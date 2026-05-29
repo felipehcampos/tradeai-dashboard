@@ -3,9 +3,15 @@ import Mercado from "./pages/Mercado"
 import Portfolio from "./pages/Portfolio"
 import Alertas from "./pages/Alertas"
 import IAAnalise from "./pages/IAAnalise"
+import Login from "./Login"
 
 export default function App() {
+  const [logado, setLogado] = useState(false)
   const [aba, setAba] = useState("mercado")
+
+  if (!logado) {
+    return <Login onLogin={() => setLogado(true)} />
+  }
 
   return (
     <div style={{minHeight:"100vh",background:"#0f172a",color:"#f1f5f9",fontFamily:"sans-serif"}}>
