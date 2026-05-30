@@ -9,7 +9,7 @@ export default function Mercado() {
 
   useEffect(() => {
     axios.get(`${API}/sinais`)
-      .then(r => setSinais(Array.isArray(r.data) ? r.data : r.data.sinais || []))
+      .then(r => setSinais(r.data.dados || []))
       .catch(() => setSinais([]))
       .finally(() => setLoading(false))
   }, [])
