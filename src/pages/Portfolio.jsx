@@ -10,6 +10,8 @@ export default function Portfolio() {
   const [posicoes, setPosicoes] = useState([])
   const [form, setForm] = useState({ ticker: "", nome: "", mercado: "B3", quantidade: "", preco_entrada: "" })
   const [mostrarForm, setMostrarForm] = useState(false)
+  const [editando, setEditando] = useState(null)
+  const [editForm, setEditForm] = useState({})
 
   useEffect(() => {
     const salvo = localStorage.getItem(STORAGE_KEY)
@@ -39,6 +41,27 @@ export default function Portfolio() {
     const novas = posicoes.filter((_, idx) => idx !== i)
     salvar(novas)
   }
+
+  const iniciarEdicao = (i) => {
+    setEditando(i)
+    setEditForm({
+      quantidade: posicoes[i].quantidade,
+      preco_entrada: posicoes[i].preco_entrada
+    })
+  }
+
+  const salvarEdicao = (i) => {
+    const novas = posicoes.map((p, idx) => idx === i ? {
+      ...p,
+      quantidade: parseFloat(editForm.quantidade),
+      preco_entrada: parseFloat(editForm.preco_entrada),
+      preco_atual: parseFloat(editForm.preco_entrada)
+    } : p)
+    salvar(novas)
+    setEditando(null)
+  }
+
+  const cancelarEdicao = () => setEditando(null)
 
   const moeda = (mercado) => mercado === "B3" ? "R$" : "US$"
 
@@ -74,21 +97,19 @@ export default function Portfolio() {
       {posicoes.length > 0 && (
         <div style={{background:"#1e293b",padding:"16px",borderRadius:"8px",marginBottom:"24px"}}>
           <h3 style={{color:"#94a3b8",marginBottom:"16px",fontSize:"14px"}}>📊 Alocação do Portfólio</h3>
-          <div style={{display:"flex",gap:"24px",alignItems:"center",flexWrap:"wrap"}}>
-            <ResponsiveContainer width="100%" height={250}>
-              <PieChart>
-                <Pie data={dadosGrafico} cx="50%" cy="50%" outerRadius={100}
-                  dataKey="value" nameKey="name" label={({name, percent}) => `${name} ${percent}%`}
-                  labelLine={true}>
-                  {dadosGrafico.map((_, i) => (
-                    <Cell key={i} fill={CORES[i % CORES.length]} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(value) => `R$ ${fmt(value)}`} contentStyle={{background:"#0f172a",border:"1px solid #334155",borderRadius:"8px"}} />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
+          <ResponsiveContainer width="100%" height={250}>
+            <PieChart>
+              <Pie data={dadosGrafico} cx="50%" cy="50%" outerRadius={100}
+                dataKey="value" nameKey="name" label={({name, percent}) => `${name} ${percent}%`}
+                labelLine={true}>
+                {dadosGrafico.map((_, i) => (
+                  <Cell key={i} fill={CORES[i % CORES.length]} />
+                ))}
+              </Pie>
+              <Tooltip formatter={(value) => `R$ ${fmt(value)}`} contentStyle={{background:"#0f172a",border:"1px solid #334155",borderRadius:"8px"}} />
+              <Legend />
+            </PieChart>
+          </ResponsiveContainer>
         </div>
       )}
 
@@ -134,7 +155,7 @@ export default function Portfolio() {
         <table style={{width:"100%",borderCollapse:"collapse"}}>
           <thead>
             <tr style={{background:"#1e293b"}}>
-              {["Ticker","Nome","Mercado","Qtd","Entrada","Atual","P&L","% Carteira","Data",""].map(h => (
+              {["Ticker","Nome","Mercado","Qtd","Entrada","Atual","P&L","% Carteira","Data","Ações"].map(h => (
                 <th key={h} style={{padding:"12px",textAlign:"left",color:"#94a3b8",borderBottom:"1px solid #334155"}}>{h}</th>
               ))}
             </tr>
@@ -144,13 +165,28 @@ export default function Portfolio() {
               const pl = (p.preco_atual - p.preco_entrada) * p.quantidade
               const plPct = ((p.preco_atual - p.preco_entrada) / p.preco_entrada * 100).toFixed(2)
               const pctCarteira = totalInvestido > 0 ? ((p.quantidade * p.preco_entrada / totalInvestido) * 100).toFixed(1) : 0
+              const estaEditando = editando === i
               return (
-                <tr key={i} style={{borderBottom:"1px solid #1e293b"}}>
+                <tr key={i} style={{borderBottom:"1px solid #1e293b",background: estaEditando ? "#1e3a4a" : "transparent"}}>
                   <td style={{padding:"12px",fontWeight:"bold",color:"#38bdf8"}}>{p.ticker}</td>
                   <td style={{padding:"12px"}}>{p.nome}</td>
                   <td style={{padding:"12px",color:"#94a3b8",fontSize:"12px"}}>{p.mercado}</td>
-                  <td style={{padding:"12px"}}>{p.quantidade}</td>
-                  <td style={{padding:"12px"}}>{moeda(p.mercado)} {fmt(p.preco_entrada)}</td>
+                  <td style={{padding:"12px"}}>
+                    {estaEditando ? (
+                      <input type="number" value={editForm.quantidade}
+                        onChange={e => setEditForm({...editForm, quantidade: e.target.value})}
+                        style={{width:"70px",padding:"4px",borderRadius:"4px",border:"1px solid #38bdf8",
+                          background:"#0f172a",color:"#f1f5f9",fontSize:"13px"}} />
+                    ) : p.quantidade}
+                  </td>
+                  <td style={{padding:"12px"}}>
+                    {estaEditando ? (
+                      <input type="number" value={editForm.preco_entrada}
+                        onChange={e => setEditForm({...editForm, preco_entrada: e.target.value})}
+                        style={{width:"90px",padding:"4px",borderRadius:"4px",border:"1px solid #38bdf8",
+                          background:"#0f172a",color:"#f1f5f9",fontSize:"13px"}} />
+                    ) : `${moeda(p.mercado)} ${fmt(p.preco_entrada)}`}
+                  </td>
                   <td style={{padding:"12px"}}>{moeda(p.mercado)} {fmt(p.preco_atual)}</td>
                   <td style={{padding:"12px",color: pl >= 0 ? "#4ade80" : "#f87171"}}>
                     {moeda(p.mercado)} {fmt(pl)} ({plPct}%)
@@ -165,10 +201,27 @@ export default function Portfolio() {
                   </td>
                   <td style={{padding:"12px",color:"#94a3b8",fontSize:"12px"}}>{p.data}</td>
                   <td style={{padding:"12px"}}>
-                    <button onClick={() => remover(i)} style={{
-                      padding:"4px 8px",borderRadius:"4px",border:"none",cursor:"pointer",
-                      background:"#dc2626",color:"white",fontSize:"12px"
-                    }}>Remover</button>
+                    <div style={{display:"flex",gap:"6px"}}>
+                      {estaEditando ? (
+                        <>
+                          <button onClick={() => salvarEdicao(i)} style={{
+                            padding:"4px 8px",borderRadius:"4px",border:"none",cursor:"pointer",
+                            background:"#16a34a",color:"white",fontSize:"12px"}}>✓ Salvar</button>
+                          <button onClick={cancelarEdicao} style={{
+                            padding:"4px 8px",borderRadius:"4px",border:"none",cursor:"pointer",
+                            background:"#334155",color:"white",fontSize:"12px"}}>✕</button>
+                        </>
+                      ) : (
+                        <>
+                          <button onClick={() => iniciarEdicao(i)} style={{
+                            padding:"4px 8px",borderRadius:"4px",border:"none",cursor:"pointer",
+                            background:"#d97706",color:"white",fontSize:"12px"}}>✏️ Editar</button>
+                          <button onClick={() => remover(i)} style={{
+                            padding:"4px 8px",borderRadius:"4px",border:"none",cursor:"pointer",
+                            background:"#dc2626",color:"white",fontSize:"12px"}}>Remover</button>
+                        </>
+                      )}
+                    </div>
                   </td>
                 </tr>
               )
