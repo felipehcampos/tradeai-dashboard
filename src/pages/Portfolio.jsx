@@ -2,6 +2,8 @@ import { useState, useEffect } from "react"
 
 const STORAGE_KEY = "tradeai_portfolio"
 
+const fmt = (valor) => valor.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})
+
 export default function Portfolio() {
   const [posicoes, setPosicoes] = useState([])
   const [form, setForm] = useState({ ticker: "", nome: "", mercado: "B3", quantidade: "", preco_entrada: "" })
@@ -49,9 +51,9 @@ export default function Portfolio() {
 
       <div style={{display:"flex",gap:"16px",marginBottom:"24px",flexWrap:"wrap"}}>
         {[
-          {label:"Total Investido", valor:`R$ ${totalInvestido.toFixed(2)}`, cor:"#f1f5f9"},
-          {label:"Valor Atual", valor:`R$ ${totalAtual.toFixed(2)}`, cor:"#f1f5f9"},
-          {label:"Lucro/Prejuízo", valor:`R$ ${lucroTotal.toFixed(2)} (${lucroPercent}%)`, cor: lucroTotal >= 0 ? "#4ade80" : "#f87171"},
+          {label:"Total Investido", valor:`R$ ${fmt(totalInvestido)}`, cor:"#f1f5f9"},
+          {label:"Valor Atual", valor:`R$ ${fmt(totalAtual)}`, cor:"#f1f5f9"},
+          {label:"Lucro/Prejuízo", valor:`R$ ${fmt(lucroTotal)} (${lucroPercent}%)`, cor: lucroTotal >= 0 ? "#4ade80" : "#f87171"},
           {label:"Posições Abertas", valor:posicoes.length, cor:"#38bdf8"},
         ].map((card, i) => (
           <div key={i} style={{background:"#1e293b",padding:"16px",borderRadius:"8px",minWidth:"180px",flex:1}}>
@@ -118,10 +120,10 @@ export default function Portfolio() {
                   <td style={{padding:"12px"}}>{p.nome}</td>
                   <td style={{padding:"12px",color:"#94a3b8",fontSize:"12px"}}>{p.mercado}</td>
                   <td style={{padding:"12px"}}>{p.quantidade}</td>
-                  <td style={{padding:"12px"}}>{moeda(p.mercado)} {p.preco_entrada.toFixed(2)}</td>
-                  <td style={{padding:"12px"}}>{moeda(p.mercado)} {p.preco_atual.toFixed(2)}</td>
+                  <td style={{padding:"12px"}}>{moeda(p.mercado)} {fmt(p.preco_entrada)}</td>
+                  <td style={{padding:"12px"}}>{moeda(p.mercado)} {fmt(p.preco_atual)}</td>
                   <td style={{padding:"12px",color: pl >= 0 ? "#4ade80" : "#f87171"}}>
-                    {moeda(p.mercado)} {pl.toFixed(2)} ({plPct}%)
+                    {moeda(p.mercado)} {fmt(pl)} ({plPct}%)
                   </td>
                   <td style={{padding:"12px",color:"#94a3b8",fontSize:"12px"}}>{p.data}</td>
                   <td style={{padding:"12px"}}>
