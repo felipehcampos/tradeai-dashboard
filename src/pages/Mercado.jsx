@@ -6,30 +6,84 @@ const API = import.meta.env.VITE_API_URL
 export default function Mercado() {
   const [sinais, setSinais] = useState([])
   const [loading, setLoading] = useState(true)
+  const [rodando, setRodando] = useState(false)
+  const [ultimaAtualizacao, setUltimaAtualizacao] = useState(null)
 
-  useEffect(() => {
+  const carregarSinais = () => {
+    setLoading(true)
     axios.get(`${API}/sinais`)
       .then(r => setSinais(r.data.dados || []))
       .catch(() => setSinais([]))
-      .finally(() => setLoading(false))
-  }, [])
+      .finally(() => {
+        setLoading(false)
+        setUltimaAtualizacao(new Date().toLocaleTimeString("pt-BR"))
+      })
+  }
+
+  useEffect(() => { carregarSinais() }, [])
+
+  const rodarScanner = async () => {
+    setRodando(true)
+    try {
+      await axios.post(`${API}/rodar-scanner`)
+      await carregarSinais()
+    } catch {
+      alert("Erro ao rodar o scanner.")
+    } finally {
+      setRodando(false)
+    }
+  }
 
   const moeda = (s) => {
     if (s.mercado === "B3") return "R$"
-    if (s.mercado === "CRYPTO") return "US$"
-    if (s.mercado === "COMMODITY") return "US$"
     return "US$"
+  }
+
+  const formatarData = (data) => {
+    if (!data) return ""
+    return new Date(data).toLocaleDateString("pt-BR", {
+      day:"2-digit", month:"2-digit", year:"numeric",
+      hour:"2-digit", minute:"2-digit"
+    })
   }
 
   return (
     <div>
-      <h2 style={{color:"#38bdf8",marginBottom:"16px"}}>🌎 Sinais do Mercado</h2>
-      {loading ? <p>Carregando...</p> : (
-        sinais.length === 0 ? <p style={{color:"#94a3b8"}}>Nenhum sinal gerado hoje. O scanner roda às 18h.</p> : (
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"16px",flexWrap:"wrap",gap:"8px"}}>
+        <h2 style={{color:"#38bdf8",margin:0}}>🌎 Sinais do Mercado</h2>
+        <div style={{display:"flex",gap:"8px",alignItems:"center"}}>
+          {ultimaAtualizacao && (
+            <span style={{color:"#94a3b8",fontSize:"12px"}}>Atualizado às {ultimaAtualizacao}</span>
+          )}
+          <button onClick={carregarSinais} disabled={loading}
+            style={{padding:"8px 16px",borderRadius:"8px",border:"1px solid #334155",
+              cursor:"pointer",background:"#1e293b",color:"#94a3b8",fontSize:"13px"}}>
+            {loading ? "⏳ Carregando..." : "🔄 Atualizar"}
+          </button>
+          <button onClick={rodarScanner} disabled={rodando}
+            style={{padding:"8px 16px",borderRadius:"8px",border:"none",
+              cursor:"pointer",background: rodando ? "#334155" : "#38bdf8",
+              color: rodando ? "#94a3b8" : "#0f172a",fontWeight:"bold",fontSize:"13px"}}>
+            {rodando ? "⏳ Analisando mercado..." : "🚀 Rodar Scanner Agora"}
+          </button>
+        </div>
+      </div>
+
+      {rodando && (
+        <div style={{background:"#1e293b",padding:"12px 16px",borderRadius:"8px",
+          marginBottom:"16px",borderLeft:"4px solid #38bdf8",color:"#94a3b8",fontSize:"13px"}}>
+          ⏳ O scanner está analisando o mercado... Isso pode levar alguns minutos. Aguarde.
+        </div>
+      )}
+
+      {loading ? <p style={{color:"#94a3b8"}}>Carregando...</p> : (
+        sinais.length === 0 ? (
+          <p style={{color:"#94a3b8"}}>Nenhum sinal gerado ainda. Clique em "Rodar Scanner Agora" ou aguarde às 18h.</p>
+        ) : (
           <table style={{width:"100%",borderCollapse:"collapse"}}>
             <thead>
               <tr style={{background:"#1e293b"}}>
-                {["Ticker","Nome","Mercado","Sinal","Confiança","Preço","Alvo","Stop","Sentimento"].map(h => (
+                {["Ticker","Nome","Mercado","Sinal","Confiança","Preço","Alvo","Stop","Sentimento","Data"].map(h => (
                   <th key={h} style={{padding:"12px",textAlign:"left",color:"#94a3b8",borderBottom:"1px solid #334155"}}>{h}</th>
                 ))}
               </tr>
@@ -50,6 +104,7 @@ export default function Mercado() {
                   <td style={{padding:"12px",color:"#4ade80"}}>{moeda(s)} {s.alvo_lucro}</td>
                   <td style={{padding:"12px",color:"#f87171"}}>{moeda(s)} {s.stop_loss}</td>
                   <td style={{padding:"12px"}}>{s.score_sentimento}</td>
+                  <td style={{padding:"12px",color:"#94a3b8",fontSize:"12px"}}>{formatarData(s.criado_em)}</td>
                 </tr>
               ))}
             </tbody>
