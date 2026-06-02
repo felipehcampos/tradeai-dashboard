@@ -34,6 +34,26 @@ export default function Mercado() {
     }
   }
 
+  const adicionarPortfolio = (s) => {
+    const salvo = JSON.parse(localStorage.getItem("tradeai_portfolio") || "[]")
+    const jaExiste = salvo.find(p => p.ticker === s.ticker)
+    if (jaExiste) {
+      alert(`${s.ticker} já está no portfólio!`)
+      return
+    }
+    const nova = {
+      ticker: s.ticker,
+      nome: s.nome,
+      mercado: s.mercado,
+      quantidade: 1,
+      preco_entrada: s.preco_atual,
+      preco_atual: s.preco_atual,
+      data: new Date().toLocaleDateString("pt-BR")
+    }
+    localStorage.setItem("tradeai_portfolio", JSON.stringify([...salvo, nova]))
+    alert(`${s.ticker} adicionado ao portfólio! Ajuste a quantidade na aba Portfólio.`)
+  }
+
   const moeda = (s) => {
     if (s.mercado === "B3") return "R$"
     return "US$"
@@ -83,7 +103,7 @@ export default function Mercado() {
           <table style={{width:"100%",borderCollapse:"collapse"}}>
             <thead>
               <tr style={{background:"#1e293b"}}>
-                {["Ticker","Nome","Mercado","Sinal","Confiança","Preço","Alvo","Stop","Sentimento","Data"].map(h => (
+                {["Ticker","Nome","Mercado","Sinal","Confiança","Preço","Alvo","Stop","Sentimento","Data","Ação"].map(h => (
                   <th key={h} style={{padding:"12px",textAlign:"left",color:"#94a3b8",borderBottom:"1px solid #334155"}}>{h}</th>
                 ))}
               </tr>
@@ -105,6 +125,13 @@ export default function Mercado() {
                   <td style={{padding:"12px",color:"#f87171"}}>{moeda(s)} {s.stop_loss}</td>
                   <td style={{padding:"12px"}}>{s.score_sentimento}</td>
                   <td style={{padding:"12px",color:"#94a3b8",fontSize:"12px"}}>{formatarData(s.criado_em)}</td>
+                  <td style={{padding:"12px"}}>
+                    <button onClick={() => adicionarPortfolio(s)}
+                      style={{padding:"4px 10px",borderRadius:"4px",border:"none",cursor:"pointer",
+                        background:"#16a34a",color:"white",fontSize:"12px",fontWeight:"bold"}}>
+                      + Portfólio
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
