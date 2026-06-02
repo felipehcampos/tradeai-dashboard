@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react"
+import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from "recharts"
 
 const STORAGE_KEY = "tradeai_portfolio"
+const CORES = ["#38bdf8","#4ade80","#f59e0b","#f87171","#a78bfa","#34d399","#fb923c","#60a5fa","#e879f9","#facc15"]
 
 const fmt = (valor) => valor.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})
 
@@ -45,6 +47,12 @@ export default function Portfolio() {
   const lucroTotal = totalAtual - totalInvestido
   const lucroPercent = totalInvestido > 0 ? (lucroTotal / totalInvestido * 100).toFixed(2) : 0
 
+  const dadosGrafico = posicoes.map(p => ({
+    name: p.ticker,
+    value: parseFloat((p.quantidade * p.preco_entrada).toFixed(2)),
+    percent: totalInvestido > 0 ? ((p.quantidade * p.preco_entrada / totalInvestido) * 100).toFixed(1) : 0
+  }))
+
   return (
     <div>
       <h2 style={{color:"#38bdf8",marginBottom:"16px"}}>💼 Portfólio</h2>
@@ -62,6 +70,27 @@ export default function Portfolio() {
           </div>
         ))}
       </div>
+
+      {posicoes.length > 0 && (
+        <div style={{background:"#1e293b",padding:"16px",borderRadius:"8px",marginBottom:"24px"}}>
+          <h3 style={{color:"#94a3b8",marginBottom:"16px",fontSize:"14px"}}>📊 Alocação do Portfólio</h3>
+          <div style={{display:"flex",gap:"24px",alignItems:"center",flexWrap:"wrap"}}>
+            <ResponsiveContainer width="100%" height={250}>
+              <PieChart>
+                <Pie data={dadosGrafico} cx="50%" cy="50%" outerRadius={100}
+                  dataKey="value" nameKey="name" label={({name, percent}) => `${name} ${percent}%`}
+                  labelLine={true}>
+                  {dadosGrafico.map((_, i) => (
+                    <Cell key={i} fill={CORES[i % CORES.length]} />
+                  ))}
+                </Pie>
+                <Tooltip formatter={(value) => `R$ ${fmt(value)}`} contentStyle={{background:"#0f172a",border:"1px solid #334155",borderRadius:"8px"}} />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
 
       <button onClick={() => setMostrarForm(!mostrarForm)} style={{
         padding:"10px 20px",borderRadius:"8px",border:"none",cursor:"pointer",
@@ -105,7 +134,7 @@ export default function Portfolio() {
         <table style={{width:"100%",borderCollapse:"collapse"}}>
           <thead>
             <tr style={{background:"#1e293b"}}>
-              {["Ticker","Nome","Mercado","Qtd","Entrada","Atual","P&L","Data",""].map(h => (
+              {["Ticker","Nome","Mercado","Qtd","Entrada","Atual","P&L","% Carteira","Data",""].map(h => (
                 <th key={h} style={{padding:"12px",textAlign:"left",color:"#94a3b8",borderBottom:"1px solid #334155"}}>{h}</th>
               ))}
             </tr>
@@ -114,6 +143,7 @@ export default function Portfolio() {
             {posicoes.map((p, i) => {
               const pl = (p.preco_atual - p.preco_entrada) * p.quantidade
               const plPct = ((p.preco_atual - p.preco_entrada) / p.preco_entrada * 100).toFixed(2)
+              const pctCarteira = totalInvestido > 0 ? ((p.quantidade * p.preco_entrada / totalInvestido) * 100).toFixed(1) : 0
               return (
                 <tr key={i} style={{borderBottom:"1px solid #1e293b"}}>
                   <td style={{padding:"12px",fontWeight:"bold",color:"#38bdf8"}}>{p.ticker}</td>
@@ -124,6 +154,14 @@ export default function Portfolio() {
                   <td style={{padding:"12px"}}>{moeda(p.mercado)} {fmt(p.preco_atual)}</td>
                   <td style={{padding:"12px",color: pl >= 0 ? "#4ade80" : "#f87171"}}>
                     {moeda(p.mercado)} {fmt(pl)} ({plPct}%)
+                  </td>
+                  <td style={{padding:"12px"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:"8px"}}>
+                      <div style={{background:"#334155",borderRadius:"4px",height:"8px",width:"80px"}}>
+                        <div style={{background:CORES[i % CORES.length],borderRadius:"4px",height:"8px",width:`${pctCarteira}%`}}/>
+                      </div>
+                      <span style={{color:"#94a3b8",fontSize:"12px"}}>{pctCarteira}%</span>
+                    </div>
                   </td>
                   <td style={{padding:"12px",color:"#94a3b8",fontSize:"12px"}}>{p.data}</td>
                   <td style={{padding:"12px"}}>
