@@ -81,7 +81,7 @@ export default function Mercado() {
   const totalManter = sinais.filter(s => s.sinal === "MANTER").length
 
   return (
-    <div style={{ width: "100%" }}>
+    <div style={{ width: "100%", maxWidth: "100%" }}>
 
       {/* Header */}
       <div style={{
