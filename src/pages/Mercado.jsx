@@ -8,11 +8,23 @@ export default function Mercado() {
   const [loading, setLoading] = useState(true)
   const [rodando, setRodando] = useState(false)
   const [ultimaAtualizacao, setUltimaAtualizacao] = useState(null)
+  const [filtroMercado, setFiltroMercado] = useState("TODOS")
 
   const carregarSinais = () => {
     setLoading(true)
     axios.get(`${API}/sinais`)
-      .then(r => setSinais(r.data.dados || []))
+      .then(r => {
+        const dados = r.data.dados || []
+        // Remove sinais EVITAR — mostra apenas COMPRAR e MANTER
+        const filtrados = dados.filter(s => s.sinal !== "EVITAR")
+        // Ordena: COMPRAR primeiro, depois MANTER, por confiança decrescente
+        filtrados.sort((a, b) => {
+          if (a.sinal === "COMPRAR" && b.sinal !== "COMPRAR") return -1
+          if (a.sinal !== "COMPRAR" && b.sinal === "COMPRAR") return 1
+          return b.confianca - a.confianca
+        })
+        setSinais(filtrados)
+      })
       .catch(() => setSinais([]))
       .finally(() => {
         setLoading(false)
@@ -46,89 +58,210 @@ export default function Mercado() {
       nome: s.nome,
       mercado: s.mercado,
       quantidade: 1,
-      preco_entrada: s.preco_atual,
-      preco_atual: s.preco_atual,
+      preco_entrada: parseFloat(s.preco_atual),
+      preco_atual: parseFloat(s.preco_atual),
       data: new Date().toLocaleDateString("pt-BR")
     }
     localStorage.setItem("tradeai_portfolio", JSON.stringify([...salvo, nova]))
     alert(`${s.ticker} adicionado ao portfólio! Ajuste a quantidade na aba Portfólio.`)
   }
 
-  const moeda = (s) => {
-    if (s.mercado === "B3") return "R$"
-    return "US$"
-  }
+  const moeda = (s) => s.mercado === "B3" ? "R$" : "US$"
 
   const formatarData = (data) => {
     if (!data) return ""
     return new Date(data).toLocaleDateString("pt-BR", {
-      day:"2-digit", month:"2-digit", year:"numeric",
+      day:"2-digit", month:"2-digit",
       hour:"2-digit", minute:"2-digit"
     })
   }
 
+  const formatarPreco = (valor) => {
+    if (!valor) return "—"
+    return parseFloat(valor).toLocaleString("pt-BR", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    })
+  }
+
+  const mercados = ["TODOS", "B3", "NASDAQ", "NYSE", "CRYPTO", "COMMODITY"]
+  
+  const sinaisFiltrados = filtroMercado === "TODOS" 
+    ? sinais 
+    : sinais.filter(s => s.mercado === filtroMercado)
+
+  const totalComprar = sinais.filter(s => s.sinal === "COMPRAR").length
+  const totalManter = sinais.filter(s => s.sinal === "MANTER").length
+
   return (
-    <div>
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"16px",flexWrap:"wrap",gap:"8px"}}>
-        <h2 style={{color:"#38bdf8",margin:0}}>🌎 Sinais do Mercado</h2>
-        <div style={{display:"flex",gap:"8px",alignItems:"center"}}>
+    <div style={{padding:"0 4px"}}>
+
+      {/* Header */}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",
+        marginBottom:"20px",flexWrap:"wrap",gap:"12px"}}>
+        <div>
+          <h2 style={{color:"#38bdf8",margin:"0 0 4px 0",fontSize:"20px"}}>🌎 Sinais do Mercado</h2>
           {ultimaAtualizacao && (
-            <span style={{color:"#94a3b8",fontSize:"12px"}}>Atualizado às {ultimaAtualizacao}</span>
+            <span style={{color:"#64748b",fontSize:"12px"}}>Atualizado às {ultimaAtualizacao}</span>
           )}
-          <button onClick={carregarSinais} disabled={loading}
-            style={{padding:"8px 16px",borderRadius:"8px",border:"1px solid #334155",
-              cursor:"pointer",background:"#1e293b",color:"#94a3b8",fontSize:"13px"}}>
-            {loading ? "⏳ Carregando..." : "🔄 Atualizar"}
+        </div>
+        <div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>
+          <button onClick={carregarSinais} disabled={loading} style={{
+            padding:"8px 16px",borderRadius:"8px",border:"1px solid #334155",
+            cursor:"pointer",background:"#1e293b",color:"#94a3b8",fontSize:"13px",
+            transition:"all 0.2s"}}>
+            {loading ? "⏳" : "🔄"} Atualizar
           </button>
-          <button onClick={rodarScanner} disabled={rodando}
-            style={{padding:"8px 16px",borderRadius:"8px",border:"none",
-              cursor:"pointer",background: rodando ? "#334155" : "#38bdf8",
-              color: rodando ? "#94a3b8" : "#0f172a",fontWeight:"bold",fontSize:"13px"}}>
-            {rodando ? "⏳ Analisando mercado..." : "🚀 Rodar Scanner Agora"}
+          <button onClick={rodarScanner} disabled={rodando} style={{
+            padding:"8px 20px",borderRadius:"8px",border:"none",cursor:"pointer",
+            background: rodando ? "#334155" : "linear-gradient(135deg,#38bdf8,#0ea5e9)",
+            color: rodando ? "#94a3b8" : "#0f172a",fontWeight:"bold",fontSize:"13px",
+            boxShadow: rodando ? "none" : "0 2px 8px rgba(56,189,248,0.3)"}}>
+            {rodando ? "⏳ Analisando..." : "🚀 Rodar Scanner"}
           </button>
         </div>
       </div>
 
+      {/* Cards de resumo */}
+      <div style={{display:"flex",gap:"12px",marginBottom:"20px",flexWrap:"wrap"}}>
+        {[
+          {label:"🟢 Comprar", valor:totalComprar, cor:"#16a34a", bg:"rgba(22,163,74,0.1)"},
+          {label:"🟡 Manter", valor:totalManter, cor:"#d97706", bg:"rgba(217,119,6,0.1)"},
+          {label:"📊 Total Analisados", valor:sinais.length, cor:"#38bdf8", bg:"rgba(56,189,248,0.1)"},
+        ].map((card,i) => (
+          <div key={i} style={{background:card.bg,border:`1px solid ${card.cor}30`,
+            padding:"12px 20px",borderRadius:"10px",flex:1,minWidth:"120px",textAlign:"center"}}>
+            <p style={{color:"#94a3b8",fontSize:"11px",margin:"0 0 4px 0"}}>{card.label}</p>
+            <p style={{color:card.cor,fontSize:"24px",fontWeight:"bold",margin:0}}>{card.valor}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Banner scanner rodando */}
       {rodando && (
-        <div style={{background:"#1e293b",padding:"12px 16px",borderRadius:"8px",
-          marginBottom:"16px",borderLeft:"4px solid #38bdf8",color:"#94a3b8",fontSize:"13px"}}>
-          ⏳ O scanner está analisando o mercado... Isso pode levar alguns minutos. Aguarde.
+        <div style={{background:"rgba(56,189,248,0.08)",padding:"12px 16px",borderRadius:"8px",
+          marginBottom:"16px",borderLeft:"3px solid #38bdf8",color:"#94a3b8",fontSize:"13px",
+          display:"flex",alignItems:"center",gap:"8px"}}>
+          <span style={{animation:"spin 1s linear infinite"}}>⏳</span>
+          O scanner está varrendo o mercado global... Pode levar alguns minutos.
         </div>
       )}
 
-      {loading ? <p style={{color:"#94a3b8"}}>Carregando...</p> : (
-        sinais.length === 0 ? (
-          <p style={{color:"#94a3b8"}}>Nenhum sinal gerado ainda. Clique em "Rodar Scanner Agora" ou aguarde às 18h.</p>
-        ) : (
-          <table style={{width:"100%",borderCollapse:"collapse"}}>
+      {/* Filtros por mercado */}
+      <div style={{display:"flex",gap:"8px",marginBottom:"16px",flexWrap:"wrap"}}>
+        {mercados.map(m => (
+          <button key={m} onClick={() => setFiltroMercado(m)} style={{
+            padding:"6px 14px",borderRadius:"20px",border:"none",cursor:"pointer",fontSize:"12px",
+            fontWeight: filtroMercado === m ? "bold" : "normal",
+            background: filtroMercado === m ? "#38bdf8" : "#1e293b",
+            color: filtroMercado === m ? "#0f172a" : "#94a3b8",
+            transition:"all 0.2s"}}>
+            {m}
+          </button>
+        ))}
+      </div>
+
+      {/* Tabela */}
+      {loading ? (
+        <p style={{color:"#94a3b8",textAlign:"center",padding:"40px"}}>⏳ Carregando sinais...</p>
+      ) : sinaisFiltrados.length === 0 ? (
+        <div style={{textAlign:"center",padding:"60px 20px",color:"#64748b"}}>
+          <p style={{fontSize:"48px",margin:"0 0 16px 0"}}>📭</p>
+          <p style={{fontSize:"16px",marginBottom:"8px"}}>Nenhum sinal disponível</p>
+          <p style={{fontSize:"13px"}}>Clique em "Rodar Scanner" ou aguarde às 18h</p>
+        </div>
+      ) : (
+        <div style={{overflowX:"auto",borderRadius:"12px",border:"1px solid #1e293b"}}>
+          <table style={{width:"100%",borderCollapse:"collapse",minWidth:"900px"}}>
             <thead>
-              <tr style={{background:"#1e293b"}}>
-                {["Ticker","Nome","Mercado","Sinal","Confiança","Preço","Alvo","Stop","Sentimento","Data","Ação"].map(h => (
-                  <th key={h} style={{padding:"12px",textAlign:"left",color:"#94a3b8",borderBottom:"1px solid #334155"}}>{h}</th>
+              <tr style={{background:"#0f172a"}}>
+                {["Ticker","Nome","Mercado","Sinal","Confiança","Preço Atual","Alvo","Stop","Sentimento","Data","Ação"].map(h => (
+                  <th key={h} style={{padding:"14px 12px",textAlign:"left",color:"#64748b",
+                    fontSize:"11px",fontWeight:"600",letterSpacing:"0.05em",
+                    borderBottom:"1px solid #1e293b",whiteSpace:"nowrap"}}>
+                    {h.toUpperCase()}
+                  </th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {sinais.map((s,i) => (
-                <tr key={i} style={{borderBottom:"1px solid #1e293b"}}>
-                  <td style={{padding:"12px",fontWeight:"bold",color:"#38bdf8"}}>{s.ticker}</td>
-                  <td style={{padding:"12px"}}>{s.nome}</td>
-                  <td style={{padding:"12px",color:"#94a3b8",fontSize:"12px"}}>{s.mercado}</td>
-                  <td style={{padding:"12px"}}>
-                    <span style={{padding:"4px 8px",borderRadius:"4px",
-                      background:s.sinal==="COMPRAR"?"#16a34a":s.sinal==="MANTER"?"#d97706":"#dc2626",
-                      color:"white",fontSize:"12px",fontWeight:"bold"}}>{s.sinal}</span>
+              {sinaisFiltrados.map((s, i) => (
+                <tr key={i} style={{
+                  borderBottom:"1px solid #0f172a",
+                  background: i % 2 === 0 ? "#0d1829" : "#0a1520",
+                  transition:"background 0.15s"}}
+                  onMouseEnter={e => e.currentTarget.style.background = "#1e293b"}
+                  onMouseLeave={e => e.currentTarget.style.background = i % 2 === 0 ? "#0d1829" : "#0a1520"}>
+
+                  <td style={{padding:"14px 12px",fontWeight:"700",color:"#38bdf8",fontSize:"14px"}}>
+                    {s.ticker}
                   </td>
-                  <td style={{padding:"12px"}}>{s.confianca}%</td>
-                  <td style={{padding:"12px"}}>{moeda(s)} {s.preco_atual}</td>
-                  <td style={{padding:"12px",color:"#4ade80"}}>{moeda(s)} {s.alvo_lucro}</td>
-                  <td style={{padding:"12px",color:"#f87171"}}>{moeda(s)} {s.stop_loss}</td>
-                  <td style={{padding:"12px"}}>{s.score_sentimento}</td>
-                  <td style={{padding:"12px",color:"#94a3b8",fontSize:"12px"}}>{formatarData(s.criado_em)}</td>
-                  <td style={{padding:"12px"}}>
-                    <button onClick={() => adicionarPortfolio(s)}
-                      style={{padding:"4px 10px",borderRadius:"4px",border:"none",cursor:"pointer",
-                        background:"#16a34a",color:"white",fontSize:"12px",fontWeight:"bold"}}>
+
+                  <td style={{padding:"14px 12px",color:"#e2e8f0",fontSize:"13px",maxWidth:"140px",
+                    overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                    {s.nome}
+                  </td>
+
+                  <td style={{padding:"14px 12px"}}>
+                    <span style={{padding:"3px 8px",borderRadius:"12px",fontSize:"11px",fontWeight:"600",
+                      background: s.mercado==="B3" ? "rgba(34,197,94,0.15)" : "rgba(56,189,248,0.15)",
+                      color: s.mercado==="B3" ? "#22c55e" : "#38bdf8"}}>
+                      {s.mercado}
+                    </span>
+                  </td>
+
+                  <td style={{padding:"14px 12px"}}>
+                    <span style={{padding:"5px 12px",borderRadius:"6px",fontSize:"12px",fontWeight:"700",
+                      background: s.sinal==="COMPRAR" ? "rgba(22,163,74,0.2)" : "rgba(217,119,6,0.2)",
+                      color: s.sinal==="COMPRAR" ? "#4ade80" : "#fbbf24",
+                      border: `1px solid ${s.sinal==="COMPRAR" ? "rgba(22,163,74,0.4)" : "rgba(217,119,6,0.4)"}`}}>
+                      {s.sinal==="COMPRAR" ? "▲ COMPRAR" : "◆ MANTER"}
+                    </span>
+                  </td>
+
+                  <td style={{padding:"14px 12px"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:"6px"}}>
+                      <div style={{background:"#1e293b",borderRadius:"4px",height:"6px",width:"50px"}}>
+                        <div style={{background: s.confianca>=70 ? "#4ade80" : s.confianca>=55 ? "#fbbf24" : "#f87171",
+                          borderRadius:"4px",height:"6px",width:`${s.confianca}%`}}/>
+                      </div>
+                      <span style={{color:"#e2e8f0",fontSize:"13px",fontWeight:"600"}}>{s.confianca}%</span>
+                    </div>
+                  </td>
+
+                  <td style={{padding:"14px 12px",color:"#e2e8f0",fontSize:"13px",fontWeight:"500"}}>
+                    {moeda(s)} {formatarPreco(s.preco_atual)}
+                  </td>
+
+                  <td style={{padding:"14px 12px",fontWeight:"600",fontSize:"13px"}}>
+                    <span style={{color:"#4ade80"}}>{moeda(s)} {formatarPreco(s.alvo_lucro)}</span>
+                    {s.pct_alvo && <span style={{color:"#22c55e",fontSize:"11px",marginLeft:"4px"}}>+{s.pct_alvo}%</span>}
+                  </td>
+
+                  <td style={{padding:"14px 12px",fontWeight:"600",fontSize:"13px"}}>
+                    <span style={{color:"#f87171"}}>{moeda(s)} {formatarPreco(s.stop_loss)}</span>
+                    {s.pct_stop && <span style={{color:"#ef4444",fontSize:"11px",marginLeft:"4px"}}>{s.pct_stop}%</span>}
+                  </td>
+
+                  <td style={{padding:"14px 12px"}}>
+                    <span style={{
+                      color: s.score_sentimento > 0.3 ? "#4ade80" : s.score_sentimento < -0.3 ? "#f87171" : "#94a3b8",
+                      fontWeight:"600",fontSize:"13px"}}>
+                      {s.score_sentimento > 0.3 ? "😊" : s.score_sentimento < -0.3 ? "😟" : "😐"} {s.score_sentimento}
+                    </span>
+                  </td>
+
+                  <td style={{padding:"14px 12px",color:"#64748b",fontSize:"11px",whiteSpace:"nowrap"}}>
+                    {formatarData(s.criado_em)}
+                  </td>
+
+                  <td style={{padding:"14px 12px"}}>
+                    <button onClick={() => adicionarPortfolio(s)} style={{
+                      padding:"6px 12px",borderRadius:"6px",border:"none",cursor:"pointer",
+                      background:"linear-gradient(135deg,#16a34a,#15803d)",
+                      color:"white",fontSize:"12px",fontWeight:"700",
+                      boxShadow:"0 2px 4px rgba(22,163,74,0.3)",
+                      whiteSpace:"nowrap"}}>
                       + Portfólio
                     </button>
                   </td>
@@ -136,7 +269,7 @@ export default function Mercado() {
               ))}
             </tbody>
           </table>
-        )
+        </div>
       )}
     </div>
   )
