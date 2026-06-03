@@ -133,7 +133,7 @@ export default function App() {
       <main style={{
         flex: 1,
         padding: "24px",
-        maxWidth: "1600px",
+        maxWidth: "100%",
         width: "100%",
         margin: "0 auto",
         boxSizing: "border-box"
