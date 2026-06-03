@@ -6,10 +6,10 @@ import IAAnalise from "./pages/IAAnalise"
 import Login from "./Login"
 
 const ABAS = [
-  { id: "mercado",   label: "Mercado",   icon: "🌎" },
-  { id: "portfolio", label: "Portfólio", icon: "💼" },
-  { id: "alertas",   label: "Alertas",   icon: "🔔" },
-  { id: "ia",        label: "IA Análise",icon: "🤖" },
+  { id: "mercado",   label: "Mercado",    icon: "🌎" },
+  { id: "portfolio", label: "Portfólio",  icon: "💼" },
+  { id: "alertas",   label: "Alertas",    icon: "🔔" },
+  { id: "ia",        label: "IA Análise", icon: "🤖" },
 ]
 
 export default function App() {
@@ -25,118 +25,84 @@ export default function App() {
       color: "#e2e8f0",
       fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif",
       display: "flex",
-      flexDirection: "column"
+      flexDirection: "column",
+      width: "100%",
     }}>
 
       {/* ── NAVBAR ── */}
       <nav style={{
-        background: "rgba(15,23,42,0.95)",
-        backdropFilter: "blur(12px)",
-        borderBottom: "1px solid rgba(56,189,248,0.12)",
-        padding: "0 24px",
+        background: "rgba(6,13,26,0.98)",
+        backdropFilter: "blur(16px)",
+        borderBottom: "1px solid rgba(56,189,248,0.1)",
+        padding: "0 32px",
         display: "flex",
         alignItems: "center",
-        gap: "8px",
         position: "sticky",
         top: 0,
         zIndex: 100,
         height: "60px",
-        boxShadow: "0 4px 24px rgba(0,0,0,0.3)"
+        boxShadow: "0 2px 20px rgba(0,0,0,0.5)",
+        width: "100%",
       }}>
 
         {/* Logo */}
         <div style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "10px",
-          marginRight: "32px",
-          cursor: "default"
+          display: "flex", alignItems: "center",
+          gap: "10px", marginRight: "40px", cursor: "default", flexShrink: 0
         }}>
           <div style={{
-            width: "32px",
-            height: "32px",
-            background: "linear-gradient(135deg,#38bdf8,#0ea5e9)",
-            borderRadius: "8px",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: "16px",
-            boxShadow: "0 2px 8px rgba(56,189,248,0.4)"
+            width: "34px", height: "34px",
+            background: "linear-gradient(135deg,#38bdf8,#0284c7)",
+            borderRadius: "8px", display: "flex", alignItems: "center",
+            justifyContent: "center", fontSize: "18px",
+            boxShadow: "0 0 12px rgba(56,189,248,0.4)"
           }}>📈</div>
-          <span style={{
-            color: "#f1f5f9",
-            fontWeight: "800",
-            fontSize: "18px",
-            letterSpacing: "-0.5px"
-          }}>Trade<span style={{color:"#38bdf8"}}>AI</span></span>
+          <span style={{ color: "#f1f5f9", fontWeight: "800", fontSize: "19px", letterSpacing: "-0.5px" }}>
+            Trade<span style={{ color: "#38bdf8" }}>AI</span>
+          </span>
         </div>
 
         {/* Abas */}
-        <div style={{display:"flex",gap:"4px",flex:1}}>
+        <div style={{ display: "flex", gap: "2px", flex: 1 }}>
           {ABAS.map(a => (
             <button key={a.id} onClick={() => setAba(a.id)} style={{
-              padding: "8px 18px",
-              borderRadius: "8px",
+              padding: "8px 20px",
               border: "none",
+              borderBottom: aba === a.id ? "2px solid #38bdf8" : "2px solid transparent",
+              borderRadius: "0",
               cursor: "pointer",
               fontSize: "13px",
-              fontWeight: aba === a.id ? "700" : "500",
-              background: aba === a.id
-                ? "linear-gradient(135deg,rgba(56,189,248,0.2),rgba(14,165,233,0.15))"
-                : "transparent",
+              fontWeight: aba === a.id ? "700" : "400",
+              background: "transparent",
               color: aba === a.id ? "#38bdf8" : "#64748b",
-              borderBottom: aba === a.id ? "2px solid #38bdf8" : "2px solid transparent",
-              borderRadius: "8px 8px 0 0",
               transition: "all 0.2s",
-              display: "flex",
-              alignItems: "center",
-              gap: "6px",
-              whiteSpace: "nowrap"
+              display: "flex", alignItems: "center", gap: "6px",
+              whiteSpace: "nowrap", height: "60px",
             }}
-            onMouseEnter={e => {
-              if (aba !== a.id) e.currentTarget.style.color = "#94a3b8"
-            }}
-            onMouseLeave={e => {
-              if (aba !== a.id) e.currentTarget.style.color = "#64748b"
-            }}>
-              <span style={{fontSize:"14px"}}>{a.icon}</span>
-              <span style={{
-                display: "none"
-              }} className="tab-label">{a.label}</span>
+            onMouseEnter={e => { if (aba !== a.id) e.currentTarget.style.color = "#94a3b8" }}
+            onMouseLeave={e => { if (aba !== a.id) e.currentTarget.style.color = "#64748b" }}>
+              <span>{a.icon}</span>
               <span>{a.label}</span>
             </button>
           ))}
         </div>
 
         {/* Status online */}
-        <div style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "6px",
-          color: "#64748b",
-          fontSize: "12px",
-          marginLeft: "auto"
-        }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
           <div style={{
-            width: "8px",
-            height: "8px",
-            borderRadius: "50%",
-            background: "#22c55e",
-            boxShadow: "0 0 6px #22c55e",
-            animation: "pulse 2s infinite"
+            width: "8px", height: "8px", borderRadius: "50%",
+            background: "#22c55e", boxShadow: "0 0 8px #22c55e"
           }}/>
-          <span style={{display:"none"}} id="status-text">Sistema Online</span>
+          <span style={{ color: "#64748b", fontSize: "12px" }}>Online</span>
         </div>
       </nav>
 
-      {/* ── CONTEÚDO ── */}
+      {/* ── CONTEÚDO PRINCIPAL ── */}
       <main style={{
         flex: 1,
-        padding: "24px",
-        maxWidth: "100%",
+        padding: "28px 32px",
         width: "100%",
-        margin: "0 auto",
-        boxSizing: "border-box"
+        boxSizing: "border-box",
       }}>
         {aba === "mercado"   && <Mercado />}
         {aba === "portfolio" && <Portfolio />}
@@ -146,13 +112,14 @@ export default function App() {
 
       {/* ── FOOTER ── */}
       <footer style={{
-        borderTop: "1px solid rgba(56,189,248,0.08)",
-        padding: "12px 24px",
+        borderTop: "1px solid rgba(56,189,248,0.06)",
+        padding: "10px 32px",
         display: "flex",
         justifyContent: "space-between",
         alignItems: "center",
         color: "#334155",
-        fontSize: "11px"
+        fontSize: "11px",
+        background: "rgba(6,13,26,0.8)"
       }}>
         <span>TradeAI © 2026 — Uso pessoal e privado</span>
         <span>Não constitui recomendação financeira</span>
@@ -160,22 +127,24 @@ export default function App() {
 
       {/* ── CSS GLOBAL ── */}
       <style>{`
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        
-        body { 
-          background: #060d1a !important; 
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        html, body {
+          width: 100%;
+          overflow-x: hidden;
+          background: #060d1a !important;
           scrollbar-width: thin;
           scrollbar-color: #1e293b #060d1a;
         }
-        
-        ::-webkit-scrollbar { width: 6px; height: 6px; }
+
+        ::-webkit-scrollbar { width: 5px; height: 5px; }
         ::-webkit-scrollbar-track { background: #060d1a; }
         ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 3px; }
         ::-webkit-scrollbar-thumb:hover { background: #334155; }
 
         @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.4; }
+          0%, 100% { opacity: 1; box-shadow: 0 0 8px #22c55e; }
+          50% { opacity: 0.5; box-shadow: 0 0 3px #22c55e; }
         }
 
         @keyframes spin {
@@ -183,19 +152,17 @@ export default function App() {
           to { transform: rotate(360deg); }
         }
 
-        /* Responsivo mobile */
+        /* ── RESPONSIVO MOBILE ── */
         @media (max-width: 768px) {
-          main { padding: 12px !important; }
-          nav { padding: 0 12px !important; }
-          nav button span:last-child { display: none !important; }
-          nav button { padding: 8px 12px !important; }
-          table { font-size: 12px !important; }
-          td, th { padding: 8px 6px !important; }
+          main { padding: 12px 14px !important; }
+          nav { padding: 0 14px !important; }
+          nav span { font-size: 12px !important; }
         }
 
         @media (max-width: 480px) {
-          nav button { padding: 6px 8px !important; font-size: 11px !important; }
-          h2 { font-size: 16px !important; }
+          nav button span:last-child { display: none !important; }
+          nav button { padding: 8px 10px !important; }
+          h2 { font-size: 17px !important; }
         }
       `}</style>
     </div>
