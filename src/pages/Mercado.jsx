@@ -7,8 +7,10 @@ export default function Mercado() {
   const [sinais, setSinais] = useState([])
   const [loading, setLoading] = useState(true)
   const [rodando, setRodando] = useState(false)
+  const [atualizandoPrecos, setAtualizandoPrecos] = useState(false)
   const [ultimaAtualizacao, setUltimaAtualizacao] = useState(null)
   const [filtroMercado, setFiltroMercado] = useState("TODOS")
+  const [precosAtuais, setPrecosAtuais] = useState({})
 
   const carregarSinais = () => {
     setLoading(true)
@@ -30,6 +32,23 @@ export default function Mercado() {
       })
   }
 
+  const atualizarPrecos = async () => {
+    if (sinais.length === 0) return
+    setAtualizandoPrecos(true)
+    try {
+      const tickers = [...new Set(sinais.map(s => s.ticker))]
+      const res = await axios.post(`${API}/precos`, { tickers })
+      if (res.data.sucesso) {
+        setPrecosAtuais(res.data.precos)
+        setUltimaAtualizacao(new Date().toLocaleTimeString("pt-BR"))
+      }
+    } catch {
+      console.error("Erro ao atualizar preços")
+    } finally {
+      setAtualizandoPrecos(false)
+    }
+  }
+
   useEffect(() => { carregarSinais() }, [])
 
   const rodarScanner = async () => {
@@ -37,6 +56,7 @@ export default function Mercado() {
     try {
       await axios.post(`${API}/rodar-scanner`)
       await carregarSinais()
+      setPrecosAtuais({})
     } catch {
       alert("Erro ao rodar o scanner.")
     } finally {
@@ -45,17 +65,18 @@ export default function Mercado() {
   }
 
   const adicionarPortfolio = (s) => {
+    const precoAtual = precosAtuais[s.ticker] || parseFloat(s.preco_atual)
     const salvo = JSON.parse(localStorage.getItem("tradeai_portfolio") || "[]")
     const jaExiste = salvo.find(p => p.ticker === s.ticker)
     if (jaExiste) { alert(`${s.ticker} já está no portfólio!`); return }
     const nova = {
       ticker: s.ticker, nome: s.nome, mercado: s.mercado,
-      quantidade: 1, preco_entrada: parseFloat(s.preco_atual),
-      preco_atual: parseFloat(s.preco_atual),
+      quantidade: 1, preco_entrada: precoAtual,
+      preco_atual: precoAtual,
       data: new Date().toLocaleDateString("pt-BR")
     }
     localStorage.setItem("tradeai_portfolio", JSON.stringify([...salvo, nova]))
-    alert(`${s.ticker} adicionado ao portfólio! Ajuste a quantidade na aba Portfólio.`)
+    alert(`${s.ticker} adicionado ao portfólio com preço R$ ${precoAtual}! Ajuste a quantidade na aba Portfólio.`)
   }
 
   const moeda = (s) => s.mercado === "B3" ? "R$" : "US$"
@@ -75,13 +96,26 @@ export default function Mercado() {
     })
   }
 
+  const getPrecoExibir = (s) => {
+    return precosAtuais[s.ticker] || parseFloat(s.preco_atual)
+  }
+
+  const calcularVariacao = (s) => {
+    const precoNovo = precosAtuais[s.ticker]
+    const precoAntigo = parseFloat(s.preco_atual)
+    if (!precoNovo || precoNovo === precoAntigo) return null
+    const pct = ((precoNovo - precoAntigo) / precoAntigo * 100).toFixed(2)
+    return parseFloat(pct)
+  }
+
   const mercados = ["TODOS", "B3", "NASDAQ", "NYSE", "CRYPTO", "COMMODITY"]
   const sinaisFiltrados = filtroMercado === "TODOS" ? sinais : sinais.filter(s => s.mercado === filtroMercado)
   const totalComprar = sinais.filter(s => s.sinal === "COMPRAR").length
   const totalManter = sinais.filter(s => s.sinal === "MANTER").length
+  const temPrecosAtuais = Object.keys(precosAtuais).length > 0
 
   return (
-    <div style={{ width: "100%", maxWidth: "100%" }}>
+    <div style={{ width: "100%" }}>
 
       {/* Header */}
       <div style={{
@@ -93,7 +127,9 @@ export default function Mercado() {
             🌎 Sinais do Mercado
           </h2>
           {ultimaAtualizacao && (
-            <span style={{ color: "#64748b", fontSize: "12px" }}>Atualizado às {ultimaAtualizacao}</span>
+            <span style={{ color: "#64748b", fontSize: "12px" }}>
+              {temPrecosAtuais ? "💹 Preços atualizados às " : "Carregado às "}{ultimaAtualizacao}
+            </span>
           )}
         </div>
         <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
@@ -101,7 +137,16 @@ export default function Mercado() {
             padding: "9px 18px", borderRadius: "8px", border: "1px solid #334155",
             cursor: "pointer", background: "#1e293b", color: "#94a3b8", fontSize: "13px"
           }}>
-            {loading ? "⏳" : "🔄"} Atualizar
+            {loading ? "⏳" : "🔄"} Sinais
+          </button>
+          <button onClick={atualizarPrecos} disabled={atualizandoPrecos || sinais.length === 0} style={{
+            padding: "9px 18px", borderRadius: "8px", border: "none", cursor: "pointer",
+            background: atualizandoPrecos ? "#334155" : "linear-gradient(135deg,#0ea5e9,#0284c7)",
+            color: atualizandoPrecos ? "#94a3b8" : "white",
+            fontSize: "13px", fontWeight: "600",
+            boxShadow: atualizandoPrecos ? "none" : "0 2px 8px rgba(14,165,233,0.3)"
+          }}>
+            {atualizandoPrecos ? "⏳ Atualizando..." : "💹 Atualizar Preços"}
           </button>
           <button onClick={rodarScanner} disabled={rodando} style={{
             padding: "9px 20px", borderRadius: "8px", border: "none", cursor: "pointer",
@@ -141,6 +186,16 @@ export default function Mercado() {
         </div>
       )}
 
+      {/* Banner preços atualizados */}
+      {temPrecosAtuais && !atualizandoPrecos && (
+        <div style={{
+          background: "rgba(14,165,233,0.08)", padding: "10px 16px", borderRadius: "8px",
+          marginBottom: "16px", borderLeft: "3px solid #0ea5e9", color: "#94a3b8", fontSize: "13px"
+        }}>
+          💹 Preços atualizados em tempo real — valores podem diferir dos sinais originais
+        </div>
+      )}
+
       {/* Filtros */}
       <div style={{ display: "flex", gap: "8px", marginBottom: "16px", flexWrap: "wrap" }}>
         {mercados.map(m => (
@@ -177,16 +232,16 @@ export default function Mercado() {
               <col style={{ width: "8%" }} />
               <col style={{ width: "10%" }} />
               <col style={{ width: "10%" }} />
+              <col style={{ width: "11%" }} />
               <col style={{ width: "10%" }} />
               <col style={{ width: "10%" }} />
-              <col style={{ width: "10%" }} />
-              <col style={{ width: "8%" }} />
+              <col style={{ width: "7%" }} />
               <col style={{ width: "8%" }} />
               <col style={{ width: "8%" }} />
             </colgroup>
             <thead>
               <tr style={{ background: "#0a1520" }}>
-                {["Ticker", "Nome", "Mercado", "Sinal", "Confiança", "Preço", "Alvo", "Stop", "Sentimento", "Data", "Ação"].map(h => (
+                {["Ticker", "Nome", "Mercado", "Sinal", "Confiança", "Preço Atual", "Alvo", "Stop", "Humor", "Data", "Ação"].map(h => (
                   <th key={h} style={{
                     padding: "14px 10px", textAlign: "left", color: "#64748b",
                     fontSize: "11px", fontWeight: "700", letterSpacing: "0.06em",
@@ -198,107 +253,118 @@ export default function Mercado() {
               </tr>
             </thead>
             <tbody>
-              {sinaisFiltrados.map((s, i) => (
-                <tr key={i}
-                  style={{
-                    borderBottom: "1px solid #0f172a",
-                    background: i % 2 === 0 ? "#0d1829" : "#0a1520",
-                    transition: "background 0.15s"
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.background = "#1e293b"}
-                  onMouseLeave={e => e.currentTarget.style.background = i % 2 === 0 ? "#0d1829" : "#0a1520"}
-                >
-                  <td style={{ padding: "14px 10px", fontWeight: "700", color: "#38bdf8", fontSize: "13px", whiteSpace: "nowrap" }}>
-                    {s.ticker}
-                  </td>
+              {sinaisFiltrados.map((s, i) => {
+                const precoExibir = getPrecoExibir(s)
+                const variacao = calcularVariacao(s)
+                return (
+                  <tr key={i}
+                    style={{
+                      borderBottom: "1px solid #0f172a",
+                      background: i % 2 === 0 ? "#0d1829" : "#0a1520",
+                      transition: "background 0.15s"
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.background = "#1e293b"}
+                    onMouseLeave={e => e.currentTarget.style.background = i % 2 === 0 ? "#0d1829" : "#0a1520"}
+                  >
+                    <td style={{ padding: "14px 10px", fontWeight: "700", color: "#38bdf8", fontSize: "13px", whiteSpace: "nowrap" }}>
+                      {s.ticker}
+                    </td>
 
-                  <td style={{ padding: "14px 10px", color: "#e2e8f0", fontSize: "12px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {s.nome}
-                  </td>
+                    <td style={{ padding: "14px 10px", color: "#e2e8f0", fontSize: "12px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {s.nome}
+                    </td>
 
-                  <td style={{ padding: "14px 10px" }}>
-                    <span style={{
-                      display: "inline-block", padding: "3px 8px", borderRadius: "12px",
-                      fontSize: "11px", fontWeight: "600", whiteSpace: "nowrap",
-                      background: s.mercado === "B3" ? "rgba(34,197,94,0.15)" : "rgba(56,189,248,0.15)",
-                      color: s.mercado === "B3" ? "#22c55e" : "#38bdf8"
-                    }}>
-                      {s.mercado}
-                    </span>
-                  </td>
+                    <td style={{ padding: "14px 10px" }}>
+                      <span style={{
+                        display: "inline-block", padding: "3px 8px", borderRadius: "12px",
+                        fontSize: "11px", fontWeight: "600", whiteSpace: "nowrap",
+                        background: s.mercado === "B3" ? "rgba(34,197,94,0.15)" : "rgba(56,189,248,0.15)",
+                        color: s.mercado === "B3" ? "#22c55e" : "#38bdf8"
+                      }}>
+                        {s.mercado}
+                      </span>
+                    </td>
 
-                  <td style={{ padding: "14px 10px" }}>
-                    <span style={{
-                      display: "inline-flex", alignItems: "center", gap: "4px",
-                      padding: "5px 10px", borderRadius: "6px", fontSize: "11px",
-                      fontWeight: "700", whiteSpace: "nowrap",
-                      background: s.sinal === "COMPRAR" ? "rgba(22,163,74,0.2)" : "rgba(217,119,6,0.2)",
-                      color: s.sinal === "COMPRAR" ? "#4ade80" : "#fbbf24",
-                      border: `1px solid ${s.sinal === "COMPRAR" ? "rgba(22,163,74,0.5)" : "rgba(217,119,6,0.5)"}`
-                    }}>
-                      {s.sinal === "COMPRAR" ? "▲" : "◆"} {s.sinal}
-                    </span>
-                  </td>
+                    <td style={{ padding: "14px 10px" }}>
+                      <span style={{
+                        display: "inline-flex", alignItems: "center", gap: "4px",
+                        padding: "5px 10px", borderRadius: "6px", fontSize: "11px",
+                        fontWeight: "700", whiteSpace: "nowrap",
+                        background: s.sinal === "COMPRAR" ? "rgba(22,163,74,0.2)" : "rgba(217,119,6,0.2)",
+                        color: s.sinal === "COMPRAR" ? "#4ade80" : "#fbbf24",
+                        border: `1px solid ${s.sinal === "COMPRAR" ? "rgba(22,163,74,0.5)" : "rgba(217,119,6,0.5)"}`
+                      }}>
+                        {s.sinal === "COMPRAR" ? "▲" : "◆"} {s.sinal}
+                      </span>
+                    </td>
 
-                  <td style={{ padding: "14px 10px" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                      <div style={{ background: "#1e293b", borderRadius: "4px", height: "5px", width: "40px", flexShrink: 0 }}>
-                        <div style={{
-                          background: s.confianca >= 70 ? "#4ade80" : s.confianca >= 55 ? "#fbbf24" : "#f87171",
-                          borderRadius: "4px", height: "5px", width: `${s.confianca}%`
-                        }} />
+                    <td style={{ padding: "14px 10px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                        <div style={{ background: "#1e293b", borderRadius: "4px", height: "5px", width: "40px", flexShrink: 0 }}>
+                          <div style={{
+                            background: s.confianca >= 70 ? "#4ade80" : s.confianca >= 55 ? "#fbbf24" : "#f87171",
+                            borderRadius: "4px", height: "5px", width: `${s.confianca}%`
+                          }} />
+                        </div>
+                        <span style={{ color: "#e2e8f0", fontSize: "12px", fontWeight: "600" }}>{s.confianca}%</span>
                       </div>
-                      <span style={{ color: "#e2e8f0", fontSize: "12px", fontWeight: "600" }}>{s.confianca}%</span>
-                    </div>
-                  </td>
+                    </td>
 
-                  <td style={{ padding: "14px 10px", color: "#e2e8f0", fontSize: "12px", fontWeight: "500", whiteSpace: "nowrap" }}>
-                    {moeda(s)} {formatarPreco(s.preco_atual)}
-                  </td>
+                    <td style={{ padding: "14px 10px", whiteSpace: "nowrap" }}>
+                      <span style={{ color: "#e2e8f0", fontSize: "12px", fontWeight: "600" }}>
+                        {moeda(s)} {formatarPreco(precoExibir)}
+                      </span>
+                      {variacao !== null && (
+                        <span style={{
+                          display: "block", fontSize: "10px",
+                          color: variacao >= 0 ? "#22c55e" : "#ef4444"
+                        }}>
+                          {variacao >= 0 ? "▲" : "▼"} {Math.abs(variacao)}%
+                        </span>
+                      )}
+                    </td>
 
-                  <td style={{ padding: "14px 10px", whiteSpace: "nowrap" }}>
-                    <span style={{ color: "#4ade80", fontSize: "12px", fontWeight: "600" }}>
-                      {moeda(s)} {formatarPreco(s.alvo_lucro)}
-                    </span>
-                    {s.pct_alvo && (
-                      <span style={{ color: "#22c55e", fontSize: "10px", marginLeft: "4px" }}>+{s.pct_alvo}%</span>
-                    )}
-                  </td>
+                    <td style={{ padding: "14px 10px", whiteSpace: "nowrap" }}>
+                      <span style={{ color: "#4ade80", fontSize: "12px", fontWeight: "600" }}>
+                        {moeda(s)} {formatarPreco(s.alvo_lucro)}
+                      </span>
+                      {s.pct_alvo && (
+                        <span style={{ color: "#22c55e", fontSize: "10px", marginLeft: "4px" }}>+{s.pct_alvo}%</span>
+                      )}
+                    </td>
 
-                  <td style={{ padding: "14px 10px", whiteSpace: "nowrap" }}>
-                    <span style={{ color: "#f87171", fontSize: "12px", fontWeight: "600" }}>
-                      {moeda(s)} {formatarPreco(s.stop_loss)}
-                    </span>
-                    {s.pct_stop && (
-                      <span style={{ color: "#ef4444", fontSize: "10px", marginLeft: "4px" }}>{s.pct_stop}%</span>
-                    )}
-                  </td>
+                    <td style={{ padding: "14px 10px", whiteSpace: "nowrap" }}>
+                      <span style={{ color: "#f87171", fontSize: "12px", fontWeight: "600" }}>
+                        {moeda(s)} {formatarPreco(s.stop_loss)}
+                      </span>
+                      {s.pct_stop && (
+                        <span style={{ color: "#ef4444", fontSize: "10px", marginLeft: "4px" }}>{s.pct_stop}%</span>
+                      )}
+                    </td>
 
-                  <td style={{ padding: "14px 10px", textAlign: "center" }}>
-                    <span style={{
-                      fontSize: "18px",
-                      title: s.score_sentimento
-                    }}>
-                      {s.score_sentimento > 0.3 ? "😊" : s.score_sentimento < -0.3 ? "😟" : "😐"}
-                    </span>
-                  </td>
+                    <td style={{ padding: "14px 10px", textAlign: "center" }}>
+                      <span style={{ fontSize: "18px" }}>
+                        {s.score_sentimento > 0.3 ? "😊" : s.score_sentimento < -0.3 ? "😟" : "😐"}
+                      </span>
+                    </td>
 
-                  <td style={{ padding: "14px 10px", color: "#64748b", fontSize: "11px", whiteSpace: "nowrap" }}>
-                    {formatarData(s.criado_em)}
-                  </td>
+                    <td style={{ padding: "14px 10px", color: "#64748b", fontSize: "11px", whiteSpace: "nowrap" }}>
+                      {formatarData(s.criado_em)}
+                    </td>
 
-                  <td style={{ padding: "14px 10px" }}>
-                    <button onClick={() => adicionarPortfolio(s)} style={{
-                      padding: "6px 10px", borderRadius: "6px", border: "none", cursor: "pointer",
-                      background: "linear-gradient(135deg,#16a34a,#15803d)",
-                      color: "white", fontSize: "11px", fontWeight: "700",
-                      whiteSpace: "nowrap", boxShadow: "0 2px 4px rgba(22,163,74,0.3)"
-                    }}>
-                      + Portfólio
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                    <td style={{ padding: "14px 10px" }}>
+                      <button onClick={() => adicionarPortfolio(s)} style={{
+                        padding: "6px 10px", borderRadius: "6px", border: "none", cursor: "pointer",
+                        background: "linear-gradient(135deg,#16a34a,#15803d)",
+                        color: "white", fontSize: "11px", fontWeight: "700",
+                        whiteSpace: "nowrap", boxShadow: "0 2px 4px rgba(22,163,74,0.3)"
+                      }}>
+                        + Portfólio
+                      </button>
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
