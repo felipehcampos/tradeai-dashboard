@@ -3,11 +3,13 @@ import Mercado from "./pages/Mercado"
 import Portfolio from "./pages/Portfolio"
 import Alertas from "./pages/Alertas"
 import IAAnalise from "./pages/IAAnalise"
+import SwingRapido from "./pages/SwingRapido"
 import Login from "./Login"
 
 const ABAS = [
   { id: "mercado",   label: "Mercado",    icon: "🌎" },
   { id: "portfolio", label: "Portfólio",  icon: "💼" },
+  { id: "swing",     label: "Swing",      icon: "⚡" },
   { id: "alertas",   label: "Alertas",    icon: "🔔" },
   { id: "ia",        label: "IA Análise", icon: "🤖" },
 ]
@@ -68,13 +70,17 @@ export default function App() {
             <button key={a.id} onClick={() => setAba(a.id)} style={{
               padding: "8px 20px",
               border: "none",
-              borderBottom: aba === a.id ? "2px solid #38bdf8" : "2px solid transparent",
+              borderBottom: aba === a.id
+                ? `2px solid ${a.id === "swing" ? "#f59e0b" : "#38bdf8"}`
+                : "2px solid transparent",
               borderRadius: "0",
               cursor: "pointer",
               fontSize: "13px",
               fontWeight: aba === a.id ? "700" : "400",
               background: "transparent",
-              color: aba === a.id ? "#38bdf8" : "#64748b",
+              color: aba === a.id
+                ? (a.id === "swing" ? "#f59e0b" : "#38bdf8")
+                : "#64748b",
               transition: "all 0.2s",
               display: "flex", alignItems: "center", gap: "6px",
               whiteSpace: "nowrap", height: "60px",
@@ -106,6 +112,7 @@ export default function App() {
       }}>
         {aba === "mercado"   && <Mercado />}
         {aba === "portfolio" && <Portfolio />}
+        {aba === "swing"     && <SwingRapido />}
         {aba === "alertas"   && <Alertas />}
         {aba === "ia"        && <IAAnalise />}
       </main>
@@ -152,7 +159,6 @@ export default function App() {
           to { transform: rotate(360deg); }
         }
 
-        /* ── RESPONSIVO MOBILE ── */
         @media (max-width: 768px) {
           main { padding: 12px 14px !important; }
           nav { padding: 0 14px !important; }
