@@ -1,11 +1,4 @@
-export default function SwingRapido() {
-  return (
-    <div style={{ padding: "20px", color: "#f59e0b" }}>
-      <h2>⚡ Swing Rápido</h2>
-      <p style={{ color: "#64748b" }}>Carregando...</p>
-    </div>
-  )
-}import { useState, useEffect } from "react"
+import { useState, useEffect } from "react"
 import axios from "axios"
 
 const API = import.meta.env.VITE_API_URL
