@@ -37,14 +37,18 @@ export default function SwingRapido() {
 
   const rodarScanner = async () => {
     setRodando(true)
-    try {
-      await axios.post(`${API}/rodar-scanner-swing`)
-      await carregarSinais()
-    } catch {
-      alert("Erro ao rodar o scanner swing.")
-    } finally {
+    axios.post(`${API}/rodar-scanner-swing`, {}, { timeout: 600000 })
+      .finally(() => {
+        setRodando(false)
+        carregarSinais()
+      })
+    const intervalo = setInterval(() => {
+      carregarSinais()
+    }, 15000)
+    setTimeout(() => {
+      clearInterval(intervalo)
       setRodando(false)
-    }
+    }, 480000)
   }
 
   const moeda = (mercado) => mercado === "B3" ? "R$" : "US$"
