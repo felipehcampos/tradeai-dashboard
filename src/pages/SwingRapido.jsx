@@ -12,6 +12,7 @@ export default function SwingRapido() {
   const [ultimaAtualizacao, setUltimaAtualizacao] = useState(null)
   const [filtroMercado, setFiltroMercado] = useState("TODOS")
   const [vistaAtiva, setVistaAtiva] = useState("ativos")
+  const [modalSinal, setModalSinal] = useState(null)
 
   const carregarSinais = () => {
     setLoading(true)
@@ -90,6 +91,46 @@ export default function SwingRapido() {
 
   return (
     <div style={{ width: "100%" }}>
+      {/* Modal de análise */}
+      {modalSinal && (
+        <div onClick={() => setModalSinal(null)} style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)",
+          zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center",
+          padding: "20px"
+        }}>
+          <div onClick={e => e.stopPropagation()} style={{
+            background: "#0d1829", border: "1px solid #1e293b", borderRadius: "16px",
+            padding: "28px", maxWidth: "520px", width: "100%", position: "relative"
+          }}>
+            <button onClick={() => setModalSinal(null)} style={{
+              position: "absolute", top: "16px", right: "16px",
+              background: "none", border: "none", color: "#64748b",
+              fontSize: "18px", cursor: "pointer"
+            }}>✕</button>
+            <div style={{ marginBottom: "16px" }}>
+              <span style={{ color: "#f59e0b", fontWeight: "800", fontSize: "18px" }}>{modalSinal.ticker}</span>
+              <span style={{ color: "#64748b", fontSize: "13px", marginLeft: "8px" }}>{modalSinal.nome}</span>
+            </div>
+            <div style={{ display: "flex", gap: "8px", marginBottom: "16px", flexWrap: "wrap" }}>
+              <span style={{ padding: "4px 10px", borderRadius: "8px", fontSize: "11px", fontWeight: "700", background: "rgba(239,68,68,0.1)", color: "#f87171" }}>
+                📉 {modalSinal.variacao_dia ? `${parseFloat(modalSinal.variacao_dia).toFixed(2)}%` : "—"}
+              </span>
+              <span style={{ padding: "4px 10px", borderRadius: "8px", fontSize: "11px", fontWeight: "700", background: "rgba(245,158,11,0.1)", color: "#f59e0b" }}>
+                RSI {modalSinal.rsi ? parseFloat(modalSinal.rsi).toFixed(1) : "—"}
+              </span>
+              <span style={{ padding: "4px 10px", borderRadius: "8px", fontSize: "11px", fontWeight: "700", background: "rgba(34,197,94,0.1)", color: "#22c55e" }}>
+                Vol {modalSinal.volume_vs_media ? `${parseFloat(modalSinal.volume_vs_media).toFixed(0)}%` : "—"}
+              </span>
+              <span style={{ padding: "4px 10px", borderRadius: "8px", fontSize: "11px", fontWeight: "700", background: "rgba(56,189,248,0.1)", color: "#38bdf8" }}>
+                {modalSinal.tipo_risco === "SISTEMICO" ? "🔵 Sistêmico" : "🔴 Idiossincr."}
+              </span>
+            </div>
+            <p style={{ color: "#cbd5e1", fontSize: "13px", lineHeight: "1.7", margin: 0 }}>
+              💡 {modalSinal.justificativa}
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Header */}
       <div style={{
@@ -269,14 +310,18 @@ export default function SwingRapido() {
                     </td>
 
                     {/* Nome + Diagnóstico IA */}
-                    <td style={{ padding: "14px 10px", verticalAlign: "top" }}>
-                      <div style={{ color: "#f1f5f9", fontSize: "12px", fontWeight: "600", marginBottom: "4px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <td style={{ padding: "14px 10px", verticalAlign: "middle" }}>
+                      <div style={{ color: "#f1f5f9", fontSize: "12px", fontWeight: "600", marginBottom: "6px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         {s.nome}
                       </div>
                       {s.justificativa && (
-                        <div style={{ color: "#64748b", fontSize: "10px", lineHeight: "1.4" }}>
-                          💡 {s.justificativa}
-                        </div>
+                        <button onClick={() => setModalSinal(s)} style={{
+                          padding: "3px 10px", borderRadius: "6px", border: "1px solid #334155",
+                          background: "#1e293b", color: "#94a3b8", fontSize: "10px",
+                          cursor: "pointer", whiteSpace: "nowrap"
+                        }}>
+                          💡 Ver análise
+                        </button>
                       )}
                     </td>
 
