@@ -5,4 +5,369 @@ export default function SwingRapido() {
       <p style={{ color: "#64748b" }}>Carregando...</p>
     </div>
   )
+}import { useState, useEffect } from "react"
+import axios from "axios"
+
+const API = import.meta.env.VITE_API_URL
+
+export default function SwingRapido() {
+  const [sinais, setSinais] = useState([])
+  const [historico, setHistorico] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [rodando, setRodando] = useState(false)
+  const [erroConexao, setErroConexao] = useState(false)
+  const [ultimaAtualizacao, setUltimaAtualizacao] = useState(null)
+  const [filtroMercado, setFiltroMercado] = useState("TODOS")
+  const [vistaAtiva, setVistaAtiva] = useState("ativos")
+
+  const carregarSinais = () => {
+    setLoading(true)
+    setErroConexao(false)
+    Promise.all([
+      axios.get(`${API}/sinais-swing`),
+      axios.get(`${API}/sinais-swing/historico`)
+    ])
+      .then(([resAtivos, resHistorico]) => {
+        setSinais(resAtivos.data.dados || [])
+        setHistorico(resHistorico.data.dados || [])
+        setUltimaAtualizacao(new Date().toLocaleTimeString("pt-BR"))
+      })
+      .catch(() => {
+        setErroConexao(true)
+        setSinais([])
+        setHistorico([])
+      })
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => { carregarSinais() }, [])
+
+  const rodarScanner = async () => {
+    setRodando(true)
+    try {
+      await axios.post(`${API}/rodar-scanner-swing`)
+      await carregarSinais()
+    } catch {
+      alert("Erro ao rodar o scanner swing.")
+    } finally {
+      setRodando(false)
+    }
+  }
+
+  const moeda = (mercado) => mercado === "B3" ? "R$" : "US$"
+
+  const formatarPreco = (valor) => {
+    if (!valor) return "—"
+    return parseFloat(valor).toLocaleString("pt-BR", {
+      minimumFractionDigits: 2, maximumFractionDigits: 2
+    })
+  }
+
+  const formatarData = (data) => {
+    if (!data) return ""
+    return new Date(data).toLocaleDateString("pt-BR", {
+      day: "2-digit", month: "2-digit",
+      hour: "2-digit", minute: "2-digit"
+    })
+  }
+
+  const calcularTimeStop = (dataExpiracao) => {
+    if (!dataExpiracao) return null
+    const agora = new Date()
+    const expira = new Date(dataExpiracao)
+    const diffHoras = Math.ceil((expira - agora) / (1000 * 60 * 60))
+    if (diffHoras <= 0) return { texto: "EXPIRADO", cor: "#ef4444" }
+    if (diffHoras <= 24) return { texto: `${diffHoras}h rest.`, cor: "#f59e0b" }
+    const dias = Math.ceil(diffHoras / 24)
+    return { texto: `${dias}d rest.`, cor: "#22c55e" }
+  }
+
+  const mercados = ["TODOS", "B3", "NASDAQ", "NYSE", "CRYPTO", "COMMODITY"]
+  const sinaisFiltrados = filtroMercado === "TODOS"
+    ? sinais
+    : sinais.filter(s => s.mercado === filtroMercado)
+
+  const totalAtivos = sinais.length
+  const totalB3 = sinais.filter(s => s.mercado === "B3").length
+  const totalIntl = sinais.filter(s => s.mercado !== "B3").length
+
+  return (
+    <div style={{ width: "100%" }}>
+
+      {/* Header */}
+      <div style={{
+        display: "flex", alignItems: "flex-start", justifyContent: "space-between",
+        marginBottom: "20px", flexWrap: "wrap", gap: "12px"
+      }}>
+        <div>
+          <h2 style={{ color: "#f59e0b", margin: "0 0 4px 0", fontSize: "22px", fontWeight: "800" }}>
+            ⚡ Swing Rápido
+          </h2>
+          <span style={{ color: "#64748b", fontSize: "12px" }}>
+            Reversão à Média — Alvo +5% | Stop -2% | Time Stop 3 dias
+            {ultimaAtualizacao && ` • Atualizado às ${ultimaAtualizacao}`}
+          </span>
+        </div>
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+          <button onClick={carregarSinais} disabled={loading} style={{
+            padding: "9px 18px", borderRadius: "8px", border: "1px solid #334155",
+            cursor: "pointer", background: "#1e293b", color: "#94a3b8", fontSize: "13px"
+          }}>
+            {loading ? "⏳" : "🔄"} Atualizar
+          </button>
+          <button onClick={rodarScanner} disabled={rodando} style={{
+            padding: "9px 20px", borderRadius: "8px", border: "none", cursor: "pointer",
+            background: rodando ? "#334155" : "linear-gradient(135deg,#f59e0b,#d97706)",
+            color: rodando ? "#94a3b8" : "#0f172a",
+            fontWeight: "bold", fontSize: "13px",
+            boxShadow: rodando ? "none" : "0 2px 8px rgba(245,158,11,0.4)"
+          }}>
+            {rodando ? "⏳ Varrendo mercado..." : "⚡ Rodar Scanner Swing"}
+          </button>
+        </div>
+      </div>
+
+      {/* Erro de conexão */}
+      {erroConexao && (
+        <div style={{
+          background: "rgba(239,68,68,0.1)", padding: "12px 16px", borderRadius: "8px",
+          marginBottom: "16px", border: "1px solid rgba(239,68,68,0.3)",
+          color: "#f87171", fontSize: "13px"
+        }}>
+          ⚠️ <strong>Erro de conexão:</strong> Não foi possível conectar ao servidor TradeAI. Verifique se o backend está ativo.
+        </div>
+      )}
+
+      {/* Cards resumo */}
+      <div style={{ display: "flex", gap: "12px", marginBottom: "20px", flexWrap: "wrap" }}>
+        {[
+          { label: "⚡ Sinais Ativos", valor: totalAtivos, cor: "#f59e0b", bg: "rgba(245,158,11,0.06)", border: "rgba(245,158,11,0.15)" },
+          { label: "🇧🇷 B3", valor: totalB3, cor: "#22c55e", bg: "rgba(34,197,94,0.06)", border: "rgba(34,197,94,0.15)" },
+          { label: "🌎 Internacional", valor: totalIntl, cor: "#38bdf8", bg: "rgba(56,189,248,0.06)", border: "rgba(56,189,248,0.15)" },
+          { label: "📋 Histórico", valor: historico.length, cor: "#a78bfa", bg: "rgba(167,139,250,0.06)", border: "rgba(167,139,250,0.15)" },
+        ].map((card, i) => (
+          <div key={i} style={{
+            background: card.bg, border: `1px solid ${card.border}`,
+            padding: "16px 24px", borderRadius: "12px", flex: 1, minWidth: "130px", textAlign: "center"
+          }}>
+            <p style={{ color: "#64748b", fontSize: "12px", margin: "0 0 6px 0" }}>{card.label}</p>
+            <p style={{ color: card.cor, fontSize: "28px", fontWeight: "800", margin: 0 }}>{card.valor}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Banner rodando */}
+      {rodando && (
+        <div style={{
+          background: "rgba(245,158,11,0.08)", padding: "12px 16px", borderRadius: "8px",
+          marginBottom: "16px", borderLeft: "3px solid #f59e0b", color: "#94a3b8", fontSize: "13px"
+        }}>
+          ⚡ Varrendo 70+ ativos da B3 + mercado global em busca de pânico técnico... Aguarde alguns minutos.
+        </div>
+      )}
+
+      {/* Tabs Ativos / Histórico */}
+      <div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>
+        {[
+          { id: "ativos", label: "⚡ Sinais Ativos" },
+          { id: "historico", label: "📋 Histórico" }
+        ].map(v => (
+          <button key={v.id} onClick={() => setVistaAtiva(v.id)} style={{
+            padding: "7px 18px", borderRadius: "8px", border: "none", cursor: "pointer",
+            fontSize: "13px", fontWeight: vistaAtiva === v.id ? "700" : "400",
+            background: vistaAtiva === v.id ? "rgba(245,158,11,0.15)" : "#1e293b",
+            color: vistaAtiva === v.id ? "#f59e0b" : "#64748b",
+            borderBottom: vistaAtiva === v.id ? "2px solid #f59e0b" : "2px solid transparent",
+          }}>
+            {v.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Filtros por mercado */}
+      {vistaAtiva === "ativos" && (
+        <div style={{ display: "flex", gap: "8px", marginBottom: "16px", flexWrap: "wrap" }}>
+          {mercados.map(m => (
+            <button key={m} onClick={() => setFiltroMercado(m)} style={{
+              padding: "6px 16px", borderRadius: "20px", border: "none", cursor: "pointer",
+              fontSize: "12px", fontWeight: filtroMercado === m ? "700" : "400",
+              background: filtroMercado === m ? "#f59e0b" : "#1e293b",
+              color: filtroMercado === m ? "#0f172a" : "#64748b",
+              transition: "all 0.2s"
+            }}>
+              {m}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Conteúdo */}
+      {loading ? (
+        <div style={{ textAlign: "center", padding: "60px", color: "#64748b" }}>
+          <p style={{ fontSize: "32px", marginBottom: "12px" }}>⏳</p>
+          <p>Carregando sinais swing...</p>
+        </div>
+      ) : vistaAtiva === "ativos" && sinaisFiltrados.length === 0 ? (
+        <div style={{ textAlign: "center", padding: "60px", color: "#64748b" }}>
+          <p style={{ fontSize: "48px", marginBottom: "12px" }}>📭</p>
+          <p style={{ fontSize: "16px", marginBottom: "8px" }}>Nenhum sinal swing ativo</p>
+          <p style={{ fontSize: "13px", marginBottom: "16px" }}>
+            O scanner busca quedas ≥3% + RSI ≤38 + volume ≥150% da média
+          </p>
+          <button onClick={rodarScanner} disabled={rodando} style={{
+            padding: "10px 24px", borderRadius: "8px", border: "none", cursor: "pointer",
+            background: "linear-gradient(135deg,#f59e0b,#d97706)",
+            color: "#0f172a", fontWeight: "bold", fontSize: "13px"
+          }}>
+            ⚡ Rodar Scanner Agora
+          </button>
+        </div>
+      ) : (
+        <div style={{ overflowX: "auto", borderRadius: "12px", border: "1px solid #1e293b" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
+            {/* Colunas calibradas para exatamente 100% */}
+            <colgroup>
+              <col style={{ width: "7%" }} />
+              <col style={{ width: "16%" }} />
+              <col style={{ width: "8%" }} />
+              <col style={{ width: "7%" }} />
+              <col style={{ width: "6%" }} />
+              <col style={{ width: "7%" }} />
+              <col style={{ width: "9%" }} />
+              <col style={{ width: "9%" }} />
+              <col style={{ width: "9%" }} />
+              <col style={{ width: "7%" }} />
+              <col style={{ width: "8%" }} />
+              <col style={{ width: "7%" }} />
+            </colgroup>
+            <thead>
+              <tr style={{ background: "#0a1520" }}>
+                {["Ticker", "Nome / Diagnóstico IA", "Mercado", "Queda", "RSI", "Volume", "Preço", "Alvo", "Stop", "Risco", "Time Stop", "Data"].map(h => (
+                  <th key={h} style={{
+                    padding: "12px 10px", textAlign: "left", color: "#64748b",
+                    fontSize: "11px", fontWeight: "700", letterSpacing: "0.05em",
+                    borderBottom: "1px solid #1e293b", whiteSpace: "nowrap"
+                  }}>
+                    {h.toUpperCase()}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {(vistaAtiva === "ativos" ? sinaisFiltrados : historico).map((s, i) => {
+                const timeStop = calcularTimeStop(s.data_expiracao)
+                const expirado = s.status === "EXPIRADO"
+                return (
+                  <tr key={i} style={{
+                    borderBottom: "1px solid #1e293b",
+                    background: expirado ? "rgba(100,116,139,0.03)" : i % 2 === 0 ? "#0d1829" : "#0a1520",
+                    opacity: expirado ? 0.5 : 1,
+                    transition: "background 0.15s"
+                  }}
+                  onMouseEnter={e => { if (!expirado) e.currentTarget.style.background = "#112235" }}
+                  onMouseLeave={e => { if (!expirado) e.currentTarget.style.background = i % 2 === 0 ? "#0d1829" : "#0a1520" }}>
+
+                    <td style={{ padding: "14px 10px", fontWeight: "800", color: "#f59e0b", fontSize: "13px" }}>
+                      {s.ticker}
+                    </td>
+
+                    {/* Nome + Diagnóstico IA */}
+                    <td style={{ padding: "14px 10px", verticalAlign: "top" }}>
+                      <div style={{ color: "#f1f5f9", fontSize: "12px", fontWeight: "600", marginBottom: "4px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {s.nome}
+                      </div>
+                      {s.justificativa && (
+                        <div style={{ color: "#64748b", fontSize: "10px", lineHeight: "1.4" }}>
+                          💡 {s.justificativa}
+                        </div>
+                      )}
+                    </td>
+
+                    <td style={{ padding: "14px 10px" }}>
+                      <span style={{
+                        display: "inline-block", padding: "3px 8px", borderRadius: "12px",
+                        fontSize: "10px", fontWeight: "700",
+                        background: s.mercado === "B3" ? "rgba(34,197,94,0.12)" : "rgba(56,189,248,0.12)",
+                        color: s.mercado === "B3" ? "#22c55e" : "#38bdf8"
+                      }}>
+                        {s.mercado}
+                      </span>
+                    </td>
+
+                    <td style={{ padding: "14px 10px" }}>
+                      <span style={{ color: "#f87171", fontWeight: "700", fontSize: "13px" }}>
+                        {s.variacao_dia ? `${parseFloat(s.variacao_dia).toFixed(2)}%` : "—"}
+                      </span>
+                    </td>
+
+                    <td style={{ padding: "14px 10px" }}>
+                      <span style={{
+                        color: parseFloat(s.rsi) <= 30 ? "#f87171" : "#f59e0b",
+                        fontWeight: "700", fontSize: "13px"
+                      }}>
+                        {s.rsi ? parseFloat(s.rsi).toFixed(1) : "—"}
+                      </span>
+                    </td>
+
+                    <td style={{ padding: "14px 10px" }}>
+                      <span style={{ color: "#4ade80", fontSize: "12px", fontWeight: "700" }}>
+                        {s.volume_vs_media ? `${parseFloat(s.volume_vs_media).toFixed(0)}%` : "—"}
+                      </span>
+                    </td>
+
+                    <td style={{ padding: "14px 10px", color: "#cbd5e1", fontSize: "12px", fontWeight: "600" }}>
+                      {moeda(s.mercado)} {formatarPreco(s.preco_atual)}
+                    </td>
+
+                    <td style={{ padding: "14px 10px" }}>
+                      <span style={{ color: "#4ade80", fontSize: "12px", fontWeight: "700" }}>
+                        {moeda(s.mercado)} {formatarPreco(s.alvo_lucro)}
+                      </span>
+                      {s.pct_alvo && (
+                        <span style={{ color: "#22c55e", fontSize: "10px", display: "block" }}>+{s.pct_alvo}%</span>
+                      )}
+                    </td>
+
+                    <td style={{ padding: "14px 10px" }}>
+                      <span style={{ color: "#f87171", fontSize: "12px", fontWeight: "700" }}>
+                        {moeda(s.mercado)} {formatarPreco(s.stop_loss)}
+                      </span>
+                      {s.pct_stop && (
+                        <span style={{ color: "#ef4444", fontSize: "10px", display: "block" }}>-{s.pct_stop}%</span>
+                      )}
+                    </td>
+
+                    <td style={{ padding: "14px 10px" }}>
+                      <span style={{
+                        display: "inline-block", padding: "3px 6px", borderRadius: "10px",
+                        fontSize: "10px", fontWeight: "700",
+                        background: s.tipo_risco === "SISTEMICO" ? "rgba(56,189,248,0.1)" : "rgba(239,68,68,0.1)",
+                        color: s.tipo_risco === "SISTEMICO" ? "#38bdf8" : "#f87171"
+                      }}>
+                        {s.tipo_risco === "SISTEMICO" ? "🔵 Sist" : "🔴 Idios"}
+                      </span>
+                    </td>
+
+                    <td style={{ padding: "14px 10px" }}>
+                      {expirado ? (
+                        <span style={{ color: "#64748b", fontSize: "11px", fontWeight: "700" }}>⏰ EXPIRADO</span>
+                      ) : timeStop ? (
+                        <span style={{ color: timeStop.cor, fontSize: "11px", fontWeight: "700" }}>
+                          ⏱️ {timeStop.texto}
+                        </span>
+                      ) : "—"}
+                    </td>
+
+                    <td style={{ padding: "14px 10px", color: "#475569", fontSize: "11px" }}>
+                      {formatarData(s.criado_em)}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
 }
