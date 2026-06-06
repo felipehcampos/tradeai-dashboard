@@ -134,20 +134,24 @@ export default function Mercado() {
           )}
         </div>
         <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-          <button onClick={carregarSinais} disabled={loading} style={{
-            padding: "9px 18px", borderRadius: "8px", border: "1px solid #334155",
-            cursor: "pointer", background: "#1e293b", color: "#94a3b8", fontSize: "13px"
-          }}>
-            {loading ? "⏳" : "🔄"} Sinais
-          </button>
           <button onClick={atualizarPrecos} disabled={atualizandoPrecos || sinais.length === 0} style={{
             padding: "9px 18px", borderRadius: "8px", border: "none", cursor: "pointer",
             background: atualizandoPrecos ? "#334155" : "linear-gradient(135deg,#0ea5e9,#0284c7)",
             color: atualizandoPrecos ? "#94a3b8" : "white",
-            fontSize: "13px", fontWeight: "600",
-            boxShadow: atualizandoPrecos ? "none" : "0 2px 8px rgba(14,165,233,0.3)"
+            fontSize: "13px", fontWeight: "600", minWidth: "160px",
+            boxShadow: atualizandoPrecos ? "none" : "0 2px 8px rgba(14,165,233,0.3)",
+            transition: "all 0.2s"
           }}>
-            {atualizandoPrecos ? "⏳ Atualizando..." : "💹 Atualizar Preços"}
+            {atualizandoPrecos ? (
+              <span style={{ display: "flex", alignItems: "center", gap: "8px", justifyContent: "center" }}>
+                <span style={{
+                  width: "12px", height: "12px", border: "2px solid #94a3b8",
+                  borderTopColor: "transparent", borderRadius: "50%",
+                  display: "inline-block", animation: "spin 0.8s linear infinite"
+                }} />
+                Atualizando...
+              </span>
+            ) : "💹 Atualizar Preços"}
           </button>
           <button onClick={rodarScanner} disabled={rodando} style={{
             padding: "9px 20px", borderRadius: "8px", border: "none", cursor: "pointer",
@@ -253,7 +257,7 @@ export default function Mercado() {
                 ))}
               </tr>
             </thead>
-            <tbody>
+            <tbody style={{ opacity: atualizandoPrecos || loading ? 0.4 : 1, transition: "opacity 0.3s ease-in-out" }}>
               {sinaisFiltrados.map((s, i) => {
                 const precoExibir = getPrecoExibir(s)
                 const variacao = calcularVariacao(s)

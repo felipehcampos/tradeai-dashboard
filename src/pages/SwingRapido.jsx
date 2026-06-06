@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react" // Injetado useRef para controle de memória
 import axios from "axios"
 
 const API = import.meta.env.VITE_API_URL
@@ -15,6 +15,9 @@ export default function SwingRapido() {
   const [modalSinal, setModalSinal] = useState(null)
   const [precosAtuais, setPrecosAtuais] = useState({})
   const [atualizandoPrecos, setAtualizandoPrecos] = useState(false)
+  
+  // Guarda a referência do intervalo na memória do componente de forma segura
+  const scannerIntervalRef = useRef(null)
 
   const carregarSinais = () => {
     setLoading(true)
@@ -36,21 +39,40 @@ export default function SwingRapido() {
       .finally(() => setLoading(false))
   }
 
-  useEffect(() => { carregarSinais() }, [])
+  // Bloco de Segurança Máxima: Limpa o intervalo se o usuário fechar a página ou mudar de aba
+  useEffect(() => {
+    carregarSinais()
+    return () => {
+      if (scannerIntervalRef.current) clearInterval(scannerIntervalRef.current)
+    }
+  }, [])
 
   const rodarScanner = async () => {
+    if (rodando) return
     setRodando(true)
-    axios.post(`${API}/rodar-scanner-swing`, {}, { timeout: 600000 })
-      .finally(() => {
-        setRodando(false)
-        carregarSinais()
-      })
-    const intervalo = setInterval(() => {
+
+    // Inicia a escuta em tempo real do progresso
+    scannerIntervalRef.current = setInterval(() => {
       carregarSinais()
     }, 15000)
-    setTimeout(() => {
-      clearInterval(intervalo)
+
+    const limparIntervaloSeguro = () => {
+      if (scannerIntervalRef.current) {
+        clearInterval(scannerIntervalRef.current)
+        scannerIntervalRef.current = null
+      }
       setRodando(false)
+    }
+
+    axios.post(`${API}/rodar-scanner-swing`, {}, { timeout: 600000 })
+      .finally(() => {
+        limparIntervaloSeguro()
+        carregarSinais()
+      })
+
+    // Trava de segurança para desligar após 8 minutos se o servidor sumir
+    setTimeout(() => {
+      limparIntervaloSeguro()
     }, 480000)
   }
 
@@ -118,6 +140,13 @@ export default function SwingRapido() {
 
   return (
     <div style={{ width: "100%" }}>
+      <style>{`
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
+      
       {/* Modal de análise */}
       {modalSinal && (
         <div onClick={() => setModalSinal(null)} style={{
@@ -174,18 +203,28 @@ export default function SwingRapido() {
           </span>
         </div>
         <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-          <button onClick={carregarSinais} disabled={loading} style={{
-            padding: "9px 18px", borderRadius: "8px", border: "1px solid #334155",
-            cursor: "pointer", background: "#1e293b", color: "#94a3b8", fontSize: "13px"
-          }}>
-            {loading ? "⏳" : "🔄"} Atualizar
-          </button>
+          
+          {/* INSTALADO O SPINNER GIRATÓRIO PROFISSIONAL IGUAL À ABA MERCADO */}
           <button onClick={atualizarPrecos} disabled={atualizandoPrecos || sinais.length === 0} style={{
-            padding: "9px 18px", borderRadius: "8px", border: "1px solid #334155",
-            cursor: "pointer", background: "#1e293b", color: "#22c55e", fontSize: "13px"
+            padding: "9px 18px", borderRadius: "8px", border: "none", cursor: "pointer",
+            background: atualizandoPrecos || sinais.length === 0 ? "#334155" : "linear-gradient(135deg,#10b981,#059669)",
+            color: atualizandoPrecos ? "#94a3b8" : "white",
+            fontSize: "13px", fontWeight: "600", minWidth: "160px",
+            boxShadow: atualizandoPrecos ? "none" : "0 2px 8px rgba(16,185,129,0.3)",
+            transition: "all 0.2s"
           }}>
-            {atualizandoPrecos ? "⏳" : "💹"} Atualizar Preços
+            {atualizandoPrecos ? (
+              <span style={{ display: "flex", alignItems: "center", gap: "8px", justifyContent: "center" }}>
+                <span style={{
+                  width: "12px", height: "12px", border: "2px solid #94a3b8",
+                  borderTopColor: "transparent", borderRadius: "50%",
+                  display: "inline-block", animation: "spin 0.8s linear infinite"
+                }} />
+                Atualizando...
+              </span>
+            ) : "💹 Atualizar Preços"}
           </button>
+          
           <button onClick={rodarScanner} disabled={rodando} style={{
             padding: "9px 20px", borderRadius: "8px", border: "none", cursor: "pointer",
             background: rodando ? "#334155" : "linear-gradient(135deg,#f59e0b,#d97706)",
@@ -296,7 +335,6 @@ export default function SwingRapido() {
       ) : (
         <div style={{ overflowX: "auto", borderRadius: "12px", border: "1px solid #1e293b" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
-            {/* Colunas calibradas para exatamente 100% */}
             <colgroup>
               <col style={{ width: "7%" }} />
               <col style={{ width: "16%" }} />
@@ -324,7 +362,7 @@ export default function SwingRapido() {
                 ))}
               </tr>
             </thead>
-            <tbody>
+            <tbody style={{ opacity: atualizandoPrecos || loading ? 0.4 : 1, transition: "opacity 0.3s ease-in-out" }}>
               {(vistaAtiva === "ativos" ? sinaisFiltrados : historico).map((s, i) => {
                 const timeStop = calcularTimeStop(s.data_expiracao)
                 const expirado = s.status === "EXPIRADO"
@@ -342,7 +380,6 @@ export default function SwingRapido() {
                       {s.ticker}
                     </td>
 
-                    {/* Nome + Diagnóstico IA */}
                     <td style={{ padding: "14px 10px", verticalAlign: "middle" }}>
                       <div style={{ color: "#f1f5f9", fontSize: "12px", fontWeight: "600", marginBottom: "6px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         {s.nome}
@@ -414,7 +451,7 @@ export default function SwingRapido() {
                     </td>
 
                     <td style={{ padding: "14px 10px" }}>
-                      <span style={{ color: "#f87171", fontSize: "12px", fontWeight: "700" }}>
+                      <span style={{ color: "#f87171", fontSize: "12px", fontWeight: "600" }}>
                         {moeda(s.mercado)} {formatarPreco(s.stop_loss)}
                       </span>
                       {s.pct_stop && (
