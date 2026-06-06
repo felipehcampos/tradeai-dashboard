@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react" // Injetado useRef para controle de memória
-import axios from "axios"
+import api from "../services/api"
 
 const API = import.meta.env.VITE_API_URL
 
@@ -23,8 +23,8 @@ export default function SwingRapido() {
     setLoading(true)
     setErroConexao(false)
     Promise.all([
-      axios.get(`${API}/sinais-swing`),
-      axios.get(`${API}/sinais-swing/historico`)
+      api.get(`${API}/sinais-swing`),
+      api.get(`${API}/sinais-swing/historico`)
     ])
       .then(([resAtivos, resHistorico]) => {
         setSinais(resAtivos.data.dados || [])
@@ -64,7 +64,7 @@ export default function SwingRapido() {
       setRodando(false)
     }
 
-    axios.post(`${API}/rodar-scanner-swing`, {}, { timeout: 600000 })
+    api.post(`${API}/rodar-scanner-swing`, {}, { timeout: 600000 })
       .finally(() => {
         limparIntervaloSeguro()
         carregarSinais()
@@ -81,7 +81,7 @@ export default function SwingRapido() {
     setAtualizandoPrecos(true)
     try {
       const tickers = [...new Set(sinais.map(s => s.ticker))]
-      const res = await axios.post(`${API}/precos`, { tickers })
+      const res = await api.post(`${API}/precos`, { tickers })
       if (res.data.sucesso) {
         setPrecosAtuais(res.data.precos)
         setUltimaAtualizacao(new Date().toLocaleTimeString("pt-BR"))

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import axios from "axios"
+import api from "../services/api"
 
 const API = import.meta.env.VITE_API_URL
 
@@ -8,7 +8,7 @@ export default function Alertas() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    axios.get(`${API}/alertas`)
+    api.get(`${API}/alertas`)
       .then(r => setAlertas(Array.isArray(r.data) ? r.data : r.data.alertas || []))
       .catch(() => setAlertas([]))
       .finally(() => setLoading(false))

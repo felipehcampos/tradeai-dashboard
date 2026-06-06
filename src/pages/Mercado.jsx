@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import axios from "axios"
+import api from "../services/api"
 
 const API = import.meta.env.VITE_API_URL
 
@@ -14,7 +14,7 @@ export default function Mercado() {
 
   const carregarSinais = () => {
     setLoading(true)
-    axios.get(`${API}/sinais`)
+    api.get(`${API}/sinais`)
       .then(r => {
         const dados = r.data.dados || []
         const filtrados = dados.filter(s => s.sinal !== "EVITAR")
@@ -37,7 +37,7 @@ export default function Mercado() {
     setAtualizandoPrecos(true)
     try {
       const tickers = [...new Set(sinais.map(s => s.ticker))]
-      const res = await axios.post(`${API}/precos`, { tickers })
+      const res = await api.post(`${API}/precos`, { tickers })
       if (res.data.sucesso) {
         setPrecosAtuais(res.data.precos)
         setUltimaAtualizacao(new Date().toLocaleTimeString("pt-BR"))
@@ -54,7 +54,7 @@ export default function Mercado() {
   const rodarScanner = async () => {
     setRodando(true)
     try {
-      await axios.post(`${API}/rodar-scanner`)
+      await api.post(`${API}/rodar-scanner`)
       await carregarSinais()
       setPrecosAtuais({})
     } catch {

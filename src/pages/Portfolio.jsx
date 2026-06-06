@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react"
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from "recharts"
-import axios from "axios"
+import api from "../services/api"
 
 const STORAGE_KEY = "tradeai_portfolio"
 const HISTORICO_KEY = "tradeai_portfolio_historico"
@@ -143,7 +143,7 @@ export default function Portfolio() {
     setAtualizando(true)
     try {
       const tickers = posicoes.map(p => p.ticker)
-      const res = await axios.post(`${API}/precos`, { tickers })
+      const res = await api.post(`${API}/precos`, { tickers })
       if (res.data.sucesso) {
         const precos = res.data.precos
         const novas = posicoes.map(p => ({

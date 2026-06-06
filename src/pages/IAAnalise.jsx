@@ -1,5 +1,5 @@
 import { useState } from "react"
-import axios from "axios"
+import api from "../services/api"
 
 const API = import.meta.env.VITE_API_URL
 
@@ -13,7 +13,7 @@ export default function IAAnalise() {
     setLoading(true)
     setResposta("")
     try {
-      const r = await axios.post(`${API}/chat`, { pergunta: pergunta })
+      const r = await api.post(`${API}/chat`, { pergunta: pergunta })
       setResposta(r.data.resposta)
     } catch {
       setResposta("Erro ao conectar com a IA.")

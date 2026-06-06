@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import axios from "axios"
+import api from "../services/api"
 
 const API = import.meta.env.VITE_API_URL
 
@@ -14,7 +14,7 @@ export default function Noticias() {
     if (isManual) setAtualizando(true)
     else setLoading(true)
 
-    axios.get(`${API}/noticias`)
+    api.get(`${API}/noticias`)
       .then(r => {
         setNoticias(r.data.dados || [])
         setUltimaAtualizacao(new Date().toLocaleTimeString("pt-BR"))
