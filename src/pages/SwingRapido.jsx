@@ -13,6 +13,8 @@ export default function SwingRapido() {
   const [filtroMercado, setFiltroMercado] = useState("TODOS")
   const [vistaAtiva, setVistaAtiva] = useState("ativos")
   const [modalSinal, setModalSinal] = useState(null)
+  const [precosAtuais, setPrecosAtuais] = useState({})
+  const [atualizandoPrecos, setAtualizandoPrecos] = useState(false)
 
   const carregarSinais = () => {
     setLoading(true)
@@ -50,6 +52,31 @@ export default function SwingRapido() {
       clearInterval(intervalo)
       setRodando(false)
     }, 480000)
+  }
+
+  const atualizarPrecos = async () => {
+    if (sinais.length === 0) return
+    setAtualizandoPrecos(true)
+    try {
+      const tickers = [...new Set(sinais.map(s => s.ticker))]
+      const res = await axios.post(`${API}/precos`, { tickers })
+      if (res.data.sucesso) {
+        setPrecosAtuais(res.data.precos)
+        setUltimaAtualizacao(new Date().toLocaleTimeString("pt-BR"))
+      }
+    } catch {
+      console.error("Erro ao atualizar preços")
+    } finally {
+      setAtualizandoPrecos(false)
+    }
+  }
+
+  const getPrecoExibir = (s) => precosAtuais[s.ticker] || s.preco_atual
+  const calcularVariacao = (s) => {
+    if (!precosAtuais[s.ticker] || !s.preco_atual) return null
+    const atual = parseFloat(precosAtuais[s.ticker])
+    const original = parseFloat(s.preco_atual)
+    return ((atual - original) / original * 100).toFixed(2)
   }
 
   const moeda = (mercado) => mercado === "B3" ? "R$" : "US$"
@@ -152,6 +179,12 @@ export default function SwingRapido() {
             cursor: "pointer", background: "#1e293b", color: "#94a3b8", fontSize: "13px"
           }}>
             {loading ? "⏳" : "🔄"} Atualizar
+          </button>
+          <button onClick={atualizarPrecos} disabled={atualizandoPrecos || sinais.length === 0} style={{
+            padding: "9px 18px", borderRadius: "8px", border: "1px solid #334155",
+            cursor: "pointer", background: "#1e293b", color: "#22c55e", fontSize: "13px"
+          }}>
+            {atualizandoPrecos ? "⏳" : "💹"} Atualizar Preços
           </button>
           <button onClick={rodarScanner} disabled={rodando} style={{
             padding: "9px 20px", borderRadius: "8px", border: "none", cursor: "pointer",
@@ -357,8 +390,18 @@ export default function SwingRapido() {
                       </span>
                     </td>
 
-                    <td style={{ padding: "14px 10px", color: "#cbd5e1", fontSize: "12px", fontWeight: "600" }}>
-                      {moeda(s.mercado)} {formatarPreco(s.preco_atual)}
+                    <td style={{ padding: "14px 10px", whiteSpace: "nowrap" }}>
+                      <span style={{ color: "#cbd5e1", fontSize: "12px", fontWeight: "600" }}>
+                        {moeda(s.mercado)} {formatarPreco(getPrecoExibir(s))}
+                      </span>
+                      {calcularVariacao(s) !== null && (
+                        <span style={{
+                          display: "block", fontSize: "10px",
+                          color: parseFloat(calcularVariacao(s)) >= 0 ? "#22c55e" : "#ef4444"
+                        }}>
+                          {parseFloat(calcularVariacao(s)) >= 0 ? "▲" : "▼"} {Math.abs(calcularVariacao(s))}%
+                        </span>
+                      )}
                     </td>
 
                     <td style={{ padding: "14px 10px" }}>
