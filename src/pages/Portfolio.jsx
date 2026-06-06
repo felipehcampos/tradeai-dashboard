@@ -3,76 +3,80 @@ import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from "recha
 import axios from "axios"
 
 const STORAGE_KEY = "tradeai_portfolio"
+const HISTORICO_KEY = "tradeai_portfolio_historico"
 const CORES = ["#38bdf8","#4ade80","#f59e0b","#f87171","#a78bfa","#34d399","#fb923c","#60a5fa","#e879f9","#facc15"]
 const API = import.meta.env.VITE_API_URL
 
 const fmt = (valor) => valor.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})
 
-// Mapeamento automático de setor por ticker
 const SETORES = {
-  // Bancos
   "ITUB4.SA":"Bancos","BBAS3.SA":"Bancos","BBDC4.SA":"Bancos","SANB11.SA":"Bancos",
   "BPAC11.SA":"Bancos","BRSR6.SA":"Bancos",
-  // Mineração
   "VALE3.SA":"Mineração","GGBR4.SA":"Siderurgia","CSNA3.SA":"Siderurgia",
   "USIM5.SA":"Siderurgia","CMIN3.SA":"Mineração","BRAP4.SA":"Mineração",
-  // Petróleo
   "PETR4.SA":"Petróleo","PETR3.SA":"Petróleo","PRIO3.SA":"Petróleo",
   "RECV3.SA":"Petróleo","VBBR3.SA":"Energia","CSAN3.SA":"Energia",
-  // Energia Elétrica
   "EGIE3.SA":"Energia","ENGI11.SA":"Energia","CMIG4.SA":"Energia",
   "CPFE3.SA":"Energia","TAEE11.SA":"Energia","ENBR3.SA":"Energia",
-  // Varejo
-  "MGLU3.SA":"Varejo","LREN3.SA":"Varejo","ALPA4.SA":"Varejo",
-  "SOMA3.SA":"Varejo","SBFG3.SA":"Varejo",
-  // Saúde
-  "HAPV3.SA":"Saúde","RDOR3.SA":"Saúde","FLRY3.SA":"Saúde",
-  "ODPV3.SA":"Saúde","DASA3.SA":"Saúde",
-  // Agro
-  "AGRO3.SA":"Agronegócio","SLCE3.SA":"Agronegócio","SMTO3.SA":"Agronegócio",
-  "JBSS3.SA":"Agronegócio","MRFG3.SA":"Agronegócio","BEEF3.SA":"Agronegócio",
-  // Telecom
+  "MGLU3.SA":"Varejo","LREN3.SA":"Varejo","SOMA3.SA":"Varejo",
+  "HAPV3.SA":"Saúde","RDOR3.SA":"Saúde","FLRY3.SA":"Saúde","ODPV3.SA":"Saúde",
+  "AGRO3.SA":"Agronegócio","SLCE3.SA":"Agronegócio","JBSS3.SA":"Agronegócio",
   "VIVT3.SA":"Telecom","TIMS3.SA":"Telecom",
-  // Tecnologia
   "TOTVS3.SA":"Tecnologia","LWSA3.SA":"Tecnologia",
-  // Imobiliário
   "CYRE3.SA":"Imobiliário","MRVE3.SA":"Imobiliário","EZTC3.SA":"Imobiliário",
   "MULT3.SA":"Imobiliário","ALOS3.SA":"Imobiliário",
-  // Internacional
   "NVDA":"Tecnologia","AAPL":"Tecnologia","MSFT":"Tecnologia","GOOGL":"Tecnologia",
-  "META":"Tecnologia","AMZN":"Tecnologia","NFLX":"Entretenimento",
-  "TSLA":"Veículos Elétricos","RIVN":"Veículos Elétricos",
-  "JPM":"Bancos","BAC":"Bancos","GS":"Bancos","V":"Financeiro","MA":"Financeiro",
-  "XOM":"Petróleo","CVX":"Petróleo","COP":"Petróleo","SLB":"Petróleo",
-  "LLY":"Saúde","NVO":"Saúde","ABBV":"Saúde","PFE":"Saúde","MRNA":"Saúde",
-  "AVGO":"Semicondutores","AMD":"Semicondutores","INTC":"Semicondutores",
-  "TSM":"Semicondutores","QCOM":"Semicondutores","ARM":"Semicondutores",
-  "COIN":"Crypto","MSTR":"Crypto","RIOT":"Crypto","MARA":"Crypto",
-  "BTC-USD":"Crypto","ETH-USD":"Crypto","SOL-USD":"Crypto","XRP-USD":"Crypto",
-  "GC=F":"Commodities","CL=F":"Commodities","SI=F":"Commodities",
-  "SHEL.L":"Petróleo","BP.L":"Petróleo","UBER":"Tecnologia","PLTR":"Tecnologia",
+  "META":"Tecnologia","AMZN":"Tecnologia","TSLA":"Veículos Elétricos",
+  "JPM":"Bancos","BAC":"Bancos","V":"Financeiro","MA":"Financeiro",
+  "XOM":"Petróleo","CVX":"Petróleo","LLY":"Saúde","ABBV":"Saúde",
+  "AVGO":"Semicondutores","AMD":"Semicondutores","TSM":"Semicondutores",
+  "BTC-USD":"Crypto","ETH-USD":"Crypto","SOL-USD":"Crypto",
+  "GC=F":"Commodities","CL=F":"Commodities",
 }
 
 const getSetor = (ticker) => SETORES[ticker] || "Outros"
 
+const diasNaOperacao = (dataStr) => {
+  if (!dataStr) return 0
+  const partes = dataStr.split("/")
+  if (partes.length === 3) {
+    const data = new Date(`${partes[2]}-${partes[1]}-${partes[0]}`)
+    const diff = Math.floor((new Date() - data) / (1000 * 60 * 60 * 24))
+    return diff
+  }
+  return 0
+}
+
 export default function Portfolio() {
   const [posicoes, setPosicoes] = useState([])
+  const [historico, setHistorico] = useState([])
+  const [abaAtiva, setAbaAtiva] = useState("abertas")
   const [form, setForm] = useState({ ticker: "", nome: "", mercado: "B3", quantidade: "", preco_entrada: "" })
   const [mostrarForm, setMostrarForm] = useState(false)
   const [editando, setEditando] = useState(null)
   const [editForm, setEditForm] = useState({})
   const [atualizando, setAtualizando] = useState(false)
   const [ultimaAtualizacao, setUltimaAtualizacao] = useState(null)
-  const [modoGrafico, setModoGrafico] = useState("ativo") // "ativo" ou "setor"
+  const [modoGrafico, setModoGrafico] = useState("ativo")
+  const [modalEncerrar, setModalEncerrar] = useState(null)
+  const [precoSaida, setPrecoSaida] = useState("")
 
   useEffect(() => {
     const salvo = localStorage.getItem(STORAGE_KEY)
     if (salvo) setPosicoes(JSON.parse(salvo))
+    const hist = localStorage.getItem(HISTORICO_KEY)
+    if (hist) setHistorico(JSON.parse(hist))
   }, [])
 
   const salvar = (novas) => {
     setPosicoes(novas)
     localStorage.setItem(STORAGE_KEY, JSON.stringify(novas))
+  }
+
+  const salvarHistorico = (novo) => {
+    const novoHist = [novo, ...historico]
+    setHistorico(novoHist)
+    localStorage.setItem(HISTORICO_KEY, JSON.stringify(novoHist))
   }
 
   const adicionar = () => {
@@ -110,7 +114,29 @@ export default function Portfolio() {
     setEditando(null)
   }
 
-  const cancelarEdicao = () => setEditando(null)
+  const encerrarPosicao = () => {
+    if (!precoSaida || !modalEncerrar) return
+    const p = posicoes[modalEncerrar.idx]
+    const saida = parseFloat(precoSaida)
+    const pl = (saida - p.preco_entrada) * p.quantidade
+    const plPct = ((saida - p.preco_entrada) / p.preco_entrada * 100).toFixed(2)
+    salvarHistorico({
+      ticker: p.ticker,
+      nome: p.nome,
+      mercado: p.mercado,
+      quantidade: p.quantidade,
+      preco_entrada: p.preco_entrada,
+      preco_saida: saida,
+      pl: pl,
+      pl_pct: plPct,
+      data_entrada: p.data,
+      data_saida: new Date().toLocaleDateString("pt-BR"),
+      dias: diasNaOperacao(p.data)
+    })
+    remover(modalEncerrar.idx)
+    setModalEncerrar(null)
+    setPrecoSaida("")
+  }
 
   const atualizarPrecos = async () => {
     if (posicoes.length === 0) return
@@ -138,17 +164,16 @@ export default function Portfolio() {
 
   const totalInvestido = posicoes.reduce((acc, p) => acc + p.quantidade * p.preco_entrada, 0)
   const totalAtual = posicoes.reduce((acc, p) => acc + p.quantidade * p.preco_atual, 0)
-  const lucroTotal = totalAtual - totalInvestido
-  const lucroPercent = totalInvestido > 0 ? (lucroTotal / totalInvestido * 100).toFixed(2) : 0
+  const lucroFlutuante = totalAtual - totalInvestido
+  const lucroFlutuantePct = totalInvestido > 0 ? (lucroFlutuante / totalInvestido * 100).toFixed(2) : 0
+  const lucroRealizado = historico.reduce((acc, h) => acc + h.pl, 0)
 
-  // Dados gráfico por ativo
   const dadosPorAtivo = posicoes.map(p => ({
     name: p.ticker,
     value: parseFloat((p.quantidade * p.preco_entrada).toFixed(2)),
     percent: totalInvestido > 0 ? ((p.quantidade * p.preco_entrada / totalInvestido) * 100).toFixed(1) : 0
   }))
 
-  // Dados gráfico por setor
   const dadosPorSetor = Object.entries(
     posicoes.reduce((acc, p) => {
       const setor = getSetor(p.ticker)
@@ -166,6 +191,68 @@ export default function Portfolio() {
 
   return (
     <div style={{ width: "100%" }}>
+      <style>{`
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
+
+      {/* Modal Encerrar Posição */}
+      {modalEncerrar && (
+        <div onClick={() => setModalEncerrar(null)} style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)",
+          zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px"
+        }}>
+          <div onClick={e => e.stopPropagation()} style={{
+            background: "#0d1829", border: "1px solid #1e293b", borderRadius: "16px",
+            padding: "28px", maxWidth: "420px", width: "100%"
+          }}>
+            <h3 style={{ color: "#f59e0b", margin: "0 0 8px 0" }}>🏁 Encerrar Posição</h3>
+            <p style={{ color: "#64748b", fontSize: "13px", margin: "0 0 20px 0" }}>
+              {modalEncerrar.ticker} — {modalEncerrar.quantidade} cotas @ {moeda(modalEncerrar.mercado)} {fmt(modalEncerrar.preco_entrada)}
+            </p>
+            <p style={{ color: "#94a3b8", fontSize: "13px", marginBottom: "8px" }}>Preço de saída:</p>
+            <input
+              type="number"
+              value={precoSaida}
+              onChange={e => setPrecoSaida(e.target.value)}
+              placeholder="Ex: 85.50"
+              style={{
+                width: "100%", padding: "12px", borderRadius: "8px",
+                border: "1px solid #334155", background: "#0f172a",
+                color: "#f1f5f9", fontSize: "14px", marginBottom: "16px", boxSizing: "border-box"
+              }}
+            />
+            {precoSaida && (
+              <div style={{
+                padding: "12px", borderRadius: "8px", marginBottom: "16px",
+                background: (parseFloat(precoSaida) - modalEncerrar.preco_entrada) >= 0
+                  ? "rgba(74,222,128,0.1)" : "rgba(248,113,113,0.1)"
+              }}>
+                <p style={{ margin: 0, fontSize: "13px", color: "#94a3b8" }}>Resultado estimado:</p>
+                <p style={{
+                  margin: "4px 0 0 0", fontSize: "18px", fontWeight: "800",
+                  color: (parseFloat(precoSaida) - modalEncerrar.preco_entrada) >= 0 ? "#4ade80" : "#f87171"
+                }}>
+                  {moeda(modalEncerrar.mercado)} {fmt((parseFloat(precoSaida) - modalEncerrar.preco_entrada) * modalEncerrar.quantidade)}
+                  {" "}({((parseFloat(precoSaida) - modalEncerrar.preco_entrada) / modalEncerrar.preco_entrada * 100).toFixed(2)}%)
+                </p>
+              </div>
+            )}
+            <div style={{ display: "flex", gap: "10px" }}>
+              <button onClick={encerrarPosicao} style={{
+                flex: 1, padding: "12px", borderRadius: "8px", border: "none", cursor: "pointer",
+                background: "linear-gradient(135deg,#16a34a,#15803d)", color: "white", fontWeight: "700", fontSize: "13px"
+              }}>✅ Confirmar Encerramento</button>
+              <button onClick={() => { setModalEncerrar(null); setPrecoSaida("") }} style={{
+                padding: "12px 16px", borderRadius: "8px", border: "1px solid #334155",
+                cursor: "pointer", background: "#1e293b", color: "#94a3b8", fontSize: "13px"
+              }}>Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Header */}
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"20px", flexWrap:"wrap", gap:"12px" }}>
@@ -180,10 +267,19 @@ export default function Portfolio() {
             padding:"9px 20px", borderRadius:"8px", border:"none", cursor:"pointer",
             background: atualizando ? "#334155" : "linear-gradient(135deg,#38bdf8,#0ea5e9)",
             color: atualizando ? "#94a3b8" : "#0f172a",
-            fontWeight:"bold", fontSize:"13px",
+            fontWeight:"bold", fontSize:"13px", minWidth: "160px",
             boxShadow: atualizando ? "none" : "0 2px 8px rgba(56,189,248,0.3)"
           }}>
-            {atualizando ? "⏳ Atualizando..." : "🔄 Atualizar Preços"}
+            {atualizando ? (
+              <span style={{ display: "flex", alignItems: "center", gap: "8px", justifyContent: "center" }}>
+                <span style={{
+                  width: "12px", height: "12px", border: "2px solid #94a3b8",
+                  borderTopColor: "transparent", borderRadius: "50%",
+                  display: "inline-block", animation: "spin 0.8s linear infinite"
+                }} />
+                Atualizando...
+              </span>
+            ) : "🔄 Atualizar Preços"}
           </button>
         )}
       </div>
@@ -193,66 +289,57 @@ export default function Portfolio() {
         {[
           { label:"Total Investido", valor:`R$ ${fmt(totalInvestido)}`, cor:"#f1f5f9", bg:"rgba(255,255,255,0.05)" },
           { label:"Valor Atual", valor:`R$ ${fmt(totalAtual)}`, cor:"#38bdf8", bg:"rgba(56,189,248,0.08)" },
-          { label:"Lucro/Prejuízo", valor:`R$ ${fmt(lucroTotal)} (${lucroPercent}%)`,
-            cor: lucroTotal >= 0 ? "#4ade80" : "#f87171",
-            bg: lucroTotal >= 0 ? "rgba(22,163,74,0.08)" : "rgba(220,38,38,0.08)" },
+          { label:"Lucro Flutuante (Aberto)",
+            valor:`R$ ${fmt(lucroFlutuante)} (${lucroFlutuantePct}%)`,
+            cor: lucroFlutuante >= 0 ? "#4ade80" : "#f87171",
+            bg: lucroFlutuante >= 0 ? "rgba(22,163,74,0.08)" : "rgba(220,38,38,0.08)" },
+          { label:"Lucro Realizado",
+            valor:`R$ ${fmt(lucroRealizado)}`,
+            cor: lucroRealizado >= 0 ? "#4ade80" : "#f87171",
+            bg: lucroRealizado >= 0 ? "rgba(22,163,74,0.08)" : "rgba(220,38,38,0.08)" },
           { label:"Posições Abertas", valor:posicoes.length, cor:"#a78bfa", bg:"rgba(167,139,250,0.08)" },
         ].map((card, i) => (
           <div key={i} style={{
             background:card.bg, border:`1px solid ${card.cor}20`,
-            padding:"16px 20px", borderRadius:"12px", minWidth:"160px", flex:1, textAlign:"center"
+            padding:"16px 20px", borderRadius:"12px", minWidth:"140px", flex:1, textAlign:"center"
           }}>
             <p style={{ color:"#64748b", fontSize:"11px", margin:"0 0 6px 0", fontWeight:"500" }}>{card.label}</p>
-            <p style={{ color:card.cor, fontSize:"22px", fontWeight:"800", margin:0 }}>{card.valor}</p>
+            <p style={{ color:card.cor, fontSize:"20px", fontWeight:"800", margin:0 }}>{card.valor}</p>
           </div>
         ))}
       </div>
 
-      {/* Gráfico com botões para alternar */}
+      {/* Gráfico */}
       {posicoes.length > 0 && (
         <div style={{ background:"#0d1829", border:"1px solid #1e293b", padding:"20px", borderRadius:"12px", marginBottom:"24px" }}>
-          
-          {/* Header do gráfico com botões */}
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"16px" }}>
             <h3 style={{ color:"#94a3b8", fontSize:"13px", fontWeight:"600", letterSpacing:"0.05em", margin:0 }}>
               📊 ALOCAÇÃO DO PORTFÓLIO
             </h3>
             <div style={{ display:"flex", gap:"6px" }}>
-              <button onClick={() => setModoGrafico("ativo")} style={{
-                padding:"5px 14px", borderRadius:"20px", border:"none", cursor:"pointer",
-                fontSize:"12px", fontWeight: modoGrafico === "ativo" ? "700" : "400",
-                background: modoGrafico === "ativo" ? "#38bdf8" : "#1e293b",
-                color: modoGrafico === "ativo" ? "#0f172a" : "#64748b",
-                transition:"all 0.2s"
-              }}>
-                Por Ativo
-              </button>
-              <button onClick={() => setModoGrafico("setor")} style={{
-                padding:"5px 14px", borderRadius:"20px", border:"none", cursor:"pointer",
-                fontSize:"12px", fontWeight: modoGrafico === "setor" ? "700" : "400",
-                background: modoGrafico === "setor" ? "#38bdf8" : "#1e293b",
-                color: modoGrafico === "setor" ? "#0f172a" : "#64748b",
-                transition:"all 0.2s"
-              }}>
-                Por Setor
-              </button>
+              {["ativo", "setor"].map(modo => (
+                <button key={modo} onClick={() => setModoGrafico(modo)} style={{
+                  padding:"5px 14px", borderRadius:"20px", border:"none", cursor:"pointer",
+                  fontSize:"12px", fontWeight: modoGrafico === modo ? "700" : "400",
+                  background: modoGrafico === modo ? "#38bdf8" : "#1e293b",
+                  color: modoGrafico === modo ? "#0f172a" : "#64748b",
+                  transition:"all 0.2s"
+                }}>
+                  {modo === "ativo" ? "Por Ativo" : "Por Setor"}
+                </button>
+              ))}
             </div>
           </div>
-
           <ResponsiveContainer width="100%" height={280}>
             <PieChart>
-              <Pie
-                data={dadosGrafico}
-                cx="50%" cy="50%" outerRadius={115}
+              <Pie data={dadosGrafico} cx="50%" cy="50%" outerRadius={115}
                 dataKey="value" nameKey="name"
-                label={({ name, percent }) => `${name} ${percent}%`}
-                labelLine={true}>
+                label={({ name, percent }) => `${name} ${percent}%`} labelLine={true}>
                 {dadosGrafico.map((_, i) => (
                   <Cell key={i} fill={CORES[i % CORES.length]} />
                 ))}
               </Pie>
-              <Tooltip
-                formatter={(value) => [`R$ ${fmt(value)}`, "Valor"]}
+              <Tooltip formatter={(value) => [`R$ ${fmt(value)}`, "Valor"]}
                 contentStyle={{ background:"#0f172a", border:"1px solid #334155", borderRadius:"8px", color:"#e2e8f0" }} />
               <Legend />
             </PieChart>
@@ -260,172 +347,302 @@ export default function Portfolio() {
         </div>
       )}
 
-      {/* Botão adicionar */}
-      <button onClick={() => setMostrarForm(!mostrarForm)} style={{
-        padding:"9px 20px", borderRadius:"8px", cursor:"pointer",
-        background: mostrarForm ? "#334155" : "#1e293b",
-        color: mostrarForm ? "#94a3b8" : "#38bdf8",
-        fontWeight:"bold", marginBottom:"16px", fontSize:"13px",
-        border:"1px solid #334155"
-      }}>
-        {mostrarForm ? "✕ Cancelar" : "+ Adicionar Posição"}
-      </button>
+      {/* Sub-abas */}
+      <div style={{ display:"flex", gap:"8px", marginBottom:"16px" }}>
+        {[
+          { id: "abertas", label: "💼 Posições Abertas", count: posicoes.length },
+          { id: "historico", label: "📜 Histórico de Trades", count: historico.length }
+        ].map(a => (
+          <button key={a.id} onClick={() => setAbaAtiva(a.id)} style={{
+            padding:"8px 20px", borderRadius:"8px", border:"none", cursor:"pointer",
+            fontSize:"13px", fontWeight: abaAtiva === a.id ? "700" : "400",
+            background: abaAtiva === a.id ? "rgba(56,189,248,0.15)" : "#1e293b",
+            color: abaAtiva === a.id ? "#38bdf8" : "#64748b",
+            borderBottom: abaAtiva === a.id ? "2px solid #38bdf8" : "2px solid transparent",
+          }}>
+            {a.label} <span style={{ marginLeft:"6px", background:"#1e293b", padding:"2px 8px", borderRadius:"10px", fontSize:"11px" }}>{a.count}</span>
+          </button>
+        ))}
+      </div>
 
-      {/* Formulário */}
-      {mostrarForm && (
-        <div style={{ background:"#0d1829", border:"1px solid #1e293b", padding:"16px",
-          borderRadius:"12px", marginBottom:"16px", display:"flex", gap:"12px", flexWrap:"wrap" }}>
-          {[
-            { key:"ticker", placeholder:"Ticker (ex: VALE3.SA)" },
-            { key:"nome", placeholder:"Nome (ex: Vale)" },
-            { key:"quantidade", placeholder:"Quantidade", type:"number" },
-            { key:"preco_entrada", placeholder:"Preço de Entrada", type:"number" },
-          ].map(f => (
-            <input key={f.key} type={f.type||"text"} placeholder={f.placeholder}
-              value={form[f.key]} onChange={e => setForm({...form, [f.key]: e.target.value})}
-              style={{ padding:"10px", borderRadius:"6px", border:"1px solid #334155",
-                background:"#0f172a", color:"#f1f5f9", fontSize:"13px", flex:1, minWidth:"150px" }} />
-          ))}
-          <select value={form.mercado} onChange={e => setForm({...form, mercado: e.target.value})}
-            style={{ padding:"10px", borderRadius:"6px", border:"1px solid #334155",
-              background:"#0f172a", color:"#f1f5f9", fontSize:"13px" }}>
-            <option value="B3">B3</option>
-            <option value="NASDAQ">NASDAQ</option>
-            <option value="NYSE">NYSE</option>
-            <option value="CRYPTO">CRYPTO</option>
-            <option value="COMMODITY">COMMODITY</option>
-          </select>
-          <button onClick={adicionar} style={{
-            padding:"10px 20px", borderRadius:"6px", border:"none", cursor:"pointer",
-            background:"linear-gradient(135deg,#16a34a,#15803d)", color:"white", fontWeight:"bold", fontSize:"13px"
-          }}>Adicionar</button>
-        </div>
+      {/* ABA: Posições Abertas */}
+      {abaAtiva === "abertas" && (
+        <>
+          <button onClick={() => setMostrarForm(!mostrarForm)} style={{
+            padding:"9px 20px", borderRadius:"8px", cursor:"pointer",
+            background: mostrarForm ? "#334155" : "#1e293b",
+            color: mostrarForm ? "#94a3b8" : "#38bdf8",
+            fontWeight:"bold", marginBottom:"16px", fontSize:"13px",
+            border:"1px solid #334155"
+          }}>
+            {mostrarForm ? "✕ Cancelar" : "+ Adicionar Posição"}
+          </button>
+
+          {mostrarForm && (
+            <div style={{ background:"#0d1829", border:"1px solid #1e293b", padding:"16px",
+              borderRadius:"12px", marginBottom:"16px", display:"flex", gap:"12px", flexWrap:"wrap" }}>
+              {[
+                { key:"ticker", placeholder:"Ticker (ex: VALE3.SA)" },
+                { key:"nome", placeholder:"Nome (ex: Vale)" },
+                { key:"quantidade", placeholder:"Quantidade", type:"number" },
+                { key:"preco_entrada", placeholder:"Preço de Entrada", type:"number" },
+              ].map(f => (
+                <input key={f.key} type={f.type||"text"} placeholder={f.placeholder}
+                  value={form[f.key]} onChange={e => setForm({...form, [f.key]: e.target.value})}
+                  style={{ padding:"10px", borderRadius:"6px", border:"1px solid #334155",
+                    background:"#0f172a", color:"#f1f5f9", fontSize:"13px", flex:1, minWidth:"150px" }} />
+              ))}
+              <select value={form.mercado} onChange={e => setForm({...form, mercado: e.target.value})}
+                style={{ padding:"10px", borderRadius:"6px", border:"1px solid #334155",
+                  background:"#0f172a", color:"#f1f5f9", fontSize:"13px" }}>
+                <option value="B3">B3</option>
+                <option value="NASDAQ">NASDAQ</option>
+                <option value="NYSE">NYSE</option>
+                <option value="CRYPTO">CRYPTO</option>
+                <option value="COMMODITY">COMMODITY</option>
+              </select>
+              <button onClick={adicionar} style={{
+                padding:"10px 20px", borderRadius:"6px", border:"none", cursor:"pointer",
+                background:"linear-gradient(135deg,#16a34a,#15803d)", color:"white", fontWeight:"bold", fontSize:"13px"
+              }}>Adicionar</button>
+            </div>
+          )}
+
+          {posicoes.length === 0 ? (
+            <div style={{ textAlign:"center", padding:"60px", color:"#64748b" }}>
+              <p style={{ fontSize:"40px", marginBottom:"12px" }}>📭</p>
+              <p style={{ fontSize:"15px", marginBottom:"8px" }}>Nenhuma posição aberta</p>
+              <p style={{ fontSize:"13px" }}>Adicione uma posição ou clique em "+ Portfólio" na aba Mercado</p>
+            </div>
+          ) : (
+            <div style={{ overflowX:"auto", borderRadius:"12px", border:"1px solid #1e293b" }}>
+              <table style={{ width:"100%", borderCollapse:"collapse" }}>
+                <thead>
+                  <tr style={{ background:"#0a1520" }}>
+                    {["Ticker","Nome","Mercado","Setor","Qtd","Entrada","Valor Invest.","Preço Atual","Valor Atual","P&L","Alvo/Stop","Dias","Ações"].map(h => (
+                      <th key={h} style={{ padding:"12px 10px", textAlign:"left", color:"#64748b",
+                        fontSize:"10px", fontWeight:"700", letterSpacing:"0.05em",
+                        borderBottom:"1px solid #1e293b", whiteSpace:"nowrap" }}>
+                        {h.toUpperCase()}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody style={{ opacity: atualizando ? 0.4 : 1, transition: "opacity 0.3s" }}>
+                  {posicoes.map((p, i) => {
+                    const pl = (p.preco_atual - p.preco_entrada) * p.quantidade
+                    const plPct = ((p.preco_atual - p.preco_entrada) / p.preco_entrada * 100).toFixed(2)
+                    const valorInvestido = p.quantidade * p.preco_entrada
+                    const valorAtual = p.quantidade * p.preco_atual
+                    const alvo = p.preco_entrada * 1.05
+                    const stop = p.preco_entrada * 0.98
+                    const progressoAlvo = Math.min(Math.max(((p.preco_atual - stop) / (alvo - stop)) * 100, 0), 100)
+                    const dias = diasNaOperacao(p.data)
+                    const estaEditando = editando === i
+                    const emLucro = pl >= 0
+                    const setor = getSetor(p.ticker)
+                    return (
+                      <tr key={i} style={{
+                        borderBottom:"1px solid #0f172a",
+                        background: estaEditando ? "#1e3a4a" : i % 2 === 0 ? "#0d1829" : "#0a1520",
+                        transition:"background 0.15s"
+                      }}
+                      onMouseEnter={e => { if (!estaEditando) e.currentTarget.style.background = "#1e293b" }}
+                      onMouseLeave={e => { if (!estaEditando) e.currentTarget.style.background = i % 2 === 0 ? "#0d1829" : "#0a1520" }}>
+
+                        <td style={{ padding:"12px 10px", fontWeight:"700", color:"#38bdf8", fontSize:"13px", whiteSpace:"nowrap" }}>{p.ticker}</td>
+                        <td style={{ padding:"12px 10px", color:"#e2e8f0", fontSize:"12px", whiteSpace:"nowrap" }}>{p.nome}</td>
+                        <td style={{ padding:"12px 10px" }}>
+                          <span style={{ padding:"2px 7px", borderRadius:"12px", fontSize:"10px", fontWeight:"600",
+                            background: p.mercado==="B3" ? "rgba(34,197,94,0.15)" : "rgba(56,189,248,0.15)",
+                            color: p.mercado==="B3" ? "#22c55e" : "#38bdf8" }}>
+                            {p.mercado}
+                          </span>
+                        </td>
+                        <td style={{ padding:"12px 10px" }}>
+                          <span style={{ padding:"2px 7px", borderRadius:"12px", fontSize:"10px", fontWeight:"600",
+                            background:"rgba(167,139,250,0.15)", color:"#a78bfa" }}>
+                            {setor}
+                          </span>
+                        </td>
+                        <td style={{ padding:"12px 10px", color:"#e2e8f0", fontSize:"12px" }}>
+                          {estaEditando ? (
+                            <input type="number" value={editForm.quantidade}
+                              onChange={e => setEditForm({...editForm, quantidade: e.target.value})}
+                              style={{ width:"60px", padding:"4px", borderRadius:"4px", border:"1px solid #38bdf8",
+                                background:"#0f172a", color:"#f1f5f9", fontSize:"12px" }} />
+                          ) : p.quantidade}
+                        </td>
+                        <td style={{ padding:"12px 10px", color:"#e2e8f0", fontSize:"12px" }}>
+                          {estaEditando ? (
+                            <input type="number" value={editForm.preco_entrada}
+                              onChange={e => setEditForm({...editForm, preco_entrada: e.target.value})}
+                              style={{ width:"80px", padding:"4px", borderRadius:"4px", border:"1px solid #38bdf8",
+                                background:"#0f172a", color:"#f1f5f9", fontSize:"12px" }} />
+                          ) : `${moeda(p.mercado)} ${fmt(p.preco_entrada)}`}
+                        </td>
+                        <td style={{ padding:"12px 10px", color:"#94a3b8", fontSize:"12px" }}>
+                          {moeda(p.mercado)} {fmt(valorInvestido)}
+                        </td>
+                        <td style={{ padding:"12px 10px", fontWeight:"600", fontSize:"12px" }}>
+                          <span style={{ color: "#e2e8f0" }}>
+                            {moeda(p.mercado)} {fmt(p.preco_atual)}
+                          </span>
+                        </td>
+                        <td style={{ padding:"12px 10px", color: emLucro ? "#4ade80" : "#f87171", fontSize:"12px", fontWeight:"600" }}>
+                          {moeda(p.mercado)} {fmt(valorAtual)}
+                        </td>
+                        <td style={{ padding:"12px 10px" }}>
+                          <span style={{ color: emLucro ? "#4ade80" : "#f87171", fontWeight:"700", fontSize:"12px" }}>
+                            {emLucro ? "▲" : "▼"} {moeda(p.mercado)} {fmt(Math.abs(pl))}
+                          </span>
+                          <span style={{ display:"block", fontSize:"10px", color: emLucro ? "#22c55e" : "#ef4444" }}>
+                            {emLucro ? "+" : ""}{plPct}%
+                          </span>
+                        </td>
+                        <td style={{ padding:"12px 10px", minWidth:"100px" }}>
+                          <div style={{ fontSize:"9px", color:"#64748b", marginBottom:"3px", display:"flex", justifyContent:"space-between" }}>
+                            <span style={{ color:"#f87171" }}>Stop {fmt(stop)}</span>
+                            <span style={{ color:"#4ade80" }}>Alvo {fmt(alvo)}</span>
+                          </div>
+                          <div style={{ background:"#1e293b", borderRadius:"4px", height:"6px", width:"100%", position:"relative" }}>
+                            <div style={{
+                              background: progressoAlvo > 50 ? "#4ade80" : progressoAlvo > 20 ? "#f59e0b" : "#f87171",
+                              borderRadius:"4px", height:"6px", width:`${progressoAlvo}%`,
+                              transition:"width 0.3s"
+                            }}/>
+                          </div>
+                          <div style={{ fontSize:"9px", color:"#64748b", marginTop:"2px", textAlign:"center" }}>
+                            {progressoAlvo.toFixed(0)}% do caminho
+                          </div>
+                        </td>
+                        <td style={{ padding:"12px 10px" }}>
+                          <span style={{
+                            color: dias > 3 ? "#f87171" : dias > 1 ? "#f59e0b" : "#4ade80",
+                            fontSize:"12px", fontWeight:"700"
+                          }}>
+                            {dias}d
+                          </span>
+                        </td>
+                        <td style={{ padding:"12px 10px" }}>
+                          <div style={{ display:"flex", gap:"4px", flexWrap:"wrap" }}>
+                            {estaEditando ? (
+                              <>
+                                <button onClick={() => salvarEdicao(i)} style={{
+                                  padding:"4px 8px", borderRadius:"4px", border:"none", cursor:"pointer",
+                                  background:"#16a34a", color:"white", fontSize:"11px", fontWeight:"600" }}>✓</button>
+                                <button onClick={() => setEditando(null)} style={{
+                                  padding:"4px 8px", borderRadius:"4px", border:"none", cursor:"pointer",
+                                  background:"#334155", color:"white", fontSize:"11px" }}>✕</button>
+                              </>
+                            ) : (
+                              <>
+                                <button onClick={() => setModalEncerrar({idx: i, ...p})} style={{
+                                  padding:"4px 8px", borderRadius:"4px", border:"none", cursor:"pointer",
+                                  background:"#16a34a", color:"white", fontSize:"11px", fontWeight:"600",
+                                  whiteSpace:"nowrap" }}>🏁</button>
+                                <button onClick={() => iniciarEdicao(i)} style={{
+                                  padding:"4px 8px", borderRadius:"4px", border:"none", cursor:"pointer",
+                                  background:"#d97706", color:"white", fontSize:"11px" }}>✏️</button>
+                                <button onClick={() => remover(i)} style={{
+                                  padding:"4px 8px", borderRadius:"4px", border:"none", cursor:"pointer",
+                                  background:"#dc2626", color:"white", fontSize:"11px" }}>🗑️</button>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
       )}
 
-      {/* Tabela */}
-      {posicoes.length === 0 ? (
-        <div style={{ textAlign:"center", padding:"60px", color:"#64748b" }}>
-          <p style={{ fontSize:"40px", marginBottom:"12px" }}>📭</p>
-          <p style={{ fontSize:"15px", marginBottom:"8px" }}>Nenhuma posição cadastrada</p>
-          <p style={{ fontSize:"13px" }}>Adicione uma posição ou clique em "+ Portfólio" na aba Mercado</p>
-        </div>
-      ) : (
-        <div style={{ overflowX:"auto", borderRadius:"12px", border:"1px solid #1e293b" }}>
-          <table style={{ width:"100%", borderCollapse:"collapse" }}>
-            <thead>
-              <tr style={{ background:"#0a1520" }}>
-                {["Ticker","Nome","Mercado","Setor","Qtd","Entrada","Preço Atual","P&L","% Carteira","Data","Ações"].map(h => (
-                  <th key={h} style={{ padding:"14px 12px", textAlign:"left", color:"#64748b",
-                    fontSize:"11px", fontWeight:"700", letterSpacing:"0.05em",
-                    borderBottom:"1px solid #1e293b", whiteSpace:"nowrap" }}>
-                    {h.toUpperCase()}
-                  </th>
+      {/* ABA: Histórico de Trades */}
+      {abaAtiva === "historico" && (
+        <>
+          {historico.length === 0 ? (
+            <div style={{ textAlign:"center", padding:"60px", color:"#64748b" }}>
+              <p style={{ fontSize:"40px", marginBottom:"12px" }}>📜</p>
+              <p style={{ fontSize:"15px", marginBottom:"8px" }}>Nenhuma operação encerrada</p>
+              <p style={{ fontSize:"13px" }}>Quando encerrar uma posição, ela aparecerá aqui com o resultado</p>
+            </div>
+          ) : (
+            <>
+              {/* Resumo do histórico */}
+              <div style={{ display:"flex", gap:"12px", marginBottom:"16px", flexWrap:"wrap" }}>
+                {[
+                  { label:"Total de Trades", valor: historico.length, cor:"#38bdf8" },
+                  { label:"Trades Lucrativos", valor: historico.filter(h => h.pl >= 0).length, cor:"#4ade80" },
+                  { label:"Trades com Prejuízo", valor: historico.filter(h => h.pl < 0).length, cor:"#f87171" },
+                  { label:"P&L Total Realizado", valor:`R$ ${fmt(lucroRealizado)}`,
+                    cor: lucroRealizado >= 0 ? "#4ade80" : "#f87171" },
+                ].map((card, i) => (
+                  <div key={i} style={{
+                    background:"rgba(255,255,255,0.03)", border:"1px solid #1e293b",
+                    padding:"12px 16px", borderRadius:"10px", flex:1, minWidth:"120px", textAlign:"center"
+                  }}>
+                    <p style={{ color:"#64748b", fontSize:"11px", margin:"0 0 4px 0" }}>{card.label}</p>
+                    <p style={{ color:card.cor, fontSize:"18px", fontWeight:"800", margin:0 }}>{card.valor}</p>
+                  </div>
                 ))}
-              </tr>
-            </thead>
-            <tbody>
-              {posicoes.map((p, i) => {
-                const pl = (p.preco_atual - p.preco_entrada) * p.quantidade
-                const plPct = ((p.preco_atual - p.preco_entrada) / p.preco_entrada * 100).toFixed(2)
-                const pctCarteira = totalInvestido > 0 ? ((p.quantidade * p.preco_entrada / totalInvestido) * 100).toFixed(1) : 0
-                const estaEditando = editando === i
-                const emLucro = pl >= 0
-                const setor = getSetor(p.ticker)
-                return (
-                  <tr key={i} style={{
-                    borderBottom:"1px solid #0f172a",
-                    background: estaEditando ? "#1e3a4a" : i % 2 === 0 ? "#0d1829" : "#0a1520",
-                    transition:"background 0.15s"
-                  }}
-                  onMouseEnter={e => { if (!estaEditando) e.currentTarget.style.background = "#1e293b" }}
-                  onMouseLeave={e => { if (!estaEditando) e.currentTarget.style.background = i % 2 === 0 ? "#0d1829" : "#0a1520" }}>
+              </div>
 
-                    <td style={{ padding:"14px 12px", fontWeight:"700", color:"#38bdf8", fontSize:"14px" }}>{p.ticker}</td>
-                    <td style={{ padding:"14px 12px", color:"#e2e8f0", fontSize:"13px" }}>{p.nome}</td>
-                    <td style={{ padding:"14px 12px" }}>
-                      <span style={{ padding:"3px 8px", borderRadius:"12px", fontSize:"11px", fontWeight:"600",
-                        background: p.mercado==="B3" ? "rgba(34,197,94,0.15)" : "rgba(56,189,248,0.15)",
-                        color: p.mercado==="B3" ? "#22c55e" : "#38bdf8" }}>
-                        {p.mercado}
-                      </span>
-                    </td>
-                    <td style={{ padding:"14px 12px" }}>
-                      <span style={{ padding:"3px 8px", borderRadius:"12px", fontSize:"11px", fontWeight:"600",
-                        background:"rgba(167,139,250,0.15)", color:"#a78bfa" }}>
-                        {setor}
-                      </span>
-                    </td>
-                    <td style={{ padding:"14px 12px", color:"#e2e8f0", fontSize:"13px" }}>
-                      {estaEditando ? (
-                        <input type="number" value={editForm.quantidade}
-                          onChange={e => setEditForm({...editForm, quantidade: e.target.value})}
-                          style={{ width:"70px", padding:"4px", borderRadius:"4px", border:"1px solid #38bdf8",
-                            background:"#0f172a", color:"#f1f5f9", fontSize:"13px" }} />
-                      ) : p.quantidade}
-                    </td>
-                    <td style={{ padding:"14px 12px", color:"#e2e8f0", fontSize:"13px" }}>
-                      {estaEditando ? (
-                        <input type="number" value={editForm.preco_entrada}
-                          onChange={e => setEditForm({...editForm, preco_entrada: e.target.value})}
-                          style={{ width:"90px", padding:"4px", borderRadius:"4px", border:"1px solid #38bdf8",
-                            background:"#0f172a", color:"#f1f5f9", fontSize:"13px" }} />
-                      ) : `${moeda(p.mercado)} ${fmt(p.preco_entrada)}`}
-                    </td>
-                    <td style={{ padding:"14px 12px", fontWeight:"600", fontSize:"13px" }}>
-                      <span style={{ color: atualizando ? "#64748b" : "#e2e8f0" }}>
-                        {moeda(p.mercado)} {fmt(p.preco_atual)}
-                      </span>
-                      {atualizando && <span style={{ fontSize:"10px", color:"#64748b", marginLeft:"4px" }}>⏳</span>}
-                    </td>
-                    <td style={{ padding:"14px 12px" }}>
-                      <div>
-                        <span style={{ color: emLucro ? "#4ade80" : "#f87171", fontWeight:"700", fontSize:"13px" }}>
-                          {emLucro ? "▲" : "▼"} {moeda(p.mercado)} {fmt(Math.abs(pl))}
-                        </span>
-                        <span style={{ display:"block", fontSize:"11px", color: emLucro ? "#22c55e" : "#ef4444" }}>
-                          {emLucro ? "+" : ""}{plPct}%
-                        </span>
-                      </div>
-                    </td>
-                    <td style={{ padding:"14px 12px" }}>
-                      <div style={{ display:"flex", alignItems:"center", gap:"8px" }}>
-                        <div style={{ background:"#1e293b", borderRadius:"4px", height:"6px", width:"70px" }}>
-                          <div style={{ background:CORES[i % CORES.length], borderRadius:"4px",
-                            height:"6px", width:`${Math.min(pctCarteira, 100)}%` }}/>
-                        </div>
-                        <span style={{ color:"#94a3b8", fontSize:"12px" }}>{pctCarteira}%</span>
-                      </div>
-                    </td>
-                    <td style={{ padding:"14px 12px", color:"#64748b", fontSize:"11px" }}>{p.data}</td>
-                    <td style={{ padding:"14px 12px" }}>
-                      <div style={{ display:"flex", gap:"6px" }}>
-                        {estaEditando ? (
-                          <>
-                            <button onClick={() => salvarEdicao(i)} style={{
-                              padding:"5px 10px", borderRadius:"4px", border:"none", cursor:"pointer",
-                              background:"#16a34a", color:"white", fontSize:"12px", fontWeight:"600" }}>✓ Salvar</button>
-                            <button onClick={cancelarEdicao} style={{
-                              padding:"5px 10px", borderRadius:"4px", border:"none", cursor:"pointer",
-                              background:"#334155", color:"white", fontSize:"12px" }}>✕</button>
-                          </>
-                        ) : (
-                          <>
-                            <button onClick={() => iniciarEdicao(i)} style={{
-                              padding:"5px 10px", borderRadius:"4px", border:"none", cursor:"pointer",
-                              background:"#d97706", color:"white", fontSize:"12px" }}>✏️</button>
-                            <button onClick={() => remover(i)} style={{
-                              padding:"5px 10px", borderRadius:"4px", border:"none", cursor:"pointer",
-                              background:"#dc2626", color:"white", fontSize:"12px" }}>🗑️</button>
-                          </>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
+              <div style={{ overflowX:"auto", borderRadius:"12px", border:"1px solid #1e293b" }}>
+                <table style={{ width:"100%", borderCollapse:"collapse" }}>
+                  <thead>
+                    <tr style={{ background:"#0a1520" }}>
+                      {["Ticker","Nome","Qtd","Entrada","Saída","P&L (R$)","Retorno","Dias","Data Saída"].map(h => (
+                        <th key={h} style={{ padding:"12px 10px", textAlign:"left", color:"#64748b",
+                          fontSize:"10px", fontWeight:"700", letterSpacing:"0.05em",
+                          borderBottom:"1px solid #1e293b", whiteSpace:"nowrap" }}>
+                          {h.toUpperCase()}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {historico.map((h, i) => (
+                      <tr key={i} style={{
+                        borderBottom:"1px solid #0f172a",
+                        background: i % 2 === 0 ? "#0d1829" : "#0a1520"
+                      }}>
+                        <td style={{ padding:"12px 10px", fontWeight:"700", color:"#38bdf8", fontSize:"13px" }}>{h.ticker}</td>
+                        <td style={{ padding:"12px 10px", color:"#e2e8f0", fontSize:"12px" }}>{h.nome}</td>
+                        <td style={{ padding:"12px 10px", color:"#e2e8f0", fontSize:"12px" }}>{h.quantidade}</td>
+                        <td style={{ padding:"12px 10px", color:"#94a3b8", fontSize:"12px" }}>
+                          {moeda(h.mercado)} {fmt(h.preco_entrada)}
+                        </td>
+                        <td style={{ padding:"12px 10px", color:"#e2e8f0", fontSize:"12px", fontWeight:"600" }}>
+                          {moeda(h.mercado)} {fmt(h.preco_saida)}
+                        </td>
+                        <td style={{ padding:"12px 10px" }}>
+                          <span style={{ color: h.pl >= 0 ? "#4ade80" : "#f87171", fontWeight:"700", fontSize:"13px" }}>
+                            {h.pl >= 0 ? "▲" : "▼"} {moeda(h.mercado)} {fmt(Math.abs(h.pl))}
+                          </span>
+                        </td>
+                        <td style={{ padding:"12px 10px" }}>
+                          <span style={{
+                            padding:"3px 8px", borderRadius:"12px", fontSize:"11px", fontWeight:"700",
+                            background: h.pl >= 0 ? "rgba(74,222,128,0.1)" : "rgba(248,113,113,0.1)",
+                            color: h.pl >= 0 ? "#4ade80" : "#f87171"
+                          }}>
+                            {h.pl >= 0 ? "+" : ""}{h.pl_pct}%
+                          </span>
+                        </td>
+                        <td style={{ padding:"12px 10px", color:"#94a3b8", fontSize:"12px" }}>{h.dias}d</td>
+                        <td style={{ padding:"12px 10px", color:"#475569", fontSize:"11px" }}>{h.data_saida}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </>
       )}
     </div>
   )
