@@ -420,7 +420,7 @@ export default function Portfolio() {
                 <thead>
                   <tr style={{ background:"#0a1520" }}>
                     {["Ticker","Nome","Mercado","Setor","Qtd","Entrada","Valor Invest.","Preço Atual","Valor Atual","P&L","Alvo/Stop","Dias","Ações"].map(h => (
-                      <th key={h} style={{ padding:"12px 10px", textAlign:"left", color:"#64748b",
+                      <th key={h} style={{ padding:"14px 14px", textAlign:"left", color:"#64748b",
                         fontSize:"10px", fontWeight:"700", letterSpacing:"0.05em",
                         borderBottom:"1px solid #1e293b", whiteSpace:"nowrap" }}>
                         {h.toUpperCase()}
@@ -450,22 +450,22 @@ export default function Portfolio() {
                       onMouseEnter={e => { if (!estaEditando) e.currentTarget.style.background = "#1e293b" }}
                       onMouseLeave={e => { if (!estaEditando) e.currentTarget.style.background = i % 2 === 0 ? "#0d1829" : "#0a1520" }}>
 
-                        <td style={{ padding:"12px 10px", fontWeight:"700", color:"#38bdf8", fontSize:"13px", whiteSpace:"nowrap" }}>{p.ticker}</td>
-                        <td style={{ padding:"12px 10px", color:"#e2e8f0", fontSize:"12px", whiteSpace:"nowrap" }}>{p.nome}</td>
-                        <td style={{ padding:"12px 10px" }}>
+                        <td style={{ padding:"14px 14px", fontWeight:"700", color:"#38bdf8", fontSize:"13px", whiteSpace:"nowrap" }}>{p.ticker}</td>
+                        <td style={{ padding:"14px 14px", color:"#e2e8f0", fontSize:"12px", whiteSpace:"nowrap" }}>{p.nome}</td>
+                        <td style={{ padding:"14px 14px" }}>
                           <span style={{ padding:"2px 7px", borderRadius:"12px", fontSize:"10px", fontWeight:"600",
                             background: p.mercado==="B3" ? "rgba(34,197,94,0.15)" : "rgba(56,189,248,0.15)",
                             color: p.mercado==="B3" ? "#22c55e" : "#38bdf8" }}>
                             {p.mercado}
                           </span>
                         </td>
-                        <td style={{ padding:"12px 10px" }}>
+                        <td style={{ padding:"14px 14px" }}>
                           <span style={{ padding:"2px 7px", borderRadius:"12px", fontSize:"10px", fontWeight:"600",
                             background:"rgba(167,139,250,0.15)", color:"#a78bfa" }}>
                             {setor}
                           </span>
                         </td>
-                        <td style={{ padding:"12px 10px", color:"#e2e8f0", fontSize:"12px" }}>
+                        <td style={{ padding:"14px 14px", color:"#e2e8f0", fontSize:"12px" }}>
                           {estaEditando ? (
                             <input type="number" value={editForm.quantidade}
                               onChange={e => setEditForm({...editForm, quantidade: e.target.value})}
@@ -473,7 +473,7 @@ export default function Portfolio() {
                                 background:"#0f172a", color:"#f1f5f9", fontSize:"12px" }} />
                           ) : p.quantidade}
                         </td>
-                        <td style={{ padding:"12px 10px", color:"#e2e8f0", fontSize:"12px" }}>
+                        <td style={{ padding:"14px 14px", color:"#e2e8f0", fontSize:"12px" }}>
                           {estaEditando ? (
                             <input type="number" value={editForm.preco_entrada}
                               onChange={e => setEditForm({...editForm, preco_entrada: e.target.value})}
@@ -481,26 +481,34 @@ export default function Portfolio() {
                                 background:"#0f172a", color:"#f1f5f9", fontSize:"12px" }} />
                           ) : `${moeda(p.mercado)} ${fmt(p.preco_entrada)}`}
                         </td>
-                        <td style={{ padding:"12px 10px", color:"#94a3b8", fontSize:"12px" }}>
+                        <td style={{ padding:"14px 14px", color:"#94a3b8", fontSize:"12px" }}>
                           {moeda(p.mercado)} {fmt(valorInvestido)}
                         </td>
-                        <td style={{ padding:"12px 10px", fontWeight:"600", fontSize:"12px" }}>
+                        <td style={{ padding:"14px 14px", fontWeight:"600", fontSize:"12px" }}>
                           <span style={{ color: "#e2e8f0" }}>
                             {moeda(p.mercado)} {fmt(p.preco_atual)}
                           </span>
                         </td>
-                        <td style={{ padding:"12px 10px", color: emLucro ? "#4ade80" : "#f87171", fontSize:"12px", fontWeight:"600" }}>
+                        <td style={{ padding:"14px 14px", color: emLucro ? "#4ade80" : "#f87171", fontSize:"12px", fontWeight:"600" }}>
                           {moeda(p.mercado)} {fmt(valorAtual)}
                         </td>
-                        <td style={{ padding:"12px 10px" }}>
-                          <span style={{ color: emLucro ? "#4ade80" : "#f87171", fontWeight:"700", fontSize:"12px" }}>
-                            {emLucro ? "▲" : "▼"} {moeda(p.mercado)} {fmt(Math.abs(pl))}
-                          </span>
-                          <span style={{ display:"block", fontSize:"10px", color: emLucro ? "#22c55e" : "#ef4444" }}>
-                            {emLucro ? "+" : ""}{plPct}%
-                          </span>
+                        <td style={{ padding:"14px 14px", whiteSpace:"nowrap" }}>
+                          <div style={{ display:"flex", flexDirection:"column", gap:"4px" }}>
+                            <span style={{ color: emLucro ? "#4ade80" : "#f87171", fontWeight:"700", fontSize:"13px" }}>
+                              {emLucro ? "▲" : "▼"} {moeda(p.mercado)} {fmt(Math.abs(pl))}
+                            </span>
+                            <span style={{
+                              fontSize:"10px", fontWeight:"700",
+                              color: emLucro ? "#4ade80" : "#f87171",
+                              background: emLucro ? "rgba(74,222,128,0.1)" : "rgba(248,113,113,0.1)",
+                              padding:"2px 6px", borderRadius:"4px",
+                              width:"fit-content", display:"inline-block"
+                            }}>
+                              {emLucro ? "+" : ""}{plPct}%
+                            </span>
+                          </div>
                         </td>
-                        <td style={{ padding:"12px 10px", minWidth:"100px" }}>
+                        <td style={{ padding:"14px 14px", minWidth:"100px" }}>
                           <div style={{ fontSize:"9px", color:"#64748b", marginBottom:"3px", display:"flex", justifyContent:"space-between" }}>
                             <span style={{ color:"#f87171" }}>Stop {fmt(stop)}</span>
                             <span style={{ color:"#4ade80" }}>Alvo {fmt(alvo)}</span>
@@ -516,7 +524,7 @@ export default function Portfolio() {
                             {progressoAlvo.toFixed(0)}% do caminho
                           </div>
                         </td>
-                        <td style={{ padding:"12px 10px" }}>
+                        <td style={{ padding:"14px 14px" }}>
                           <span style={{
                             color: dias > 3 ? "#f87171" : dias > 1 ? "#f59e0b" : "#4ade80",
                             fontSize:"12px", fontWeight:"700"
@@ -524,7 +532,7 @@ export default function Portfolio() {
                             {dias}d
                           </span>
                         </td>
-                        <td style={{ padding:"12px 10px" }}>
+                        <td style={{ padding:"14px 14px" }}>
                           <div style={{ display:"flex", gap:"4px", flexWrap:"wrap" }}>
                             {estaEditando ? (
                               <>
@@ -544,7 +552,9 @@ export default function Portfolio() {
                                 <button onClick={() => iniciarEdicao(i)} style={{
                                   padding:"4px 8px", borderRadius:"4px", border:"none", cursor:"pointer",
                                   background:"#d97706", color:"white", fontSize:"11px" }}>✏️</button>
-                                <button onClick={() => remover(i)} style={{
+                                <button onClick={() => {
+                                  if (window.confirm(`Remover ${p.ticker} sem registrar no histórico?`)) remover(i)
+                                }} style={{
                                   padding:"4px 8px", borderRadius:"4px", border:"none", cursor:"pointer",
                                   background:"#dc2626", color:"white", fontSize:"11px" }}>🗑️</button>
                               </>
@@ -596,7 +606,7 @@ export default function Portfolio() {
                   <thead>
                     <tr style={{ background:"#0a1520" }}>
                       {["Ticker","Nome","Qtd","Entrada","Saída","P&L (R$)","Retorno","Dias","Data Saída"].map(h => (
-                        <th key={h} style={{ padding:"12px 10px", textAlign:"left", color:"#64748b",
+                        <th key={h} style={{ padding:"14px 14px", textAlign:"left", color:"#64748b",
                           fontSize:"10px", fontWeight:"700", letterSpacing:"0.05em",
                           borderBottom:"1px solid #1e293b", whiteSpace:"nowrap" }}>
                           {h.toUpperCase()}
@@ -610,21 +620,21 @@ export default function Portfolio() {
                         borderBottom:"1px solid #0f172a",
                         background: i % 2 === 0 ? "#0d1829" : "#0a1520"
                       }}>
-                        <td style={{ padding:"12px 10px", fontWeight:"700", color:"#38bdf8", fontSize:"13px" }}>{h.ticker}</td>
-                        <td style={{ padding:"12px 10px", color:"#e2e8f0", fontSize:"12px" }}>{h.nome}</td>
-                        <td style={{ padding:"12px 10px", color:"#e2e8f0", fontSize:"12px" }}>{h.quantidade}</td>
-                        <td style={{ padding:"12px 10px", color:"#94a3b8", fontSize:"12px" }}>
+                        <td style={{ padding:"14px 14px", fontWeight:"700", color:"#38bdf8", fontSize:"13px" }}>{h.ticker}</td>
+                        <td style={{ padding:"14px 14px", color:"#e2e8f0", fontSize:"12px" }}>{h.nome}</td>
+                        <td style={{ padding:"14px 14px", color:"#e2e8f0", fontSize:"12px" }}>{h.quantidade}</td>
+                        <td style={{ padding:"14px 14px", color:"#94a3b8", fontSize:"12px" }}>
                           {moeda(h.mercado)} {fmt(h.preco_entrada)}
                         </td>
-                        <td style={{ padding:"12px 10px", color:"#e2e8f0", fontSize:"12px", fontWeight:"600" }}>
+                        <td style={{ padding:"14px 14px", color:"#e2e8f0", fontSize:"12px", fontWeight:"600" }}>
                           {moeda(h.mercado)} {fmt(h.preco_saida)}
                         </td>
-                        <td style={{ padding:"12px 10px" }}>
+                        <td style={{ padding:"14px 14px" }}>
                           <span style={{ color: h.pl >= 0 ? "#4ade80" : "#f87171", fontWeight:"700", fontSize:"13px" }}>
                             {h.pl >= 0 ? "▲" : "▼"} {moeda(h.mercado)} {fmt(Math.abs(h.pl))}
                           </span>
                         </td>
-                        <td style={{ padding:"12px 10px" }}>
+                        <td style={{ padding:"14px 14px" }}>
                           <span style={{
                             padding:"3px 8px", borderRadius:"12px", fontSize:"11px", fontWeight:"700",
                             background: h.pl >= 0 ? "rgba(74,222,128,0.1)" : "rgba(248,113,113,0.1)",
@@ -633,8 +643,8 @@ export default function Portfolio() {
                             {h.pl >= 0 ? "+" : ""}{h.pl_pct}%
                           </span>
                         </td>
-                        <td style={{ padding:"12px 10px", color:"#94a3b8", fontSize:"12px" }}>{h.dias}d</td>
-                        <td style={{ padding:"12px 10px", color:"#475569", fontSize:"11px" }}>{h.data_saida}</td>
+                        <td style={{ padding:"14px 14px", color:"#94a3b8", fontSize:"12px" }}>{h.dias}d</td>
+                        <td style={{ padding:"14px 14px", color:"#475569", fontSize:"11px" }}>{h.data_saida}</td>
                       </tr>
                     ))}
                   </tbody>
