@@ -75,6 +75,7 @@ export default function Mercado() {
       preco_atual: precoAtual,
       data: new Date().toLocaleDateString("pt-BR")
     }
+    // TODO: Migrar para API POST /portfolio quando atacarmos a prioridade média do Portfólio
     localStorage.setItem("tradeai_portfolio", JSON.stringify([...salvo, nova]))
     alert(`${s.ticker} adicionado ao portfólio com preço R$ ${precoAtual}! Ajuste a quantidade na aba Portfólio.`)
   }
@@ -227,17 +228,17 @@ export default function Mercado() {
         <div style={{ overflowX: "auto", borderRadius: "12px", border: "1px solid #1e293b", width: "100%" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
             <colgroup>
-              <col style={{ width: "8%" }} />
-              <col style={{ width: "14%" }} />
-              <col style={{ width: "8%" }} />
-              <col style={{ width: "10%" }} />
-              <col style={{ width: "10%" }} />
-              <col style={{ width: "11%" }} />
-              <col style={{ width: "10%" }} />
-              <col style={{ width: "10%" }} />
               <col style={{ width: "7%" }} />
+              <col style={{ width: "16%" }} />
               <col style={{ width: "8%" }} />
-              <col style={{ width: "8%" }} />
+              <col style={{ width: "9%" }} />
+              <col style={{ width: "10%" }} />
+              <col style={{ width: "10%" }} />
+              <col style={{ width: "10%" }} />
+              <col style={{ width: "10%" }} />
+              <col style={{ width: "6%" }} />
+              <col style={{ width: "7%" }} />
+              <col style={{ width: "7%" }} />
             </colgroup>
             <thead>
               <tr style={{ background: "#0a1520" }}>
@@ -256,6 +257,9 @@ export default function Mercado() {
               {sinaisFiltrados.map((s, i) => {
                 const precoExibir = getPrecoExibir(s)
                 const variacao = calcularVariacao(s)
+                const precoBase = parseFloat(s.preco_atual) || 1
+                const percentualAlvo = s.pct_alvo || ((parseFloat(s.alvo_lucro) - precoBase) / precoBase * 100).toFixed(1)
+                const percentualStop = s.pct_stop || ((precoBase - parseFloat(s.stop_loss)) / precoBase * 100).toFixed(1)
                 return (
                   <tr key={i}
                     style={{
@@ -328,18 +332,14 @@ export default function Mercado() {
                       <span style={{ color: "#4ade80", fontSize: "12px", fontWeight: "600" }}>
                         {moeda(s)} {formatarPreco(s.alvo_lucro)}
                       </span>
-                      {s.pct_alvo && (
-                        <span style={{ color: "#22c55e", fontSize: "10px", marginLeft: "4px" }}>+{s.pct_alvo}%</span>
-                      )}
+                      <span style={{ color: "#22c55e", fontSize: "10px", display: "block" }}>+{percentualAlvo}%</span>
                     </td>
 
                     <td style={{ padding: "14px 10px", whiteSpace: "nowrap" }}>
                       <span style={{ color: "#f87171", fontSize: "12px", fontWeight: "600" }}>
                         {moeda(s)} {formatarPreco(s.stop_loss)}
                       </span>
-                      {s.pct_stop && (
-                        <span style={{ color: "#ef4444", fontSize: "10px", marginLeft: "4px" }}>{s.pct_stop}%</span>
-                      )}
+                      <span style={{ color: "#ef4444", fontSize: "10px", display: "block" }}>-{percentualStop}%</span>
                     </td>
 
                     <td style={{ padding: "14px 10px", textAlign: "center" }}>
