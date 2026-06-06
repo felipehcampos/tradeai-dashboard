@@ -4,6 +4,7 @@ import Portfolio from "./pages/Portfolio"
 import Alertas from "./pages/Alertas"
 import IAAnalise from "./pages/IAAnalise"
 import SwingRapido from "./pages/SwingRapido"
+import Noticias from "./pages/Noticias"
 import Login from "./Login"
 
 const ABAS = [
@@ -11,6 +12,7 @@ const ABAS = [
   { id: "portfolio", label: "Portfólio",  icon: "💼" },
   { id: "swing",     label: "Swing",      icon: "⚡" },
   { id: "alertas",   label: "Alertas",    icon: "🔔" },
+  { id: "noticias",  label: "Notícias",   icon: "📰" },
   { id: "ia",        label: "IA Análise", icon: "🤖" },
 ]
 
@@ -114,6 +116,7 @@ export default function App() {
         {aba === "portfolio" && <Portfolio />}
         {aba === "swing"     && <SwingRapido />}
         {aba === "alertas"   && <Alertas />}
+        {aba === "noticias"  && <Noticias />}
         {aba === "ia"        && <IAAnalise />}
       </main>
 
