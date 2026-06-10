@@ -77,6 +77,7 @@ export default function Mercado() {
     stop_loss: parseFloat(s.stop_loss) || null,
     pct_alvo: parseFloat(s.pct_alvo) || null,
     pct_stop: parseFloat(s.pct_stop) || null,
+    origem: "longo",
     data: new Date().toLocaleDateString("pt-BR")
   }
   localStorage.setItem("tradeai_portfolio", JSON.stringify([...salvo, nova]))

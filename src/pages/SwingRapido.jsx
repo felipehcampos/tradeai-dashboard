@@ -92,7 +92,25 @@ export default function SwingRapido() {
       setAtualizandoPrecos(false)
     }
   }
-
+const adicionarPortfolio = (s) => {
+    const precoAtual = precosAtuais[s.ticker] || parseFloat(s.preco_atual)
+    const salvo = JSON.parse(localStorage.getItem("tradeai_portfolio") || "[]")
+    const jaExiste = salvo.find(p => p.ticker === s.ticker)
+    if (jaExiste) { alert(`${s.ticker} já está no portfólio!`); return }
+    const nova = {
+      ticker: s.ticker, nome: s.nome, mercado: s.mercado,
+      quantidade: 1, preco_entrada: precoAtual,
+      preco_atual: precoAtual,
+      alvo_lucro: parseFloat(s.alvo_lucro) || null,
+      stop_loss: parseFloat(s.stop_loss) || null,
+      pct_alvo: parseFloat(s.pct_alvo) || null,
+      pct_stop: parseFloat(s.pct_stop) || null,
+      origem: "swing",
+      data: new Date().toLocaleDateString("pt-BR")
+    }
+    localStorage.setItem("tradeai_portfolio", JSON.stringify([...salvo, nova]))
+    alert(`${s.ticker} adicionado ao portfólio! Alvo: ${moeda(s.mercado)} ${parseFloat(s.alvo_lucro).toFixed(2)} | Stop: ${moeda(s.mercado)} ${parseFloat(s.stop_loss).toFixed(2)}`)
+  }
   const getPrecoExibir = (s) => precosAtuais[s.ticker] || s.preco_atual
   const calcularVariacao = (s) => {
     if (!precosAtuais[s.ticker] || !s.preco_atual) return null
@@ -336,22 +354,23 @@ export default function SwingRapido() {
         <div style={{ overflowX: "auto", borderRadius: "12px", border: "1px solid #1e293b" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
             <colgroup>
-              <col style={{ width: "7%" }} />
-              <col style={{ width: "16%" }} />
-              <col style={{ width: "8%" }} />
+              <col style={{ width: "6%" }} />
+              <col style={{ width: "14%" }} />
               <col style={{ width: "7%" }} />
               <col style={{ width: "6%" }} />
-              <col style={{ width: "7%" }} />
-              <col style={{ width: "9%" }} />
-              <col style={{ width: "9%" }} />
-              <col style={{ width: "9%" }} />
-              <col style={{ width: "7%" }} />
+              <col style={{ width: "5%" }} />
+              <col style={{ width: "6%" }} />
               <col style={{ width: "8%" }} />
+              <col style={{ width: "8%" }} />
+              <col style={{ width: "8%" }} />
+              <col style={{ width: "6%" }} />
               <col style={{ width: "7%" }} />
+              <col style={{ width: "6%" }} />
+              <col style={{ width: "8%" }} />
             </colgroup>
             <thead>
               <tr style={{ background: "#0a1520" }}>
-                {["Ticker", "Nome / Diagnóstico IA", "Mercado", "Queda", "RSI", "Volume", "Preço", "Alvo", "Stop", "Risco", "Time Stop", "Data"].map(h => (
+                {["Ticker", "Nome / Diagnóstico IA", "Mercado", "Queda", "RSI", "Volume", "Preço", "Alvo", "Stop", "Risco", "Time Stop", "Data", "Ação"].map(h => (
                   <th key={h} style={{
                     padding: "12px 10px", textAlign: "left", color: "#64748b",
                     fontSize: "11px", fontWeight: "700", letterSpacing: "0.05em",
@@ -482,6 +501,19 @@ export default function SwingRapido() {
 
                     <td style={{ padding: "14px 10px", color: "#475569", fontSize: "11px" }}>
                       {formatarData(s.criado_em)}
+                    </td>
+
+                    <td style={{ padding: "14px 10px" }}>
+                      {!expirado && vistaAtiva === "ativos" && (
+                        <button onClick={() => adicionarPortfolio(s)} style={{
+                          padding: "6px 10px", borderRadius: "6px", border: "none", cursor: "pointer",
+                          background: "linear-gradient(135deg,#16a34a,#15803d)",
+                          color: "white", fontSize: "11px", fontWeight: "700",
+                          whiteSpace: "nowrap", boxShadow: "0 2px 4px rgba(22,163,74,0.3)"
+                        }}>
+                          + Portfólio
+                        </button>
+                      )}
                     </td>
                   </tr>
                 )

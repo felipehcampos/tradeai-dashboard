@@ -436,6 +436,8 @@ export default function Portfolio() {
                     const valorAtual = p.quantidade * p.preco_atual
                     const alvo = p.alvo_lucro || (p.preco_entrada * 1.05)
                     const stop = p.stop_loss || (p.preco_entrada * 0.98)
+                    const pctAlvo = p.pct_alvo || ((alvo - p.preco_entrada) / p.preco_entrada * 100)
+                    const pctStop = p.pct_stop || ((p.preco_entrada - stop) / p.preco_entrada * 100)
                     const progressoAlvo = Math.min(Math.max(((p.preco_atual - stop) / (alvo - stop)) * 100, 0), 100)
                     const dias = diasNaOperacao(p.data)
                     const estaEditando = editando === i
@@ -450,7 +452,18 @@ export default function Portfolio() {
                       onMouseEnter={e => { if (!estaEditando) e.currentTarget.style.background = "#1e293b" }}
                       onMouseLeave={e => { if (!estaEditando) e.currentTarget.style.background = i % 2 === 0 ? "#0d1829" : "#0a1520" }}>
 
-                        <td style={{ padding:"14px 14px", fontWeight:"700", color:"#38bdf8", fontSize:"13px", whiteSpace:"nowrap" }}>{p.ticker}</td>
+                        <td style={{ padding:"14px 14px", fontWeight:"700", color:"#38bdf8", fontSize:"13px", whiteSpace:"nowrap" }}>
+                          {p.ticker}
+                          <div style={{ marginTop:"3px" }}>
+                            <span style={{
+                              fontSize:"9px", fontWeight:"700", padding:"2px 6px", borderRadius:"4px",
+                              background: p.origem === "swing" ? "rgba(245,158,11,0.15)" : "rgba(56,189,248,0.15)",
+                              color: p.origem === "swing" ? "#f59e0b" : "#38bdf8"
+                            }}>
+                              {p.origem === "swing" ? "⚡ Swing" : "📈 Longo"}
+                            </span>
+                          </div>
+                        </td>
                         <td style={{ padding:"14px 14px", color:"#e2e8f0", fontSize:"12px", whiteSpace:"nowrap" }}>{p.nome}</td>
                         <td style={{ padding:"14px 14px" }}>
                           <span style={{ padding:"2px 7px", borderRadius:"12px", fontSize:"10px", fontWeight:"600",
@@ -508,10 +521,14 @@ export default function Portfolio() {
                             </span>
                           </div>
                         </td>
-                        <td style={{ padding:"14px 14px", minWidth:"100px" }}>
+                        <td style={{ padding:"14px 14px", minWidth:"110px" }}>
                           <div style={{ fontSize:"9px", color:"#64748b", marginBottom:"3px", display:"flex", justifyContent:"space-between" }}>
-                            <span style={{ color:"#f87171" }}>Stop {fmt(stop)}</span>
-                            <span style={{ color:"#4ade80" }}>Alvo {fmt(alvo)}</span>
+                            <span style={{ color:"#f87171" }}>
+                              Stop {fmt(stop)} ({pctStop >= 0 ? "-" : "+"}{Math.abs(pctStop).toFixed(1)}%)
+                            </span>
+                            <span style={{ color:"#4ade80" }}>
+                              Alvo {fmt(alvo)} (+{pctAlvo.toFixed(1)}%)
+                            </span>
                           </div>
                           <div style={{ background:"#1e293b", borderRadius:"4px", height:"6px", width:"100%", position:"relative" }}>
                             <div style={{
