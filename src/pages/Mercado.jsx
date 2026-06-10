@@ -65,20 +65,23 @@ export default function Mercado() {
   }
 
   const adicionarPortfolio = (s) => {
-    const precoAtual = precosAtuais[s.ticker] || parseFloat(s.preco_atual)
-    const salvo = JSON.parse(localStorage.getItem("tradeai_portfolio") || "[]")
-    const jaExiste = salvo.find(p => p.ticker === s.ticker)
-    if (jaExiste) { alert(`${s.ticker} já está no portfólio!`); return }
-    const nova = {
-      ticker: s.ticker, nome: s.nome, mercado: s.mercado,
-      quantidade: 1, preco_entrada: precoAtual,
-      preco_atual: precoAtual,
-      data: new Date().toLocaleDateString("pt-BR")
-    }
-    // TODO: Migrar para API POST /portfolio quando atacarmos a prioridade média do Portfólio
-    localStorage.setItem("tradeai_portfolio", JSON.stringify([...salvo, nova]))
-    alert(`${s.ticker} adicionado ao portfólio com preço R$ ${precoAtual}! Ajuste a quantidade na aba Portfólio.`)
+  const precoAtual = precosAtuais[s.ticker] || parseFloat(s.preco_atual)
+  const salvo = JSON.parse(localStorage.getItem("tradeai_portfolio") || "[]")
+  const jaExiste = salvo.find(p => p.ticker === s.ticker)
+  if (jaExiste) { alert(`${s.ticker} já está no portfólio!`); return }
+  const nova = {
+    ticker: s.ticker, nome: s.nome, mercado: s.mercado,
+    quantidade: 1, preco_entrada: precoAtual,
+    preco_atual: precoAtual,
+    alvo_lucro: parseFloat(s.alvo_lucro) || null,
+    stop_loss: parseFloat(s.stop_loss) || null,
+    pct_alvo: parseFloat(s.pct_alvo) || null,
+    pct_stop: parseFloat(s.pct_stop) || null,
+    data: new Date().toLocaleDateString("pt-BR")
   }
+  localStorage.setItem("tradeai_portfolio", JSON.stringify([...salvo, nova]))
+  alert(`${s.ticker} adicionado ao portfólio! Alvo: R$ ${parseFloat(s.alvo_lucro).toFixed(2)} | Stop: R$ ${parseFloat(s.stop_loss).toFixed(2)}`)
+}
 
   const moeda = (s) => s.mercado === "B3" ? "R$" : "US$"
 

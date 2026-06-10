@@ -434,8 +434,8 @@ export default function Portfolio() {
                     const plPct = ((p.preco_atual - p.preco_entrada) / p.preco_entrada * 100).toFixed(2)
                     const valorInvestido = p.quantidade * p.preco_entrada
                     const valorAtual = p.quantidade * p.preco_atual
-                    const alvo = p.preco_entrada * 1.05
-                    const stop = p.preco_entrada * 0.98
+                    const alvo = p.alvo_lucro || (p.preco_entrada * 1.05)
+                    const stop = p.stop_loss || (p.preco_entrada * 0.98)
                     const progressoAlvo = Math.min(Math.max(((p.preco_atual - stop) / (alvo - stop)) * 100, 0), 100)
                     const dias = diasNaOperacao(p.data)
                     const estaEditando = editando === i
