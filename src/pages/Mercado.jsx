@@ -11,12 +11,14 @@ export default function Mercado() {
   const [ultimaAtualizacao, setUltimaAtualizacao] = useState(null)
   const [filtroMercado, setFiltroMercado] = useState("TODOS")
   const [precosAtuais, setPrecosAtuais] = useState({})
+  const [totalAnalisados, setTotalAnalisados] = useState(0)
 
   const carregarSinais = () => {
     setLoading(true)
     api.get(`${API}/sinais`)
       .then(r => {
         const dados = r.data.dados || []
+        setTotalAnalisados(dados.length)
         const filtrados = dados.filter(s => s.sinal !== "EVITAR")
         filtrados.sort((a, b) => {
           if (a.sinal === "COMPRAR" && b.sinal !== "COMPRAR") return -1
@@ -25,7 +27,7 @@ export default function Mercado() {
         })
         setSinais(filtrados)
       })
-      .catch(() => setSinais([]))
+      .catch(() => { setSinais([]); setTotalAnalisados(0) })
       .finally(() => {
         setLoading(false)
         setUltimaAtualizacao(new Date().toLocaleTimeString("pt-BR"))
@@ -173,7 +175,7 @@ export default function Mercado() {
         {[
           { label: "🟢 Comprar", valor: totalComprar, cor: "#22c55e", bg: "rgba(22,163,74,0.1)", border: "rgba(22,163,74,0.3)" },
           { label: "🟡 Manter", valor: totalManter, cor: "#f59e0b", bg: "rgba(217,119,6,0.1)", border: "rgba(217,119,6,0.3)" },
-          { label: "📊 Total Analisados", valor: sinais.length, cor: "#38bdf8", bg: "rgba(56,189,248,0.1)", border: "rgba(56,189,248,0.3)" },
+          { label: "📊 Total Analisados", valor: totalAnalisados, cor: "#38bdf8", bg: "rgba(56,189,248,0.1)", border: "rgba(56,189,248,0.3)" },
         ].map((card, i) => (
           <div key={i} style={{
             background: card.bg, border: `1px solid ${card.border}`,
@@ -229,8 +231,21 @@ export default function Mercado() {
       ) : sinaisFiltrados.length === 0 ? (
         <div style={{ textAlign: "center", padding: "60px", color: "#64748b" }}>
           <p style={{ fontSize: "48px", marginBottom: "12px" }}>📭</p>
-          <p style={{ fontSize: "16px", marginBottom: "8px" }}>Nenhum sinal disponível</p>
-          <p style={{ fontSize: "13px" }}>Clique em "Rodar Scanner" ou aguarde às 18h</p>
+          {totalAnalisados > 0 ? (
+            <>
+              <p style={{ fontSize: "16px", marginBottom: "8px", color: "#94a3b8" }}>
+                {totalAnalisados} ativo{totalAnalisados > 1 ? "s" : ""} analisado{totalAnalisados > 1 ? "s" : ""}, nenhuma oportunidade de compra hoje
+              </p>
+              <p style={{ fontSize: "13px" }}>
+                Todos os sinais vieram como EVITAR — o sistema preferiu não arriscar. Tente novamente mais tarde ou amanhã.
+              </p>
+            </>
+          ) : (
+            <>
+              <p style={{ fontSize: "16px", marginBottom: "8px" }}>Nenhum sinal disponível</p>
+              <p style={{ fontSize: "13px" }}>Clique em "Rodar Scanner" ou aguarde às 18h</p>
+            </>
+          )}
         </div>
       ) : (
         <div style={{ overflowX: "auto", borderRadius: "12px", border: "1px solid #1e293b", width: "100%" }}>

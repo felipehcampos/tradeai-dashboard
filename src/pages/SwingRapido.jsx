@@ -15,6 +15,9 @@ export default function SwingRapido() {
   const [modalSinal, setModalSinal] = useState(null)
   const [precosAtuais, setPrecosAtuais] = useState({})
   const [atualizandoPrecos, setAtualizandoPrecos] = useState(false)
+  const [reavaliando, setReavaliando] = useState({})
+  const [resultadosReavaliacao, setResultadosReavaliacao] = useState({})
+  const [modalReavaliacao, setModalReavaliacao] = useState(null)
   
   // Guarda a referência do intervalo na memória do componente de forma segura
   const scannerIntervalRef = useRef(null)
@@ -77,10 +80,11 @@ export default function SwingRapido() {
   }
 
   const atualizarPrecos = async () => {
-    if (sinais.length === 0) return
+    const lista = vistaAtiva === "ativos" ? sinais : historico
+    if (lista.length === 0) return
     setAtualizandoPrecos(true)
     try {
-      const tickers = [...new Set(sinais.map(s => s.ticker))]
+      const tickers = [...new Set(lista.map(s => s.ticker))]
       const res = await api.post(`${API}/precos`, { tickers })
       if (res.data.sucesso) {
         setPrecosAtuais(res.data.precos)
@@ -111,6 +115,40 @@ const adicionarPortfolio = (s) => {
     localStorage.setItem("tradeai_portfolio", JSON.stringify([...salvo, nova]))
     alert(`${s.ticker} adicionado ao portfólio! Alvo: ${moeda(s.mercado)} ${parseFloat(s.alvo_lucro).toFixed(2)} | Stop: ${moeda(s.mercado)} ${parseFloat(s.stop_loss).toFixed(2)}`)
   }
+  const statusHistorico = (s) => {
+    const precoAtual = precosAtuais[s.ticker] ? parseFloat(precosAtuais[s.ticker]) : parseFloat(s.preco_atual)
+    const alvo = parseFloat(s.alvo_lucro)
+    const stop = parseFloat(s.stop_loss)
+    if (!precoAtual || !alvo || !stop) {
+      return { texto: "— sem dados —", cor: "#64748b", reavaliar: false }
+    }
+    if (precoAtual >= alvo) {
+      return { texto: "🎯 Alvo já seria atingido", cor: "#4ade80", reavaliar: false }
+    }
+    if (precoAtual <= stop) {
+      return { texto: "🛑 Stop já seria atingido", cor: "#f87171", reavaliar: false }
+    }
+    return { texto: "🔁 Ainda na faixa", cor: "#f59e0b", reavaliar: true }
+  }
+
+  const reavaliarAtivo = async (s) => {
+    setReavaliando(prev => ({ ...prev, [s.ticker]: true }))
+    try {
+      const res = await api.post(`${API}/reavaliar-swing`, {
+        ticker: s.ticker, nome: s.nome, mercado: s.mercado
+      }, { timeout: 90000 })
+      if (res.data.sucesso) {
+        setResultadosReavaliacao(prev => ({ ...prev, [s.ticker]: res.data.dados }))
+      } else {
+        alert(`Erro ao reavaliar ${s.ticker}: ${res.data.erro}`)
+      }
+    } catch {
+      alert(`Erro ao reavaliar ${s.ticker}. Tente novamente.`)
+    } finally {
+      setReavaliando(prev => ({ ...prev, [s.ticker]: false }))
+    }
+  }
+
   const getPrecoExibir = (s) => precosAtuais[s.ticker] || s.preco_atual
   const calcularVariacao = (s) => {
     if (!precosAtuais[s.ticker] || !s.preco_atual) return null
@@ -205,7 +243,51 @@ const adicionarPortfolio = (s) => {
           </div>
         </div>
       )}
-
+{/* Modal de reavaliação */}
+      {modalReavaliacao && (
+        <div onClick={() => setModalReavaliacao(null)} style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)",
+          zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center",
+          padding: "20px"
+        }}>
+          <div onClick={e => e.stopPropagation()} style={{
+            background: "#0d1829", border: "1px solid #1e293b", borderRadius: "16px",
+            padding: "28px", maxWidth: "520px", width: "100%", position: "relative"
+          }}>
+            <button onClick={() => setModalReavaliacao(null)} style={{
+              position: "absolute", top: "16px", right: "16px",
+              background: "none", border: "none", color: "#64748b",
+              fontSize: "18px", cursor: "pointer"
+            }}>✕</button>
+            <div style={{ marginBottom: "16px" }}>
+              <span style={{ color: "#38bdf8", fontWeight: "800", fontSize: "18px" }}>{modalReavaliacao.ticker}</span>
+              <span style={{ color: "#64748b", fontSize: "13px", marginLeft: "8px" }}>{modalReavaliacao.nome}</span>
+              <div style={{ fontSize: "11px", color: "#64748b", marginTop: "4px" }}>🔄 Reavaliação com dados e IA atuais</div>
+            </div>
+            <div style={{ display: "flex", gap: "8px", marginBottom: "16px", flexWrap: "wrap" }}>
+              <span style={{
+                padding: "4px 10px", borderRadius: "8px", fontSize: "12px", fontWeight: "800",
+                background: modalReavaliacao.sinal === "COMPRAR" ? "rgba(34,197,94,0.15)" : modalReavaliacao.sinal === "MANTER" ? "rgba(245,158,11,0.15)" : "rgba(239,68,68,0.15)",
+                color: modalReavaliacao.sinal === "COMPRAR" ? "#4ade80" : modalReavaliacao.sinal === "MANTER" ? "#f59e0b" : "#f87171"
+              }}>
+                {modalReavaliacao.sinal === "COMPRAR" ? "🟢" : modalReavaliacao.sinal === "MANTER" ? "🟡" : "🔴"} {modalReavaliacao.sinal} — {modalReavaliacao.confianca}%
+              </span>
+              <span style={{ padding: "4px 10px", borderRadius: "8px", fontSize: "11px", fontWeight: "700", background: "rgba(245,158,11,0.1)", color: "#f59e0b" }}>
+                RSI {modalReavaliacao.rsi ? parseFloat(modalReavaliacao.rsi).toFixed(1) : "—"}
+              </span>
+              <span style={{ padding: "4px 10px", borderRadius: "8px", fontSize: "11px", fontWeight: "700", background: "rgba(56,189,248,0.1)", color: "#38bdf8" }}>
+                {modalReavaliacao.tendencia || "—"}
+              </span>
+              <span style={{ padding: "4px 10px", borderRadius: "8px", fontSize: "11px", fontWeight: "700", background: "rgba(56,189,248,0.1)", color: "#38bdf8" }}>
+                {modalReavaliacao.tipo_risco === "SISTEMICO" ? "🔵 Sistêmico" : "🔴 Idiossincr."}
+              </span>
+            </div>
+            <p style={{ color: "#cbd5e1", fontSize: "13px", lineHeight: "1.7", margin: 0 }}>
+              💡 {modalReavaliacao.justificativa}
+            </p>
+          </div>
+        </div>
+      )}
       {/* Header */}
       <div style={{
         display: "flex", alignItems: "flex-start", justifyContent: "space-between",
@@ -223,7 +305,7 @@ const adicionarPortfolio = (s) => {
         <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
           
           {/* INSTALADO O SPINNER GIRATÓRIO PROFISSIONAL IGUAL À ABA MERCADO */}
-          <button onClick={atualizarPrecos} disabled={atualizandoPrecos || sinais.length === 0} style={{
+          <button onClick={atualizarPrecos} disabled={atualizandoPrecos || (vistaAtiva === "ativos" ? sinais.length === 0 : historico.length === 0)} style={{
             padding: "9px 18px", borderRadius: "8px", border: "none", cursor: "pointer",
             background: atualizandoPrecos || sinais.length === 0 ? "#334155" : "linear-gradient(135deg,#10b981,#059669)",
             color: atualizandoPrecos ? "#94a3b8" : "white",
@@ -514,6 +596,45 @@ const adicionarPortfolio = (s) => {
                           + Portfólio 
                         </button>
                       )}
+                      {vistaAtiva === "historico" && (() => {
+                        const resultado = resultadosReavaliacao[s.ticker]
+                        const status = statusHistorico(s)
+
+                        if (resultado) {
+                          const cor = resultado.sinal === "COMPRAR" ? "#4ade80"
+                            : resultado.sinal === "MANTER" ? "#f59e0b" : "#f87171"
+                          const icone = resultado.sinal === "COMPRAR" ? "🟢"
+                            : resultado.sinal === "MANTER" ? "🟡" : "🔴"
+                          return (
+                            <button onClick={() => setModalReavaliacao(resultado)} style={{
+                              padding: "5px 10px", borderRadius: "6px", border: `1px solid ${cor}`,
+                              background: "transparent", color: cor, fontSize: "10px", fontWeight: "700",
+                              cursor: "pointer", whiteSpace: "nowrap"
+                            }}>
+                              {icone} {resultado.sinal} {resultado.confianca}%
+                            </button>
+                          )
+                        }
+
+                        if (status.reavaliar) {
+                          return (
+                            <button onClick={() => reavaliarAtivo(s)} disabled={reavaliando[s.ticker]} style={{
+                              padding: "5px 10px", borderRadius: "6px", border: "1px solid #38bdf8",
+                              background: reavaliando[s.ticker] ? "#1e293b" : "transparent",
+                              color: "#38bdf8", fontSize: "10px", fontWeight: "700",
+                              cursor: reavaliando[s.ticker] ? "default" : "pointer", whiteSpace: "nowrap"
+                            }}>
+                              {reavaliando[s.ticker] ? "⏳ Analisando..." : "🔄 Reavaliar"}
+                            </button>
+                          )
+                        }
+
+                        return (
+                          <span style={{ fontSize: "10px", fontWeight: "700", color: status.cor, whiteSpace: "nowrap" }}>
+                            {status.texto}
+                          </span>
+                        )
+                      })()}
                     </td>
                   </tr>
                 )
