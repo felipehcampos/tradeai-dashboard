@@ -511,7 +511,7 @@ const adicionarPortfolio = (s) => {
                           color: "white", fontSize: "11px", fontWeight: "700",
                           whiteSpace: "nowrap", boxShadow: "0 2px 4px rgba(22,163,74,0.3)"
                         }}>
-                          + Portfólio
+                          + Portfólio 
                         </button>
                       )}
                     </td>
