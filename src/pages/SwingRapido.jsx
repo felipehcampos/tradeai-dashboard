@@ -452,7 +452,7 @@ const adicionarPortfolio = (s) => {
             </colgroup>
             <thead>
               <tr style={{ background: "#0a1520" }}>
-                {["Ticker", "Nome / Diagnóstico IA", "Mercado", "Queda", "RSI", "Volume", "Preço", "Alvo", "Stop", "Risco", "Time Stop", "Data", "Ação"].map(h => (
+                {["Ticker", "Nome / Diagnóstico IA", "Mercado", "Variação", "RSI", "Volume", "Preço", "Alvo", "Stop", "Risco", "Time Stop", "Data", "Ação"].map(h => (
                   <th key={h} style={{
                     padding: "12px 10px", textAlign: "left", color: "#64748b",
                     fontSize: "11px", fontWeight: "700", letterSpacing: "0.05em",
@@ -508,9 +508,20 @@ const adicionarPortfolio = (s) => {
                     </td>
 
                     <td style={{ padding: "14px 10px" }}>
-                      <span style={{ color: "#f87171", fontWeight: "700", fontSize: "13px" }}>
-                        {s.variacao_dia ? `${parseFloat(s.variacao_dia).toFixed(2)}%` : "—"}
-                      </span>
+                      {(() => {
+                        const v = s.variacao_dia !== null && s.variacao_dia !== undefined
+                          ? parseFloat(s.variacao_dia) : null
+                        if (v === null || v === 0) {
+                          return <span style={{ color: "#64748b", fontWeight: "700", fontSize: "13px" }}>—</span>
+                        }
+                        const cor  = v > 0 ? "#4ade80" : "#f87171"
+                        const seta = v > 0 ? "▲" : "▼"
+                        return (
+                          <span style={{ color: cor, fontWeight: "700", fontSize: "13px" }}>
+                            {seta} {v > 0 ? "+" : ""}{v.toFixed(2)}%
+                          </span>
+                        )
+                      })()}
                     </td>
 
                     <td style={{ padding: "14px 10px" }}>
