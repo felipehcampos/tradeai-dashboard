@@ -2,7 +2,6 @@ import { useState, useEffect } from "react"
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from "recharts"
 import api from "../services/api"
 
-const STORAGE_KEY = "tradeai_portfolio"
 const HISTORICO_KEY = "tradeai_portfolio_historico"
 const CORES = ["#38bdf8","#4ade80","#f59e0b","#f87171","#a78bfa","#34d399","#fb923c","#60a5fa","#e879f9","#facc15"]
 const API = import.meta.env.VITE_API_URL
@@ -36,19 +35,29 @@ const SETORES = {
 
 const getSetor = (ticker) => SETORES[ticker] || "Outros"
 
+// Aceita tanto "DD/MM/AAAA" (histórico antigo, localStorage)
+// quanto ISO ("AAAA-MM-DDTHH:mm:ss", vindo de criado_em do banco)
 const diasNaOperacao = (dataStr) => {
   if (!dataStr) return 0
-  const partes = dataStr.split("/")
-  if (partes.length === 3) {
-    const data = new Date(`${partes[2]}-${partes[1]}-${partes[0]}`)
-    const diff = Math.floor((new Date() - data) / (1000 * 60 * 60 * 24))
-    return diff
+  let data
+  if (dataStr.includes("T")) {
+    data = new Date(dataStr)
+  } else {
+    const partes = dataStr.split("/")
+    if (partes.length === 3) {
+      data = new Date(`${partes[2]}-${partes[1]}-${partes[0]}`)
+    } else {
+      return 0
+    }
   }
-  return 0
+  if (isNaN(data.getTime())) return 0
+  const diff = Math.floor((new Date() - data) / (1000 * 60 * 60 * 24))
+  return diff
 }
 
 export default function Portfolio() {
   const [posicoes, setPosicoes] = useState([])
+  const [carregando, setCarregando] = useState(true)
   const [historico, setHistorico] = useState([])
   const [abaAtiva, setAbaAtiva] = useState("abertas")
   const [form, setForm] = useState({ ticker: "", nome: "", mercado: "B3", quantidade: "", preco_entrada: "" })
@@ -61,17 +70,38 @@ export default function Portfolio() {
   const [modalEncerrar, setModalEncerrar] = useState(null)
   const [precoSaida, setPrecoSaida] = useState("")
 
+  const carregarPortfolio = async () => {
+    try {
+      const res = await api.get(`${API}/portfolio`)
+      if (res.data.sucesso) {
+        const mapeado = res.data.dados.map(p => ({
+          ticker: p.ticker,
+          nome: p.nome || p.ticker,
+          mercado: p.mercado || "B3",
+          quantidade: parseFloat(p.quantidade),
+          preco_entrada: parseFloat(p.preco_medio),
+          preco_atual: parseFloat(p.preco_atual ?? p.preco_medio),
+          alvo_lucro: p.alvo_lucro != null ? parseFloat(p.alvo_lucro) : null,
+          stop_loss: p.stop_loss != null ? parseFloat(p.stop_loss) : null,
+          pct_alvo: p.pct_alvo != null ? parseFloat(p.pct_alvo) : null,
+          pct_stop: p.pct_stop != null ? parseFloat(p.pct_stop) : null,
+          origem: p.origem || "manual",
+          data: p.criado_em
+        }))
+        setPosicoes(mapeado)
+      }
+    } catch {
+      console.error("Erro ao carregar portfólio")
+    } finally {
+      setCarregando(false)
+    }
+  }
+
   useEffect(() => {
-    const salvo = localStorage.getItem(STORAGE_KEY)
-    if (salvo) setPosicoes(JSON.parse(salvo))
+    carregarPortfolio()
     const hist = localStorage.getItem(HISTORICO_KEY)
     if (hist) setHistorico(JSON.parse(hist))
   }, [])
-
-  const salvar = (novas) => {
-    setPosicoes(novas)
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(novas))
-  }
 
   const salvarHistorico = (novo) => {
     const novoHist = [novo, ...historico]
@@ -79,23 +109,37 @@ export default function Portfolio() {
     localStorage.setItem(HISTORICO_KEY, JSON.stringify(novoHist))
   }
 
-  const adicionar = () => {
+  const adicionar = async () => {
     if (!form.ticker || !form.quantidade || !form.preco_entrada) return
-    const nova = {
-      ...form,
-      quantidade: parseFloat(form.quantidade),
-      preco_entrada: parseFloat(form.preco_entrada),
-      preco_atual: parseFloat(form.preco_entrada),
-      data: new Date().toLocaleDateString("pt-BR")
+    try {
+      const res = await api.post(`${API}/portfolio`, {
+        ticker: form.ticker.toUpperCase(),
+        nome: form.nome || form.ticker.toUpperCase(),
+        mercado: form.mercado,
+        quantidade: parseFloat(form.quantidade),
+        preco_medio: parseFloat(form.preco_entrada),
+        origem: "manual"
+      })
+      if (res.data.sucesso) {
+        await carregarPortfolio()
+        setForm({ ticker: "", nome: "", mercado: "B3", quantidade: "", preco_entrada: "" })
+        setMostrarForm(false)
+      } else {
+        alert(res.data.erro || "Erro ao adicionar posição.")
+      }
+    } catch {
+      alert("Erro ao adicionar posição.")
     }
-    salvar([...posicoes, nova])
-    setForm({ ticker: "", nome: "", mercado: "B3", quantidade: "", preco_entrada: "" })
-    setMostrarForm(false)
   }
 
-  const remover = (i) => {
-    const novas = posicoes.filter((_, idx) => idx !== i)
-    salvar(novas)
+  const remover = async (i) => {
+    const ticker = posicoes[i].ticker
+    try {
+      await api.delete(`${API}/portfolio/${ticker}`)
+      await carregarPortfolio()
+    } catch {
+      alert("Erro ao remover posição.")
+    }
   }
 
   const iniciarEdicao = (i) => {
@@ -103,39 +147,56 @@ export default function Portfolio() {
     setEditForm({ quantidade: posicoes[i].quantidade, preco_entrada: posicoes[i].preco_entrada })
   }
 
-  const salvarEdicao = (i) => {
-    const novas = posicoes.map((p, idx) => idx === i ? {
-      ...p,
-      quantidade: parseFloat(editForm.quantidade),
-      preco_entrada: parseFloat(editForm.preco_entrada),
-      preco_atual: p.preco_atual
-    } : p)
-    salvar(novas)
-    setEditando(null)
+  const salvarEdicao = async (i) => {
+    const p = posicoes[i]
+    try {
+      await api.delete(`${API}/portfolio/${p.ticker}`)
+      await api.post(`${API}/portfolio`, {
+        ticker: p.ticker,
+        nome: p.nome,
+        mercado: p.mercado,
+        quantidade: parseFloat(editForm.quantidade),
+        preco_medio: parseFloat(editForm.preco_entrada),
+        alvo_lucro: p.alvo_lucro,
+        stop_loss: p.stop_loss,
+        pct_alvo: p.pct_alvo,
+        pct_stop: p.pct_stop,
+        origem: p.origem
+      })
+      await carregarPortfolio()
+      setEditando(null)
+    } catch {
+      alert("Erro ao salvar edição.")
+    }
   }
 
-  const encerrarPosicao = () => {
+  const encerrarPosicao = async () => {
     if (!precoSaida || !modalEncerrar) return
     const p = posicoes[modalEncerrar.idx]
     const saida = parseFloat(precoSaida)
     const pl = (saida - p.preco_entrada) * p.quantidade
     const plPct = ((saida - p.preco_entrada) / p.preco_entrada * 100).toFixed(2)
-    salvarHistorico({
-      ticker: p.ticker,
-      nome: p.nome,
-      mercado: p.mercado,
-      quantidade: p.quantidade,
-      preco_entrada: p.preco_entrada,
-      preco_saida: saida,
-      pl: pl,
-      pl_pct: plPct,
-      data_entrada: p.data,
-      data_saida: new Date().toLocaleDateString("pt-BR"),
-      dias: diasNaOperacao(p.data)
-    })
-    remover(modalEncerrar.idx)
-    setModalEncerrar(null)
-    setPrecoSaida("")
+    try {
+      await api.delete(`${API}/portfolio/${p.ticker}`)
+      salvarHistorico({
+        ticker: p.ticker,
+        nome: p.nome,
+        mercado: p.mercado,
+        quantidade: p.quantidade,
+        preco_entrada: p.preco_entrada,
+        preco_saida: saida,
+        pl: pl,
+        pl_pct: plPct,
+        data_entrada: p.data,
+        data_saida: new Date().toLocaleDateString("pt-BR"),
+        dias: diasNaOperacao(p.data)
+      })
+      await carregarPortfolio()
+      setModalEncerrar(null)
+      setPrecoSaida("")
+    } catch {
+      alert("Erro ao encerrar posição.")
+    }
   }
 
   const atualizarPrecos = async () => {
@@ -150,7 +211,7 @@ export default function Portfolio() {
           ...p,
           preco_atual: precos[p.ticker] || p.preco_atual
         }))
-        salvar(novas)
+        setPosicoes(novas)
         setUltimaAtualizacao(new Date().toLocaleTimeString("pt-BR"))
       }
     } catch {
@@ -408,7 +469,11 @@ export default function Portfolio() {
             </div>
           )}
 
-          {posicoes.length === 0 ? (
+          {carregando ? (
+            <div style={{ textAlign:"center", padding:"60px", color:"#64748b" }}>
+              <p style={{ fontSize:"15px" }}>Carregando portfólio...</p>
+            </div>
+          ) : posicoes.length === 0 ? (
             <div style={{ textAlign:"center", padding:"60px", color:"#64748b" }}>
               <p style={{ fontSize:"40px", marginBottom:"12px" }}>📭</p>
               <p style={{ fontSize:"15px", marginBottom:"8px" }}>Nenhuma posição aberta</p>
