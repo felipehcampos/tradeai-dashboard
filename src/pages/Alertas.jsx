@@ -9,7 +9,7 @@ export default function Alertas() {
 
   useEffect(() => {
     api.get(`${API}/alertas`)
-      .then(r => setAlertas(Array.isArray(r.data) ? r.data : r.data.alertas || []))
+      .then(r => setAlertas(r.data.dados || []))
       .catch(() => setAlertas([]))
       .finally(() => setLoading(false))
   }, [])
