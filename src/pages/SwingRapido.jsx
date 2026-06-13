@@ -96,24 +96,29 @@ export default function SwingRapido() {
       setAtualizandoPrecos(false)
     }
   }
-const adicionarPortfolio = (s) => {
+const adicionarPortfolio = async (s) => {
     const precoAtual = precosAtuais[s.ticker] || parseFloat(s.preco_atual)
-    const salvo = JSON.parse(localStorage.getItem("tradeai_portfolio") || "[]")
-    const jaExiste = salvo.find(p => p.ticker === s.ticker)
-    if (jaExiste) { alert(`${s.ticker} já está no portfólio!`); return }
-    const nova = {
-      ticker: s.ticker, nome: s.nome, mercado: s.mercado,
-      quantidade: 1, preco_entrada: precoAtual,
-      preco_atual: precoAtual,
-      alvo_lucro: parseFloat(s.alvo_lucro) || null,
-      stop_loss: parseFloat(s.stop_loss) || null,
-      pct_alvo: parseFloat(s.pct_alvo) || null,
-      pct_stop: parseFloat(s.pct_stop) || null,
-      origem: "swing",
-      data: new Date().toLocaleDateString("pt-BR")
+    try {
+      const res = await api.post(`${API}/portfolio`, {
+        ticker: s.ticker,
+        nome: s.nome,
+        mercado: s.mercado,
+        quantidade: 1,
+        preco_medio: precoAtual,
+        alvo_lucro: parseFloat(s.alvo_lucro) || null,
+        stop_loss: parseFloat(s.stop_loss) || null,
+        pct_alvo: parseFloat(s.pct_alvo) || null,
+        pct_stop: parseFloat(s.pct_stop) || null,
+        origem: "swing"
+      })
+      if (res.data.sucesso) {
+        alert(`${s.ticker} adicionado ao portfólio! Alvo: ${moeda(s.mercado)} ${parseFloat(s.alvo_lucro).toFixed(2)} | Stop: ${moeda(s.mercado)} ${parseFloat(s.stop_loss).toFixed(2)}`)
+      } else {
+        alert(res.data.erro || `Erro ao adicionar ${s.ticker} ao portfólio.`)
+      }
+    } catch {
+      alert(`Erro ao adicionar ${s.ticker} ao portfólio.`)
     }
-    localStorage.setItem("tradeai_portfolio", JSON.stringify([...salvo, nova]))
-    alert(`${s.ticker} adicionado ao portfólio! Alvo: ${moeda(s.mercado)} ${parseFloat(s.alvo_lucro).toFixed(2)} | Stop: ${moeda(s.mercado)} ${parseFloat(s.stop_loss).toFixed(2)}`)
   }
   const statusHistorico = (s) => {
     const precoAtual = precosAtuais[s.ticker] ? parseFloat(precosAtuais[s.ticker]) : parseFloat(s.preco_atual)
