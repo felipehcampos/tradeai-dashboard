@@ -35,8 +35,6 @@ const SETORES = {
 
 const getSetor = (ticker) => SETORES[ticker] || "Outros"
 
-// Aceita tanto "DD/MM/AAAA" (histórico antigo, localStorage)
-// quanto ISO ("AAAA-MM-DDTHH:mm:ss", vindo de criado_em do banco)
 const diasNaOperacao = (dataStr) => {
   if (!dataStr) return 0
   let data
@@ -51,8 +49,7 @@ const diasNaOperacao = (dataStr) => {
     }
   }
   if (isNaN(data.getTime())) return 0
-  const diff = Math.floor((new Date() - data) / (1000 * 60 * 60 * 24))
-  return diff
+  return Math.floor((new Date() - data) / (1000 * 60 * 60 * 24))
 }
 
 export default function Portfolio() {
@@ -223,16 +220,26 @@ export default function Portfolio() {
 
   const moeda = (mercado) => mercado === "B3" ? "R$" : "US$"
 
-  const totalInvestido = posicoes.reduce((acc, p) => acc + p.quantidade * p.preco_entrada, 0)
-  const totalAtual = posicoes.reduce((acc, p) => acc + p.quantidade * p.preco_atual, 0)
-  const lucroFlutuante = totalAtual - totalInvestido
-  const lucroFlutuantePct = totalInvestido > 0 ? (lucroFlutuante / totalInvestido * 100).toFixed(2) : 0
-  const lucroRealizado = historico.reduce((acc, h) => acc + h.pl, 0)
+  // ── SOMA SEGREGADA POR MOEDA (PREVINE MISTURA DE R$ E US$) ──
+  const invB3 = posicoes.filter(p=>p.mercado==="B3").reduce((acc,p)=>acc+p.quantidade*p.preco_entrada, 0)
+  const atuB3 = posicoes.filter(p=>p.mercado==="B3").reduce((acc,p)=>acc+p.quantidade*p.preco_atual, 0)
+  const lucroB3 = atuB3 - invB3
+  const lucroB3Pct = invB3 > 0 ? (lucroB3 / invB3 * 100).toFixed(1) : 0
 
+  const invIntl = posicoes.filter(p=>p.mercado!=="B3").reduce((acc,p)=>acc+p.quantidade*p.preco_entrada, 0)
+  const atuIntl = posicoes.filter(p=>p.mercado!=="B3").reduce((acc,p)=>acc+p.quantidade*p.preco_atual, 0)
+  const lucroIntl = atuIntl - invIntl
+  const lucroIntlPct = invIntl > 0 ? (lucroIntl / invIntl * 100).toFixed(1) : 0
+
+  const lucroRealizadoBR = historico.filter(h=>h.mercado==="B3").reduce((acc,h)=>acc+h.pl, 0)
+  const lucroRealizadoUS = historico.filter(h=>h.mercado!=="B3").reduce((acc,h)=>acc+h.pl, 0)
+
+  // Para o gráfico de pizza fazer sentido visual, mantemos a distribuição do valor bruto nominal
+  const totalFicticioGrafico = posicoes.reduce((acc,p)=>acc+p.quantidade*p.preco_entrada, 0)
   const dadosPorAtivo = posicoes.map(p => ({
     name: p.ticker,
     value: parseFloat((p.quantidade * p.preco_entrada).toFixed(2)),
-    percent: totalInvestido > 0 ? ((p.quantidade * p.preco_entrada / totalInvestido) * 100).toFixed(1) : 0
+    percent: totalFicticioGrafico > 0 ? ((p.quantidade * p.preco_entrada / totalFicticioGrafico) * 100).toFixed(1) : 0
   }))
 
   const dadosPorSetor = Object.entries(
@@ -245,7 +252,7 @@ export default function Portfolio() {
   ).map(([setor, valor]) => ({
     name: setor,
     value: parseFloat(valor.toFixed(2)),
-    percent: totalInvestido > 0 ? ((valor / totalInvestido) * 100).toFixed(1) : 0
+    percent: totalFicticioGrafico > 0 ? ((valor / totalFicticioGrafico) * 100).toFixed(1) : 0
   })).sort((a, b) => b.value - a.value)
 
   const dadosGrafico = modoGrafico === "ativo" ? dadosPorAtivo : dadosPorSetor
@@ -345,27 +352,21 @@ export default function Portfolio() {
         )}
       </div>
 
-      {/* Cards resumo */}
+      {/* Cards resumo segmentados */}
       <div style={{ display:"flex", gap:"12px", marginBottom:"24px", flexWrap:"wrap" }}>
         {[
-          { label:"Total Investido", valor:`R$ ${fmt(totalInvestido)}`, cor:"#f1f5f9", bg:"rgba(255,255,255,0.05)" },
-          { label:"Valor Atual", valor:`R$ ${fmt(totalAtual)}`, cor:"#38bdf8", bg:"rgba(56,189,248,0.08)" },
-          { label:"Lucro Flutuante (Aberto)",
-            valor:`R$ ${fmt(lucroFlutuante)} (${lucroFlutuantePct}%)`,
-            cor: lucroFlutuante >= 0 ? "#4ade80" : "#f87171",
-            bg: lucroFlutuante >= 0 ? "rgba(22,163,74,0.08)" : "rgba(220,38,38,0.08)" },
-          { label:"Lucro Realizado",
-            valor:`R$ ${fmt(lucroRealizado)}`,
-            cor: lucroRealizado >= 0 ? "#4ade80" : "#f87171",
-            bg: lucroRealizado >= 0 ? "rgba(22,163,74,0.08)" : "rgba(220,38,38,0.08)" },
-          { label:"Posições Abertas", valor:posicoes.length, cor:"#a78bfa", bg:"rgba(167,139,250,0.08)" },
+          { label:"Patrimônio B3 (Investido / Atual)", valor:`R$ ${fmt(invB3)} / R$ ${fmt(atuB3)}`, cor:"#22c55e", bg:"rgba(34,197,94,0.04)" },
+          { label:"Lucro em Aberto B3", valor:`R$ ${fmt(lucroB3)} (${lucroB3Pct}%)`, cor: lucroB3 >= 0 ? "#4ade80" : "#f87171", bg:"rgba(34,197,94,0.08)" },
+          { label:"Patrimônio Intl (Investido / Atual)", valor:`US$ ${fmt(invIntl)} / US$ ${fmt(atuIntl)}`, cor:"#38bdf8", bg:"rgba(56,189,248,0.04)" },
+          { label:"Lucro em Aberto Intl", valor:`US$ ${fmt(lucroIntl)} (${lucroIntlPct}%)`, cor: lucroIntl >= 0 ? "#4ade80" : "#f87171", bg:"rgba(56,189,248,0.08)" },
+          { label:"Lucro Realizado (BR / US)", valor:`R$ ${fmt(lucroRealizadoBR)} | US$ ${fmt(lucroRealizadoUS)}`, cor:"#a78bfa", bg:"rgba(167,139,250,0.08)" },
         ].map((card, i) => (
           <div key={i} style={{
             background:card.bg, border:`1px solid ${card.cor}20`,
-            padding:"16px 20px", borderRadius:"12px", minWidth:"140px", flex:1, textAlign:"center"
+            padding:"16px 20px", borderRadius:"12px", minWidth:"180px", flex:1, textAlign:"center"
           }}>
             <p style={{ color:"#64748b", fontSize:"11px", margin:"0 0 6px 0", fontWeight:"500" }}>{card.label}</p>
-            <p style={{ color:card.cor, fontSize:"20px", fontWeight:"800", margin:0 }}>{card.valor}</p>
+            <p style={{ color:card.cor, fontSize:"16px", fontWeight:"800", margin:0 }}>{card.valor}</p>
           </div>
         ))}
       </div>
@@ -375,7 +376,7 @@ export default function Portfolio() {
         <div style={{ background:"#0d1829", border:"1px solid #1e293b", padding:"20px", borderRadius:"12px", marginBottom:"24px" }}>
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"16px" }}>
             <h3 style={{ color:"#94a3b8", fontSize:"13px", fontWeight:"600", letterSpacing:"0.05em", margin:0 }}>
-              📊 ALOCAÇÃO DO PORTFÓLIO
+              📊 DISTRIBUIÇÃO NOMINAL DO PORTFÓLIO
             </h3>
             <div style={{ display:"flex", gap:"6px" }}>
               {["ativo", "setor"].map(modo => (
@@ -400,7 +401,7 @@ export default function Portfolio() {
                   <Cell key={i} fill={CORES[i % CORES.length]} />
                 ))}
               </Pie>
-              <Tooltip formatter={(value) => [`R$ ${fmt(value)}`, "Valor"]}
+              <Tooltip formatter={(value) => [fmt(value), "Valor Nominal"]}
                 contentStyle={{ background:"#0f172a", border:"1px solid #334155", borderRadius:"8px", color:"#e2e8f0" }} />
               <Legend />
             </PieChart>
@@ -581,7 +582,7 @@ export default function Portfolio() {
                               background: emLucro ? "rgba(74,222,128,0.1)" : "rgba(248,113,113,0.1)",
                               padding:"2px 6px", borderRadius:"4px",
                               width:"fit-content", display:"inline-block"
-                            }}>
+                }}>
                               {emLucro ? "+" : ""}{plPct}%
                             </span>
                           </div>
@@ -670,15 +671,15 @@ export default function Portfolio() {
                   { label:"Total de Trades", valor: historico.length, cor:"#38bdf8" },
                   { label:"Trades Lucrativos", valor: historico.filter(h => h.pl >= 0).length, cor:"#4ade80" },
                   { label:"Trades com Prejuízo", valor: historico.filter(h => h.pl < 0).length, cor:"#f87171" },
-                  { label:"P&L Total Realizado", valor:`R$ ${fmt(lucroRealizado)}`,
-                    cor: lucroRealizado >= 0 ? "#4ade80" : "#f87171" },
+                  { label:"P&L Total Realizado (BR / US)", valor:`R$ ${fmt(lucroRealizadoBR)} | US$ ${fmt(lucroRealizadoUS)}`,
+                    cor: (lucroRealizadoBR + lucroRealizadoUS) >= 0 ? "#4ade80" : "#f87171" },
                 ].map((card, i) => (
                   <div key={i} style={{
                     background:"rgba(255,255,255,0.03)", border:"1px solid #1e293b",
                     padding:"12px 16px", borderRadius:"10px", flex:1, minWidth:"120px", textAlign:"center"
                   }}>
                     <p style={{ color:"#64748b", fontSize:"11px", margin:"0 0 4px 0" }}>{card.label}</p>
-                    <p style={{ color:card.cor, fontSize:"18px", fontWeight:"800", margin:0 }}>{card.valor}</p>
+                    <p style={{ color:card.cor, fontSize:"16px", fontWeight:"800", margin:0 }}>{card.valor}</p>
                   </div>
                 ))}
               </div>
@@ -687,7 +688,7 @@ export default function Portfolio() {
                 <table style={{ width:"100%", borderCollapse:"collapse" }}>
                   <thead>
                     <tr style={{ background:"#0a1520" }}>
-                      {["Ticker","Nome","Qtd","Entrada","Saída","P&L (R$)","Retorno","Dias","Data Saída"].map(h => (
+                      {["Ticker","Nome","Qtd","Entrada","Saída","P&L","Retorno","Dias","Data Saída"].map(h => (
                         <th key={h} style={{ padding:"14px 14px", textAlign:"left", color:"#64748b",
                           fontSize:"10px", fontWeight:"700", letterSpacing:"0.05em",
                           borderBottom:"1px solid #1e293b", whiteSpace:"nowrap" }}>
