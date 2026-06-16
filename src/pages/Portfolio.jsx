@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from "recharts"
+import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, ReferenceLine } from "recharts"
 import api from "../services/api"
 
 const HISTORICO_KEY = "tradeai_portfolio_historico"
@@ -67,6 +67,11 @@ export default function Portfolio() {
   const [modalEncerrar, setModalEncerrar] = useState(null)
   const [precoSaida, setPrecoSaida] = useState("")
 
+  // ── NOVOS ESTADOS PARA O MINI-TERMINAL HISTÓRICO ──
+  const [modalHistorico, setModalHistorico] = useState(null) // guarda { ticker, preco_entrada, data_entrada }
+  const [dadosHistorico, setDadosHistorico] = useState([])
+  const [carregandoHist, setCarregandoHist] = useState(false)
+
   const carregarPortfolio = async () => {
     try {
       const res = await api.get(`${API}/portfolio`)
@@ -99,6 +104,25 @@ export default function Portfolio() {
     const hist = localStorage.getItem(HISTORICO_KEY)
     if (hist) setHistorico(JSON.parse(hist))
   }, [])
+
+  const abrirHistoricoAtivo = async (p) => {
+    setModalHistorico(p)
+    setCarregandoHist(true)
+    setDadosHistorico([])
+    try {
+      // Passa a data_entrada (data) como parâmetro para o yfinance buscar desde o início do trade
+      const res = await api.get(`${API}/portfolio/historico/${p.ticker}`, {
+        params: { data_inicio: p.data }
+      })
+      if (res.data.sucesso) {
+        setDadosHistorico(res.data.dados || [])
+      }
+    } catch (err) {
+      console.error("Erro ao carregar linha do tempo do ativo", err)
+    } finally {
+      setCarregandoHist(false)
+    }
+  }
 
   const salvarHistorico = (novo) => {
     const novoHist = [novo, ...historico]
@@ -220,7 +244,6 @@ export default function Portfolio() {
 
   const moeda = (mercado) => mercado === "B3" ? "R$" : "US$"
 
-  // ── SOMA SEGREGADA POR MOEDA (PREVINE MISTURA DE R$ E US$) ──
   const invB3 = posicoes.filter(p=>p.mercado==="B3").reduce((acc,p)=>acc+p.quantidade*p.preco_entrada, 0)
   const atuB3 = posicoes.filter(p=>p.mercado==="B3").reduce((acc,p)=>acc+p.quantidade*p.preco_atual, 0)
   const lucroB3 = atuB3 - invB3
@@ -234,7 +257,6 @@ export default function Portfolio() {
   const lucroRealizadoBR = historico.filter(h=>h.mercado==="B3").reduce((acc,h)=>acc+h.pl, 0)
   const lucroRealizadoUS = historico.filter(h=>h.mercado!=="B3").reduce((acc,h)=>acc+h.pl, 0)
 
-  // Para o gráfico de pizza fazer sentido visual, mantemos a distribuição do valor bruto nominal
   const totalFicticioGrafico = posicoes.reduce((acc,p)=>acc+p.quantidade*p.preco_entrada, 0)
   const dadosPorAtivo = posicoes.map(p => ({
     name: p.ticker,
@@ -265,6 +287,98 @@ export default function Portfolio() {
           to { transform: rotate(360deg); }
         }
       `}</style>
+
+      {/* ── MODAL: DIÁRIO HISTÓRICO DE PREÇOS (NOVO!) ── */}
+      {modalHistorico && (
+        <div onClick={() => setModalHistorico(null)} style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)",
+          zIndex: 1100, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px"
+        }}>
+          <div onClick={e => e.stopPropagation()} style={{
+            background: "#0d1829", border: "1px solid #1e293b", borderRadius: "16px",
+            padding: "24px", maxWidth: "560px", width: "100%", maxHeight: "85vh", display: "flex", flexDirection: "column"
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+              <h3 style={{ color: "#38bdf8", margin: 0, fontSize: "18px", fontWeight: "800" }}>
+                📈 Histórico de Linha do Tempo — {modalHistorico.ticker}
+              </h3>
+              <button onClick={() => setModalHistorico(null)} style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", fontSize: "16px" }}>✕</button>
+            </div>
+            <p style={{ color: "#64748b", fontSize: "12px", margin: "0 0 16px 0" }}>
+              Preço de Entrada Original: <strong style={{ color: "#e2e8f0" }}>{moeda(modalHistorico.mercado)} {fmt(modalHistorico.preco_entrada)}</strong>
+            </p>
+
+            {carregandoHist ? (
+              <div style={{ textAlign: "center", padding: "40px", color: "#64748b" }}>
+                <span style={{
+                  width: "24px", height: "24px", border: "2px solid #38bdf8",
+                  borderTopColor: "transparent", borderRadius: "50%",
+                  display: "inline-block", animation: "spin 0.8s linear infinite", marginBottom: "12px"
+                }} />
+                <p style={{ fontSize: "13px" }}>Conectando com Yahoo Finance e montando histórico diário...</p>
+              </div>
+            ) : dadosHistorico.length === 0 ? (
+              <div style={{ textAlign: "center", padding: "40px", color: "#64748b" }}>
+                <p style={{ fontSize: "13px" }}>Nenhum dado diário encontrado para este ativo desde a compra.</p>
+              </div>
+            ) : (
+              <>
+                {/* Mini Gráfico Recharts */}
+                <div style={{ background: "#060d1a", borderRadius: "8px", padding: "12px 12px 0 0", marginBottom: "16px" }}>
+                  <ResponsiveContainer width="100%" height={180}>
+                    <LineChart data={dadosHistorico}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                      <XAxis dataKey="data" stroke="#475569" strokeWidth={0.5} style={{ fontSize: "10px" }} />
+                      <YAxis stroke="#475569" strokeWidth={0.5} style={{ fontSize: "10px" }} domain={['auto', 'auto']} />
+                      <Tooltip 
+                        contentStyle={{ background: "#0f172a", border: "1px solid #334155", borderRadius: "6px", fontSize: "12px" }}
+                        formatter={(value) => [`${moeda(modalHistorico.mercado)} ${fmt(value)}`, "Fechamento"]}
+                      />
+                      {/* Linha guia marcando o preço de entrada original */}
+                      <ReferenceLine y={modalHistorico.preco_entrada} stroke="#f59e0b" strokeDasharray="3 3" label={{ value: 'Entrada', fill: '#f59e0b', fontSize: 10, position: 'insideTopLeft' }} />
+                      <Line type="monotone" dataKey="fechamento" stroke="#38bdf8" strokeWidth={2} dot={{ r: 3, strokeWidth: 1 }} activeDot={{ r: 5 }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* Tabela de Preços com Rolagem Interna */}
+                <div style={{ overflowY: "auto", flex: 1, border: "1px solid #1e293b", borderRadius: "8px" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
+                    <thead>
+                      <tr style={{ background: "#0a1520", position: "sticky", top: 0, zIndex: 1 }}>
+                        <th style={{ padding: "10px", color: "#64748b", textAlign: "left" }}>DATA</th>
+                        <th style={{ padding: "10px", color: "#64748b", textAlign: "right" }}>FECHAMENTO</th>
+                        <th style={{ padding: "10px", color: "#64748b", textAlign: "right" }}>P&L DESDE A ENTRADA</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {dadosHistorico.map((dia, idx) => {
+                        const varPct = ((dia.fechamento - modalHistorico.preco_entrada) / modalHistorico.preco_entrada * 100).toFixed(2)
+                        const lucro = dia.fechamento >= modalHistorico.preco_entrada
+                        return (
+                          <tr key={idx} style={{ borderBottom: "1px solid #1e293b", background: idx % 2 === 0 ? "#0d1829" : "#0a1520" }}>
+                            <td style={{ padding: "10px", color: "#94a3b8" }}>{dia.data}</td>
+                            <td style={{ padding: "10px", color: "#e2e8f0", textAlign: "right", fontWeight: "600" }}>
+                              {moeda(modalHistorico.mercado)} {fmt(dia.fechamento)}
+                            </td>
+                            <td style={{ padding: "10px", textAlign: "right", fontWeight: "700", color: lucro ? "#4ade80" : "#f87171" }}>
+                              {lucro ? "▲ +" : "▼ "}{varPct}%
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+            <button onClick={() => setModalHistorico(null)} style={{
+              marginTop: "16px", padding: "10px", borderRadius: "8px", border: "1px solid #334155",
+              background: "#1e293b", color: "#94a3b8", cursor: "pointer", fontWeight: "600", fontSize: "13px"
+            }}>Fechar Diário</button>
+          </div>
+        </div>
+      )}
 
       {/* Modal Encerrar Posição */}
       {modalEncerrar && (
@@ -371,7 +485,7 @@ export default function Portfolio() {
         ))}
       </div>
 
-      {/* Gráfico */}
+      {/* Gráfico de Pizza */}
       {posicoes.length > 0 && (
         <div style={{ background:"#0d1829", border:"1px solid #1e293b", padding:"20px", borderRadius:"12px", marginBottom:"24px" }}>
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"16px" }}>
@@ -582,7 +696,7 @@ export default function Portfolio() {
                               background: emLucro ? "rgba(74,222,128,0.1)" : "rgba(248,113,113,0.1)",
                               padding:"2px 6px", borderRadius:"4px",
                               width:"fit-content", display:"inline-block"
-                }}>
+                            }}>
                               {emLucro ? "+" : ""}{plPct}%
                             </span>
                           </div>
@@ -628,6 +742,10 @@ export default function Portfolio() {
                               </>
                             ) : (
                               <>
+                                {/* INSTALADO O BOTÃO DE HISTÓRICO DE LINHA DO TEMPO */}
+                                <button onClick={() => abrirHistoricoAtivo(p)} style={{
+                                  padding:"4px 8px", borderRadius:"4px", border:"none", cursor:"pointer",
+                                  background:"#0ea5e9", color:"white", fontSize:"11px", fontWeight:"600" }} title="Ver Diário de Preços">📈</button>
                                 <button onClick={() => setModalEncerrar({idx: i, ...p})} style={{
                                   padding:"4px 8px", borderRadius:"4px", border:"none", cursor:"pointer",
                                   background:"#16a34a", color:"white", fontSize:"11px", fontWeight:"600",
