@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react" // Injetado useRef para controle de memória
+import { useState, useEffect, useRef } from "react"
 import api from "../services/api"
 
 const API = import.meta.env.VITE_API_URL
@@ -18,9 +18,10 @@ export default function SwingRapido() {
   const [reavaliando, setReavaliando] = useState({})
   const [resultadosReavaliacao, setResultadosReavaliacao] = useState({})
   const [modalReavaliacao, setModalReavaliacao] = useState(null)
-  
-  // Guarda a referência do intervalo na memória do componente de forma segura
+  const [bannerStatus, setBannerStatus] = useState(null) // null | "executando" | "concluido"
+
   const scannerIntervalRef = useRef(null)
+  const pollingStatusRef = useRef(null)
 
   const carregarSinais = () => {
     setLoading(true)
@@ -42,41 +43,53 @@ export default function SwingRapido() {
       .finally(() => setLoading(false))
   }
 
-  // Bloco de Segurança Máxima: Limpa o intervalo se o usuário fechar a página ou mudar de aba
+  const iniciarPollingStatus = () => {
+    if (pollingStatusRef.current) return
+    pollingStatusRef.current = setInterval(async () => {
+      try {
+        const res = await api.get(`${API}/scanner/status`)
+        if (res.data.swing === "ocioso") {
+          clearInterval(pollingStatusRef.current)
+          pollingStatusRef.current = null
+          setRodando(false)
+          setBannerStatus("concluido")
+          carregarSinais()
+          setTimeout(() => setBannerStatus(null), 5000)
+        }
+      } catch { /* silencia */ }
+    }, 15000)
+  }
+
   useEffect(() => {
     carregarSinais()
+    // Verifica se o scanner já está rodando ao carregar a página
+    api.get(`${API}/scanner/status`).then(res => {
+      if (res.data.swing === "executando") {
+        setRodando(true)
+        setBannerStatus("executando")
+        iniciarPollingStatus()
+      }
+    }).catch(() => {})
     return () => {
       if (scannerIntervalRef.current) clearInterval(scannerIntervalRef.current)
+      if (pollingStatusRef.current) clearInterval(pollingStatusRef.current)
     }
   }, [])
 
   const rodarScanner = async () => {
     if (rodando) return
-    setRodando(true)
-
-    // Inicia a escuta em tempo real do progresso
-    scannerIntervalRef.current = setInterval(() => {
-      carregarSinais()
-    }, 15000)
-
-    const limparIntervaloSeguro = () => {
-      if (scannerIntervalRef.current) {
-        clearInterval(scannerIntervalRef.current)
-        scannerIntervalRef.current = null
+    try {
+      const res = await api.post(`${API}/rodar-scanner-swing`)
+      if (res.data.sucesso) {
+        setRodando(true)
+        setBannerStatus("executando")
+        iniciarPollingStatus()
+      } else {
+        alert(res.data.erro || "Erro ao rodar o scanner.")
       }
-      setRodando(false)
+    } catch {
+      alert("Erro ao rodar o scanner.")
     }
-
-    api.post(`${API}/rodar-scanner-swing`, {}, { timeout: 600000 })
-      .finally(() => {
-        limparIntervaloSeguro()
-        carregarSinais()
-      })
-
-    // Trava de segurança para desligar após 8 minutos se o servidor sumir
-    setTimeout(() => {
-      limparIntervaloSeguro()
-    }, 480000)
   }
 
   const atualizarPrecos = async () => {
@@ -96,7 +109,8 @@ export default function SwingRapido() {
       setAtualizandoPrecos(false)
     }
   }
-const adicionarPortfolio = async (s) => {
+
+  const adicionarPortfolio = async (s) => {
     const precoAtual = precosAtuais[s.ticker] || parseFloat(s.preco_atual)
     try {
       const res = await api.post(`${API}/portfolio`, {
@@ -120,6 +134,7 @@ const adicionarPortfolio = async (s) => {
       alert(`Erro ao adicionar ${s.ticker} ao portfólio.`)
     }
   }
+
   const statusHistorico = (s) => {
     const precoAtual = precosAtuais[s.ticker] ? parseFloat(precosAtuais[s.ticker]) : parseFloat(s.preco_atual)
     const alvo = parseFloat(s.alvo_lucro)
@@ -127,12 +142,8 @@ const adicionarPortfolio = async (s) => {
     if (!precoAtual || !alvo || !stop) {
       return { texto: "— sem dados —", cor: "#64748b", reavaliar: false }
     }
-    if (precoAtual >= alvo) {
-      return { texto: "🎯 Alvo já seria atingido", cor: "#4ade80", reavaliar: false }
-    }
-    if (precoAtual <= stop) {
-      return { texto: "🛑 Stop já seria atingido", cor: "#f87171", reavaliar: false }
-    }
+    if (precoAtual >= alvo) return { texto: "🎯 Alvo já seria atingido", cor: "#4ade80", reavaliar: false }
+    if (precoAtual <= stop) return { texto: "🛑 Stop já seria atingido", cor: "#f87171", reavaliar: false }
     return { texto: "🔁 Ainda na faixa", cor: "#f59e0b", reavaliar: true }
   }
 
@@ -206,14 +217,17 @@ const adicionarPortfolio = async (s) => {
           from { transform: rotate(0deg); }
           to { transform: rotate(360deg); }
         }
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.6; }
+        }
       `}</style>
-      
+
       {/* Modal de análise */}
       {modalSinal && (
         <div onClick={() => setModalSinal(null)} style={{
           position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)",
-          zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center",
-          padding: "20px"
+          zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px"
         }}>
           <div onClick={e => e.stopPropagation()} style={{
             background: "#0d1829", border: "1px solid #1e293b", borderRadius: "16px",
@@ -221,8 +235,7 @@ const adicionarPortfolio = async (s) => {
           }}>
             <button onClick={() => setModalSinal(null)} style={{
               position: "absolute", top: "16px", right: "16px",
-              background: "none", border: "none", color: "#64748b",
-              fontSize: "18px", cursor: "pointer"
+              background: "none", border: "none", color: "#64748b", fontSize: "18px", cursor: "pointer"
             }}>✕</button>
             <div style={{ marginBottom: "16px" }}>
               <span style={{ color: "#f59e0b", fontWeight: "800", fontSize: "18px" }}>{modalSinal.ticker}</span>
@@ -248,12 +261,12 @@ const adicionarPortfolio = async (s) => {
           </div>
         </div>
       )}
-{/* Modal de reavaliação */}
+
+      {/* Modal de reavaliação */}
       {modalReavaliacao && (
         <div onClick={() => setModalReavaliacao(null)} style={{
           position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)",
-          zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center",
-          padding: "20px"
+          zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px"
         }}>
           <div onClick={e => e.stopPropagation()} style={{
             background: "#0d1829", border: "1px solid #1e293b", borderRadius: "16px",
@@ -261,8 +274,7 @@ const adicionarPortfolio = async (s) => {
           }}>
             <button onClick={() => setModalReavaliacao(null)} style={{
               position: "absolute", top: "16px", right: "16px",
-              background: "none", border: "none", color: "#64748b",
-              fontSize: "18px", cursor: "pointer"
+              background: "none", border: "none", color: "#64748b", fontSize: "18px", cursor: "pointer"
             }}>✕</button>
             <div style={{ marginBottom: "16px" }}>
               <span style={{ color: "#38bdf8", fontWeight: "800", fontSize: "18px" }}>{modalReavaliacao.ticker}</span>
@@ -293,6 +305,50 @@ const adicionarPortfolio = async (s) => {
           </div>
         </div>
       )}
+
+      {/* Banner executando */}
+      {bannerStatus === "executando" && (
+        <div style={{
+          background: "rgba(245,158,11,0.12)", border: "1px solid rgba(245,158,11,0.4)",
+          borderRadius: "10px", padding: "14px 20px", marginBottom: "16px",
+          display: "flex", alignItems: "center", gap: "12px",
+          animation: "pulse 2s ease-in-out infinite"
+        }}>
+          <span style={{
+            width: "16px", height: "16px", border: "2px solid #f59e0b",
+            borderTopColor: "transparent", borderRadius: "50%",
+            display: "inline-block", animation: "spin 0.8s linear infinite", flexShrink: 0
+          }} />
+          <div>
+            <p style={{ margin: 0, color: "#f59e0b", fontWeight: "700", fontSize: "13px" }}>
+              ⏳ Scanner Swing em execução...
+            </p>
+            <p style={{ margin: "2px 0 0 0", color: "#94a3b8", fontSize: "12px" }}>
+              Varrendo B3 + mercados globais em busca de reversões. A página atualizará automaticamente quando concluir.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Banner concluído */}
+      {bannerStatus === "concluido" && (
+        <div style={{
+          background: "rgba(34,197,94,0.12)", border: "1px solid rgba(34,197,94,0.4)",
+          borderRadius: "10px", padding: "14px 20px", marginBottom: "16px",
+          display: "flex", alignItems: "center", gap: "12px"
+        }}>
+          <span style={{ fontSize: "20px" }}>✅</span>
+          <div>
+            <p style={{ margin: 0, color: "#4ade80", fontWeight: "700", fontSize: "13px" }}>
+              Scanner Swing concluído!
+            </p>
+            <p style={{ margin: "2px 0 0 0", color: "#94a3b8", fontSize: "12px" }}>
+              {sinais.length} sinal(is) ativo(s) encontrado(s). Resultados atualizados.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div style={{
         display: "flex", alignItems: "flex-start", justifyContent: "space-between",
@@ -308,8 +364,6 @@ const adicionarPortfolio = async (s) => {
           </span>
         </div>
         <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-          
-          {/* INSTALADO O SPINNER GIRATÓRIO PROFISSIONAL IGUAL À ABA MERCADO */}
           <button onClick={atualizarPrecos} disabled={atualizandoPrecos || (vistaAtiva === "ativos" ? sinais.length === 0 : historico.length === 0)} style={{
             padding: "9px 18px", borderRadius: "8px", border: "none", cursor: "pointer",
             background: atualizandoPrecos || sinais.length === 0 ? "#334155" : "linear-gradient(135deg,#10b981,#059669)",
@@ -329,15 +383,24 @@ const adicionarPortfolio = async (s) => {
               </span>
             ) : "💹 Atualizar Preços"}
           </button>
-          
+
           <button onClick={rodarScanner} disabled={rodando} style={{
-            padding: "9px 20px", borderRadius: "8px", border: "none", cursor: "pointer",
+            padding: "9px 20px", borderRadius: "8px", border: "none", cursor: rodando ? "not-allowed" : "pointer",
             background: rodando ? "#334155" : "linear-gradient(135deg,#f59e0b,#d97706)",
             color: rodando ? "#94a3b8" : "#0f172a",
             fontWeight: "bold", fontSize: "13px",
             boxShadow: rodando ? "none" : "0 2px 8px rgba(245,158,11,0.4)"
           }}>
-            {rodando ? "⏳ Varrendo mercado..." : "⚡ Rodar Scanner Swing"}
+            {rodando ? (
+              <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <span style={{
+                  width: "12px", height: "12px", border: "2px solid #94a3b8",
+                  borderTopColor: "transparent", borderRadius: "50%",
+                  display: "inline-block", animation: "spin 0.8s linear infinite"
+                }} />
+                Analisando...
+              </span>
+            ) : "⚡ Rodar Scanner Swing"}
           </button>
         </div>
       </div>
@@ -349,7 +412,7 @@ const adicionarPortfolio = async (s) => {
           marginBottom: "16px", border: "1px solid rgba(239,68,68,0.3)",
           color: "#f87171", fontSize: "13px"
         }}>
-          ⚠️ <strong>Erro de conexão:</strong> Não foi possível conectar ao servidor TradeAI. Verifique se o backend está ativo.
+          ⚠️ <strong>Erro de conexão:</strong> Não foi possível conectar ao servidor TradeAI.
         </div>
       )}
 
@@ -370,16 +433,6 @@ const adicionarPortfolio = async (s) => {
           </div>
         ))}
       </div>
-
-      {/* Banner rodando */}
-      {rodando && (
-        <div style={{
-          background: "rgba(245,158,11,0.08)", padding: "12px 16px", borderRadius: "8px",
-          marginBottom: "16px", borderLeft: "3px solid #f59e0b", color: "#94a3b8", fontSize: "13px"
-        }}>
-          ⚡ Varrendo 70+ ativos da B3 + mercado global em busca de pânico técnico... Aguarde alguns minutos.
-        </div>
-      )}
 
       {/* Tabs Ativos / Histórico */}
       <div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>
@@ -485,7 +538,6 @@ const adicionarPortfolio = async (s) => {
                     <td style={{ padding: "14px 10px", fontWeight: "800", color: "#f59e0b", fontSize: "13px" }}>
                       {s.ticker}
                     </td>
-
                     <td style={{ padding: "14px 10px", verticalAlign: "middle" }}>
                       <div style={{ color: "#f1f5f9", fontSize: "12px", fontWeight: "600", marginBottom: "6px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         {s.nome}
@@ -500,7 +552,6 @@ const adicionarPortfolio = async (s) => {
                         </button>
                       )}
                     </td>
-
                     <td style={{ padding: "14px 10px" }}>
                       <span style={{
                         display: "inline-block", padding: "3px 8px", borderRadius: "12px",
@@ -511,7 +562,6 @@ const adicionarPortfolio = async (s) => {
                         {s.mercado}
                       </span>
                     </td>
-
                     <td style={{ padding: "14px 10px" }}>
                       {(() => {
                         const v = s.variacao_dia !== null && s.variacao_dia !== undefined
@@ -519,7 +569,7 @@ const adicionarPortfolio = async (s) => {
                         if (v === null || v === 0) {
                           return <span style={{ color: "#64748b", fontWeight: "700", fontSize: "13px" }}>—</span>
                         }
-                        const cor  = v > 0 ? "#4ade80" : "#f87171"
+                        const cor = v > 0 ? "#4ade80" : "#f87171"
                         const seta = v > 0 ? "▲" : "▼"
                         return (
                           <span style={{ color: cor, fontWeight: "700", fontSize: "13px" }}>
@@ -528,7 +578,6 @@ const adicionarPortfolio = async (s) => {
                         )
                       })()}
                     </td>
-
                     <td style={{ padding: "14px 10px" }}>
                       <span style={{
                         color: parseFloat(s.rsi) <= 30 ? "#f87171" : "#f59e0b",
@@ -537,13 +586,11 @@ const adicionarPortfolio = async (s) => {
                         {s.rsi ? parseFloat(s.rsi).toFixed(1) : "—"}
                       </span>
                     </td>
-
                     <td style={{ padding: "14px 10px" }}>
                       <span style={{ color: "#4ade80", fontSize: "12px", fontWeight: "700" }}>
                         {s.volume_vs_media ? `${parseFloat(s.volume_vs_media).toFixed(0)}%` : "—"}
                       </span>
                     </td>
-
                     <td style={{ padding: "14px 10px", whiteSpace: "nowrap" }}>
                       <span style={{ color: "#cbd5e1", fontSize: "12px", fontWeight: "600" }}>
                         {moeda(s.mercado)} {formatarPreco(getPrecoExibir(s))}
@@ -557,7 +604,6 @@ const adicionarPortfolio = async (s) => {
                         </span>
                       )}
                     </td>
-
                     <td style={{ padding: "14px 10px" }}>
                       <span style={{ color: "#4ade80", fontSize: "12px", fontWeight: "700" }}>
                         {moeda(s.mercado)} {formatarPreco(s.alvo_lucro)}
@@ -566,7 +612,6 @@ const adicionarPortfolio = async (s) => {
                         <span style={{ color: "#22c55e", fontSize: "10px", display: "block" }}>+{s.pct_alvo}%</span>
                       )}
                     </td>
-
                     <td style={{ padding: "14px 10px" }}>
                       <span style={{ color: "#f87171", fontSize: "12px", fontWeight: "600" }}>
                         {moeda(s.mercado)} {formatarPreco(s.stop_loss)}
@@ -575,7 +620,6 @@ const adicionarPortfolio = async (s) => {
                         <span style={{ color: "#ef4444", fontSize: "10px", display: "block" }}>-{s.pct_stop}%</span>
                       )}
                     </td>
-
                     <td style={{ padding: "14px 10px" }}>
                       <span style={{
                         display: "inline-block", padding: "3px 6px", borderRadius: "10px",
@@ -586,7 +630,6 @@ const adicionarPortfolio = async (s) => {
                         {s.tipo_risco === "SISTEMICO" ? "🔵 Sist" : "🔴 Idios"}
                       </span>
                     </td>
-
                     <td style={{ padding: "14px 10px" }}>
                       {expirado ? (
                         <span style={{ color: "#64748b", fontSize: "11px", fontWeight: "700" }}>⏰ EXPIRADO</span>
@@ -596,11 +639,9 @@ const adicionarPortfolio = async (s) => {
                         </span>
                       ) : "—"}
                     </td>
-
                     <td style={{ padding: "14px 10px", color: "#475569", fontSize: "11px" }}>
                       {formatarData(s.criado_em)}
                     </td>
-
                     <td style={{ padding: "14px 10px" }}>
                       {!expirado && vistaAtiva === "ativos" && (
                         <button onClick={() => adicionarPortfolio(s)} style={{
@@ -609,13 +650,12 @@ const adicionarPortfolio = async (s) => {
                           color: "white", fontSize: "11px", fontWeight: "700",
                           whiteSpace: "nowrap", boxShadow: "0 2px 4px rgba(22,163,74,0.3)"
                         }}>
-                          + Portfólio 
+                          + Portfólio
                         </button>
                       )}
                       {vistaAtiva === "historico" && (() => {
                         const resultado = resultadosReavaliacao[s.ticker]
                         const status = statusHistorico(s)
-
                         if (resultado) {
                           const cor = resultado.sinal === "COMPRAR" ? "#4ade80"
                             : resultado.sinal === "MANTER" ? "#f59e0b" : "#f87171"
@@ -631,7 +671,6 @@ const adicionarPortfolio = async (s) => {
                             </button>
                           )
                         }
-
                         if (status.reavaliar) {
                           return (
                             <button onClick={() => reavaliarAtivo(s)} disabled={reavaliando[s.ticker]} style={{
@@ -644,7 +683,6 @@ const adicionarPortfolio = async (s) => {
                             </button>
                           )
                         }
-
                         return (
                           <span style={{ fontSize: "10px", fontWeight: "700", color: status.cor, whiteSpace: "nowrap" }}>
                             {status.texto}
