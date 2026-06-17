@@ -508,9 +508,9 @@ export default function Portfolio() {
           </div>
           <ResponsiveContainer width="100%" height={280}>
             <PieChart>
-              <Pie data={dadosGrafico} cx="50%" cy="50%" outerRadius={115}
-                dataKey="value" nameKey="name"
-                label={({ name, percent }) => `${name} ${percent}%`} labelLine={true}>
+              <Pie data={dadosGrafico} cx="50%" cy="50%"
+  innerRadius={70} outerRadius={105} paddingAngle={3}
+  dataKey="value" nameKey="name" label={false}>
                 {dadosGrafico.map((_, i) => (
                   <Cell key={i} fill={CORES[i % CORES.length]} />
                 ))}
