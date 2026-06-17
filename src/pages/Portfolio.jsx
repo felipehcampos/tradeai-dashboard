@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, ReferenceLine } from "recharts"
+import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, ReferenceLine, Tooltip } from "recharts"
 import api from "../services/api"
 
 const HISTORICO_KEY = "tradeai_portfolio_historico"
@@ -66,9 +66,7 @@ export default function Portfolio() {
   const [modoGrafico, setModoGrafico] = useState("ativo")
   const [modalEncerrar, setModalEncerrar] = useState(null)
   const [precoSaida, setPrecoSaida] = useState("")
-
-  // ── NOVOS ESTADOS PARA O MINI-TERMINAL HISTÓRICO ──
-  const [modalHistorico, setModalHistorico] = useState(null) // guarda { ticker, preco_entrada, data_entrada }
+  const [modalHistorico, setModalHistorico] = useState(null)
   const [dadosHistorico, setDadosHistorico] = useState([])
   const [carregandoHist, setCarregandoHist] = useState(false)
 
@@ -110,7 +108,6 @@ export default function Portfolio() {
     setCarregandoHist(true)
     setDadosHistorico([])
     try {
-      // Passa a data_entrada (data) como parâmetro para o yfinance buscar desde o início do trade
       const res = await api.get(`${API}/portfolio/historico/${p.ticker}`, {
         params: { data_inicio: p.data }
       })
@@ -258,6 +255,7 @@ export default function Portfolio() {
   const lucroRealizadoUS = historico.filter(h=>h.mercado!=="B3").reduce((acc,h)=>acc+h.pl, 0)
 
   const totalFicticioGrafico = posicoes.reduce((acc,p)=>acc+p.quantidade*p.preco_entrada, 0)
+
   const dadosPorAtivo = posicoes.map(p => ({
     name: p.ticker,
     value: parseFloat((p.quantidade * p.preco_entrada).toFixed(2)),
@@ -288,7 +286,7 @@ export default function Portfolio() {
         }
       `}</style>
 
-      {/* ── MODAL: DIÁRIO HISTÓRICO DE PREÇOS (NOVO!) ── */}
+      {/* Modal Histórico de Preços */}
       {modalHistorico && (
         <div onClick={() => setModalHistorico(null)} style={{
           position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)",
@@ -307,7 +305,6 @@ export default function Portfolio() {
             <p style={{ color: "#64748b", fontSize: "12px", margin: "0 0 16px 0" }}>
               Preço de Entrada Original: <strong style={{ color: "#e2e8f0" }}>{moeda(modalHistorico.mercado)} {fmt(modalHistorico.preco_entrada)}</strong>
             </p>
-
             {carregandoHist ? (
               <div style={{ textAlign: "center", padding: "40px", color: "#64748b" }}>
                 <span style={{
@@ -315,7 +312,7 @@ export default function Portfolio() {
                   borderTopColor: "transparent", borderRadius: "50%",
                   display: "inline-block", animation: "spin 0.8s linear infinite", marginBottom: "12px"
                 }} />
-                <p style={{ fontSize: "13px" }}>Conectando com Yahoo Finance e montando histórico diário...</p>
+                <p style={{ fontSize: "13px" }}>Buscando histórico diário...</p>
               </div>
             ) : dadosHistorico.length === 0 ? (
               <div style={{ textAlign: "center", padding: "40px", color: "#64748b" }}>
@@ -323,25 +320,21 @@ export default function Portfolio() {
               </div>
             ) : (
               <>
-                {/* Mini Gráfico Recharts */}
                 <div style={{ background: "#060d1a", borderRadius: "8px", padding: "12px 12px 0 0", marginBottom: "16px" }}>
                   <ResponsiveContainer width="100%" height={180}>
                     <LineChart data={dadosHistorico}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                       <XAxis dataKey="data" stroke="#475569" strokeWidth={0.5} style={{ fontSize: "10px" }} />
                       <YAxis stroke="#475569" strokeWidth={0.5} style={{ fontSize: "10px" }} domain={['auto', 'auto']} />
-                      <Tooltip 
+                      <Tooltip
                         contentStyle={{ background: "#0f172a", border: "1px solid #334155", borderRadius: "6px", fontSize: "12px" }}
                         formatter={(value) => [`${moeda(modalHistorico.mercado)} ${fmt(value)}`, "Fechamento"]}
                       />
-                      {/* Linha guia marcando o preço de entrada original */}
                       <ReferenceLine y={modalHistorico.preco_entrada} stroke="#f59e0b" strokeDasharray="3 3" label={{ value: 'Entrada', fill: '#f59e0b', fontSize: 10, position: 'insideTopLeft' }} />
                       <Line type="monotone" dataKey="fechamento" stroke="#38bdf8" strokeWidth={2} dot={{ r: 3, strokeWidth: 1 }} activeDot={{ r: 5 }} />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
-
-                {/* Tabela de Preços com Rolagem Interna */}
                 <div style={{ overflowY: "auto", flex: 1, border: "1px solid #1e293b", borderRadius: "8px" }}>
                   <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
                     <thead>
@@ -485,7 +478,7 @@ export default function Portfolio() {
         ))}
       </div>
 
-      {/* Gráfico de Pizza */}
+      {/* Gráfico de Barras Horizontais */}
       {posicoes.length > 0 && (
         <div style={{ background:"#0d1829", border:"1px solid #1e293b", padding:"20px", borderRadius:"12px", marginBottom:"24px" }}>
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"16px" }}>
@@ -506,20 +499,36 @@ export default function Portfolio() {
               ))}
             </div>
           </div>
-          <ResponsiveContainer width="100%" height={280}>
-            <PieChart>
-              <Pie data={dadosGrafico} cx="50%" cy="50%"
-  innerRadius={70} outerRadius={105} paddingAngle={3}
-  dataKey="value" nameKey="name" label={false}>
-                {dadosGrafico.map((_, i) => (
-                  <Cell key={i} fill={CORES[i % CORES.length]} />
-                ))}
-              </Pie>
-              <Tooltip formatter={(value) => [fmt(value), "Valor Nominal"]}
-                contentStyle={{ background:"#0f172a", border:"1px solid #334155", borderRadius:"8px", color:"#e2e8f0" }} />
-              <Legend />
-            </PieChart>
-          </ResponsiveContainer>
+          <div style={{ display:"flex", flexDirection:"column", gap:"8px" }}>
+            {dadosGrafico
+              .slice()
+              .sort((a, b) => b.value - a.value)
+              .map((item, i) => {
+                const maxVal = Math.max(...dadosGrafico.map(d => d.value))
+                const pct = totalFicticioGrafico > 0
+                  ? ((item.value / totalFicticioGrafico) * 100).toFixed(1)
+                  : 0
+                const largura = maxVal > 0 ? (item.value / maxVal) * 100 : 0
+                return (
+                  <div key={i} style={{ display:"flex", alignItems:"center", gap:"10px" }}>
+                    <div style={{ width:"90px", textAlign:"right", flexShrink:0 }}>
+                      <span style={{ color:"#e2e8f0", fontSize:"12px", fontWeight:"700" }}>{item.name}</span>
+                    </div>
+                    <div style={{ flex:1, background:"#1e293b", borderRadius:"4px", height:"22px", position:"relative" }}>
+                      <div style={{
+                        width:`${largura}%`, height:"100%", borderRadius:"4px",
+                        background: CORES[i % CORES.length],
+                        transition:"width 0.4s ease",
+                        minWidth: largura > 0 ? "4px" : "0"
+                      }} />
+                    </div>
+                    <div style={{ width:"50px", flexShrink:0, textAlign:"right" }}>
+                      <span style={{ color:"#94a3b8", fontSize:"12px", fontWeight:"600" }}>{pct}%</span>
+                    </div>
+                  </div>
+                )
+              })}
+          </div>
         </div>
       )}
 
@@ -631,7 +640,6 @@ export default function Portfolio() {
                       }}
                       onMouseEnter={e => { if (!estaEditando) e.currentTarget.style.background = "#1e293b" }}
                       onMouseLeave={e => { if (!estaEditando) e.currentTarget.style.background = i % 2 === 0 ? "#0d1829" : "#0a1520" }}>
-
                         <td style={{ padding:"14px 14px", fontWeight:"700", color:"#38bdf8", fontSize:"13px", whiteSpace:"nowrap" }}>
                           {p.ticker}
                           <div style={{ marginTop:"3px" }}>
@@ -742,7 +750,6 @@ export default function Portfolio() {
                               </>
                             ) : (
                               <>
-                                {/* INSTALADO O BOTÃO DE HISTÓRICO DE LINHA DO TEMPO */}
                                 <button onClick={() => abrirHistoricoAtivo(p)} style={{
                                   padding:"4px 8px", borderRadius:"4px", border:"none", cursor:"pointer",
                                   background:"#0ea5e9", color:"white", fontSize:"11px", fontWeight:"600" }} title="Ver Diário de Preços">📈</button>
@@ -783,7 +790,6 @@ export default function Portfolio() {
             </div>
           ) : (
             <>
-              {/* Resumo do histórico */}
               <div style={{ display:"flex", gap:"12px", marginBottom:"16px", flexWrap:"wrap" }}>
                 {[
                   { label:"Total de Trades", valor: historico.length, cor:"#38bdf8" },
@@ -801,7 +807,6 @@ export default function Portfolio() {
                   </div>
                 ))}
               </div>
-
               <div style={{ overflowX:"auto", borderRadius:"12px", border:"1px solid #1e293b" }}>
                 <table style={{ width:"100%", borderCollapse:"collapse" }}>
                   <thead>
