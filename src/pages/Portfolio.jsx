@@ -252,10 +252,10 @@ export default function Portfolio() {
       if (res.data.sucesso) {
         const precos = res.data.precos
         const novas = posicoes.map(p => ({
-          ...p,
-          preco_atual: precos[p.ticker] || p.preco_atual
-        }))
-        setPosicoes(novas)
+  ...p,
+  preco_atual: precos[p.ticker] != null ? precos[p.ticker] : p.preco_atual
+}))
+setPosicoes([...novas])
         setUltimaAtualizacao(new Date().toLocaleTimeString("pt-BR"))
       }
     } catch {
