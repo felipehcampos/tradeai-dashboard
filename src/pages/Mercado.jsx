@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import api from "../services/api"
 
 const API = import.meta.env.VITE_API_URL
@@ -12,6 +12,9 @@ export default function Mercado() {
   const [filtroMercado, setFiltroMercado] = useState("TODOS")
   const [precosAtuais, setPrecosAtuais] = useState({})
   const [totalAnalisados, setTotalAnalisados] = useState(0)
+  const [bannerStatus, setBannerStatus] = useState(null) // null | "executando" | "concluido"
+  const [sinaisAntesDoScan, setSinaisAntesDoScan] = useState(0)
+  const pollingRef = useRef(null)
 
   const carregarSinais = () => {
     setLoading(true)
@@ -34,6 +37,61 @@ export default function Mercado() {
       })
   }
 
+  const iniciarPolling = () => {
+    if (pollingRef.current) return
+    pollingRef.current = setInterval(async () => {
+      try {
+        const res = await api.get(`${API}/scanner/status`)
+        if (res.data.mercado === "ocioso") {
+          pararPolling()
+          setRodando(false)
+          setBannerStatus("concluido")
+          carregarSinais()
+          setTimeout(() => setBannerStatus(null), 5000)
+        }
+      } catch {
+        // silencia erros de polling
+      }
+    }, 15000) // verifica a cada 15s
+  }
+
+  const pararPolling = () => {
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current)
+      pollingRef.current = null
+    }
+  }
+
+  useEffect(() => {
+    carregarSinais()
+    // Verifica se o scanner já está rodando ao carregar a página
+    api.get(`${API}/scanner/status`).then(res => {
+      if (res.data.mercado === "executando") {
+        setRodando(true)
+        setBannerStatus("executando")
+        iniciarPolling()
+      }
+    }).catch(() => {})
+    return () => pararPolling()
+  }, [])
+
+  const rodarScanner = async () => {
+    try {
+      const res = await api.post(`${API}/rodar-scanner`)
+      if (res.data.sucesso) {
+        setSinaisAntesDoScan(sinais.length)
+        setRodando(true)
+        setBannerStatus("executando")
+        setPrecosAtuais({})
+        iniciarPolling()
+      } else {
+        alert(res.data.erro || "Erro ao rodar o scanner.")
+      }
+    } catch {
+      alert("Erro ao rodar o scanner.")
+    }
+  }
+
   const atualizarPrecos = async () => {
     if (sinais.length === 0) return
     setAtualizandoPrecos(true)
@@ -51,45 +109,30 @@ export default function Mercado() {
     }
   }
 
-  useEffect(() => { carregarSinais() }, [])
-
-  const rodarScanner = async () => {
-    setRodando(true)
-    try {
-      await api.post(`${API}/rodar-scanner`)
-      await carregarSinais()
-      setPrecosAtuais({})
-    } catch {
-      alert("Erro ao rodar o scanner.")
-    } finally {
-      setRodando(false)
-    }
-  }
-
   const adicionarPortfolio = async (s) => {
-  const precoAtual = precosAtuais[s.ticker] || parseFloat(s.preco_atual)
-  try {
-    const res = await api.post(`${API}/portfolio`, {
-      ticker: s.ticker,
-      nome: s.nome,
-      mercado: s.mercado,
-      quantidade: 1,
-      preco_medio: precoAtual,
-      alvo_lucro: parseFloat(s.alvo_lucro) || null,
-      stop_loss: parseFloat(s.stop_loss) || null,
-      pct_alvo: parseFloat(s.pct_alvo) || null,
-      pct_stop: parseFloat(s.pct_stop) || null,
-      origem: "longo"
-    })
-    if (res.data.sucesso) {
-      alert(`${s.ticker} adicionado ao portfólio! Alvo: ${moeda(s)} ${parseFloat(s.alvo_lucro).toFixed(2)} | Stop: ${moeda(s)} ${parseFloat(s.stop_loss).toFixed(2)}`)
-    } else {
-      alert(res.data.erro || `Erro ao adicionar ${s.ticker} ao portfólio.`)
+    const precoAtual = precosAtuais[s.ticker] || parseFloat(s.preco_atual)
+    try {
+      const res = await api.post(`${API}/portfolio`, {
+        ticker: s.ticker,
+        nome: s.nome,
+        mercado: s.mercado,
+        quantidade: 1,
+        preco_medio: precoAtual,
+        alvo_lucro: parseFloat(s.alvo_lucro) || null,
+        stop_loss: parseFloat(s.stop_loss) || null,
+        pct_alvo: parseFloat(s.pct_alvo) || null,
+        pct_stop: parseFloat(s.pct_stop) || null,
+        origem: "longo"
+      })
+      if (res.data.sucesso) {
+        alert(`${s.ticker} adicionado ao portfólio! Alvo: ${moeda(s)} ${parseFloat(s.alvo_lucro).toFixed(2)} | Stop: ${moeda(s)} ${parseFloat(s.stop_loss).toFixed(2)}`)
+      } else {
+        alert(res.data.erro || `Erro ao adicionar ${s.ticker} ao portfólio.`)
+      }
+    } catch {
+      alert(`Erro ao adicionar ${s.ticker} ao portfólio.`)
     }
-  } catch {
-    alert(`Erro ao adicionar ${s.ticker} ao portfólio.`)
   }
-}
 
   const moeda = (s) => s.mercado === "B3" ? "R$" : "US$"
 
@@ -108,16 +151,13 @@ export default function Mercado() {
     })
   }
 
-  const getPrecoExibir = (s) => {
-    return precosAtuais[s.ticker] || parseFloat(s.preco_atual)
-  }
+  const getPrecoExibir = (s) => precosAtuais[s.ticker] || parseFloat(s.preco_atual)
 
   const calcularVariacao = (s) => {
     const precoNovo = precosAtuais[s.ticker]
     const precoAntigo = parseFloat(s.preco_atual)
     if (!precoNovo || precoNovo === precoAntigo) return null
-    const pct = ((precoNovo - precoAntigo) / precoAntigo * 100).toFixed(2)
-    return parseFloat(pct)
+    return parseFloat(((precoNovo - precoAntigo) / precoAntigo * 100).toFixed(2))
   }
 
   const mercados = ["TODOS", "B3", "NASDAQ", "NYSE", "CRYPTO", "COMMODITY"]
@@ -133,7 +173,53 @@ export default function Mercado() {
           from { transform: rotate(0deg); }
           to { transform: rotate(360deg); }
         }
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.6; }
+        }
       `}</style>
+
+      {/* Banner de status do scanner */}
+      {bannerStatus === "executando" && (
+        <div style={{
+          background: "rgba(245,158,11,0.12)", border: "1px solid rgba(245,158,11,0.4)",
+          borderRadius: "10px", padding: "14px 20px", marginBottom: "16px",
+          display: "flex", alignItems: "center", gap: "12px",
+          animation: "pulse 2s ease-in-out infinite"
+        }}>
+          <span style={{
+            width: "16px", height: "16px", border: "2px solid #f59e0b",
+            borderTopColor: "transparent", borderRadius: "50%",
+            display: "inline-block", animation: "spin 0.8s linear infinite", flexShrink: 0
+          }} />
+          <div>
+            <p style={{ margin: 0, color: "#f59e0b", fontWeight: "700", fontSize: "13px" }}>
+              ⏳ Scanner em execução...
+            </p>
+            <p style={{ margin: "2px 0 0 0", color: "#94a3b8", fontSize: "12px" }}>
+              Analisando 80+ ativos com IA. Isso pode levar 8-10 minutos. A página atualizará automaticamente quando concluir.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {bannerStatus === "concluido" && (
+        <div style={{
+          background: "rgba(34,197,94,0.12)", border: "1px solid rgba(34,197,94,0.4)",
+          borderRadius: "10px", padding: "14px 20px", marginBottom: "16px",
+          display: "flex", alignItems: "center", gap: "12px"
+        }}>
+          <span style={{ fontSize: "20px" }}>✅</span>
+          <div>
+            <p style={{ margin: 0, color: "#4ade80", fontWeight: "700", fontSize: "13px" }}>
+              Scanner concluído!
+            </p>
+            <p style={{ margin: "2px 0 0 0", color: "#94a3b8", fontSize: "12px" }}>
+              {totalComprar} sinal(is) de COMPRAR encontrado(s). Resultados atualizados abaixo.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Header */}
       <div style={{
@@ -171,12 +257,21 @@ export default function Mercado() {
             ) : "💹 Atualizar Preços"}
           </button>
           <button onClick={rodarScanner} disabled={rodando} style={{
-            padding: "9px 20px", borderRadius: "8px", border: "none", cursor: "pointer",
+            padding: "9px 20px", borderRadius: "8px", border: "none", cursor: rodando ? "not-allowed" : "pointer",
             background: rodando ? "#334155" : "linear-gradient(135deg,#38bdf8,#0ea5e9)",
             color: rodando ? "#94a3b8" : "#0f172a", fontWeight: "bold", fontSize: "13px",
             boxShadow: rodando ? "none" : "0 2px 8px rgba(56,189,248,0.3)"
           }}>
-            {rodando ? "⏳ Analisando..." : "🚀 Rodar Scanner"}
+            {rodando ? (
+              <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <span style={{
+                  width: "12px", height: "12px", border: "2px solid #94a3b8",
+                  borderTopColor: "transparent", borderRadius: "50%",
+                  display: "inline-block", animation: "spin 0.8s linear infinite"
+                }} />
+                Analisando...
+              </span>
+            ) : "🚀 Rodar Scanner"}
           </button>
         </div>
       </div>
@@ -197,26 +292,6 @@ export default function Mercado() {
           </div>
         ))}
       </div>
-
-      {/* Banner rodando */}
-      {rodando && (
-        <div style={{
-          background: "rgba(56,189,248,0.08)", padding: "12px 16px", borderRadius: "8px",
-          marginBottom: "16px", borderLeft: "3px solid #38bdf8", color: "#94a3b8", fontSize: "13px"
-        }}>
-          ⏳ O scanner está varrendo o mercado global com 100+ ativos... Aguarde alguns minutos.
-        </div>
-      )}
-
-      {/* Banner preços atualizados */}
-      {temPrecosAtuais && !atualizandoPrecos && (
-        <div style={{
-          background: "rgba(14,165,233,0.08)", padding: "10px 16px", borderRadius: "8px",
-          marginBottom: "16px", borderLeft: "3px solid #0ea5e9", color: "#94a3b8", fontSize: "13px"
-        }}>
-          💹 Preços atualizados em tempo real — valores podem diferir dos sinais originais
-        </div>
-      )}
 
       {/* Filtros */}
       <div style={{ display: "flex", gap: "8px", marginBottom: "16px", flexWrap: "wrap" }}>
@@ -245,10 +320,10 @@ export default function Mercado() {
           {totalAnalisados > 0 ? (
             <>
               <p style={{ fontSize: "16px", marginBottom: "8px", color: "#94a3b8" }}>
-                {totalAnalisados} ativo{totalAnalisados > 1 ? "s" : ""} analisado{totalAnalisados > 1 ? "s" : ""}, nenhuma oportunidade de compra hoje
+                {totalAnalisados} ativo(s) analisado(s), nenhuma oportunidade de compra hoje
               </p>
               <p style={{ fontSize: "13px" }}>
-                Todos os sinais vieram como EVITAR — o sistema preferiu não arriscar. Tente novamente mais tarde ou amanhã.
+                Todos os sinais vieram como EVITAR — o sistema preferiu não arriscar.
               </p>
             </>
           ) : (
@@ -307,11 +382,9 @@ export default function Mercado() {
                     <td style={{ padding: "14px 10px", fontWeight: "700", color: "#38bdf8", fontSize: "13px", whiteSpace: "nowrap" }}>
                       {s.ticker}
                     </td>
-
                     <td style={{ padding: "14px 10px", color: "#e2e8f0", fontSize: "12px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {s.nome}
                     </td>
-
                     <td style={{ padding: "14px 10px" }}>
                       <span style={{
                         display: "inline-block", padding: "3px 8px", borderRadius: "12px",
@@ -322,7 +395,6 @@ export default function Mercado() {
                         {s.mercado}
                       </span>
                     </td>
-
                     <td style={{ padding: "14px 10px" }}>
                       <span style={{
                         display: "inline-flex", alignItems: "center", gap: "4px",
@@ -335,7 +407,6 @@ export default function Mercado() {
                         {s.sinal === "COMPRAR" ? "▲" : "◆"} {s.sinal}
                       </span>
                     </td>
-
                     <td style={{ padding: "14px 10px" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                         <div style={{ background: "#1e293b", borderRadius: "4px", height: "5px", width: "40px", flexShrink: 0 }}>
@@ -347,7 +418,6 @@ export default function Mercado() {
                         <span style={{ color: "#e2e8f0", fontSize: "12px", fontWeight: "600" }}>{s.confianca}%</span>
                       </div>
                     </td>
-
                     <td style={{ padding: "14px 10px", whiteSpace: "nowrap" }}>
                       <span style={{ color: "#e2e8f0", fontSize: "12px", fontWeight: "600" }}>
                         {moeda(s)} {formatarPreco(precoExibir)}
@@ -361,31 +431,26 @@ export default function Mercado() {
                         </span>
                       )}
                     </td>
-
                     <td style={{ padding: "14px 10px", whiteSpace: "nowrap" }}>
                       <span style={{ color: "#4ade80", fontSize: "12px", fontWeight: "600" }}>
                         {moeda(s)} {formatarPreco(s.alvo_lucro)}
                       </span>
                       <span style={{ color: "#22c55e", fontSize: "10px", display: "block" }}>+{percentualAlvo}%</span>
                     </td>
-
                     <td style={{ padding: "14px 10px", whiteSpace: "nowrap" }}>
                       <span style={{ color: "#f87171", fontSize: "12px", fontWeight: "600" }}>
                         {moeda(s)} {formatarPreco(s.stop_loss)}
                       </span>
                       <span style={{ color: "#ef4444", fontSize: "10px", display: "block" }}>-{percentualStop}%</span>
                     </td>
-
                     <td style={{ padding: "14px 10px", textAlign: "center" }}>
                       <span style={{ fontSize: "18px" }}>
                         {s.score_sentimento > 0.3 ? "😊" : s.score_sentimento < -0.3 ? "😟" : "😐"}
                       </span>
                     </td>
-
                     <td style={{ padding: "14px 10px", color: "#64748b", fontSize: "11px", whiteSpace: "nowrap" }}>
                       {formatarData(s.criado_em)}
                     </td>
-
                     <td style={{ padding: "14px 10px" }}>
                       <button onClick={() => adicionarPortfolio(s)} style={{
                         padding: "6px 10px", borderRadius: "6px", border: "none", cursor: "pointer",
