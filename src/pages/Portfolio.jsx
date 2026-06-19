@@ -127,6 +127,21 @@ export default function Portfolio() {
     localStorage.setItem(HISTORICO_KEY, JSON.stringify(novoHist))
   }
 
+  // ── ITEM 5: Apagar trade individual do histórico ──
+  const apagarHistorico = (i) => {
+    if (!window.confirm("Apagar este trade do histórico?")) return
+    const novoHist = historico.filter((_, idx) => idx !== i)
+    setHistorico(novoHist)
+    localStorage.setItem(HISTORICO_KEY, JSON.stringify(novoHist))
+  }
+
+  // ── ITEM 5: Apagar todo o histórico ──
+  const apagarTodoHistorico = () => {
+    if (!window.confirm("Apagar TODO o histórico de trades? Esta ação não pode ser desfeita.")) return
+    setHistorico([])
+    localStorage.removeItem(HISTORICO_KEY)
+  }
+
   const adicionar = async () => {
     if (!form.ticker || !form.quantidade || !form.preco_entrada) return
     try {
@@ -207,7 +222,8 @@ export default function Portfolio() {
         pl_pct: plPct,
         data_entrada: p.data,
         data_saida: new Date().toLocaleDateString("pt-BR"),
-        dias: diasNaOperacao(p.data)
+        dias: diasNaOperacao(p.data),
+        origem: p.origem || "manual"  // ── ITEM 9: salva origem no histórico ──
       })
       await carregarPortfolio()
       setModalEncerrar(null)
@@ -790,7 +806,8 @@ export default function Portfolio() {
             </div>
           ) : (
             <>
-              <div style={{ display:"flex", gap:"12px", marginBottom:"16px", flexWrap:"wrap" }}>
+              {/* Cards resumo + botão apagar tudo */}
+              <div style={{ display:"flex", gap:"12px", marginBottom:"16px", flexWrap:"wrap", alignItems:"stretch" }}>
                 {[
                   { label:"Total de Trades", valor: historico.length, cor:"#38bdf8" },
                   { label:"Trades Lucrativos", valor: historico.filter(h => h.pl >= 0).length, cor:"#4ade80" },
@@ -806,12 +823,22 @@ export default function Portfolio() {
                     <p style={{ color:card.cor, fontSize:"16px", fontWeight:"800", margin:0 }}>{card.valor}</p>
                   </div>
                 ))}
+                {/* ITEM 5: Botão apagar tudo */}
+                <button onClick={apagarTodoHistorico} style={{
+                  padding:"12px 16px", borderRadius:"10px", border:"1px solid #dc2626",
+                  background:"rgba(220,38,38,0.08)", color:"#f87171", fontSize:"12px",
+                  fontWeight:"600", cursor:"pointer", whiteSpace:"nowrap", alignSelf:"stretch"
+                }}>
+                  🗑️ Apagar Tudo
+                </button>
               </div>
+
               <div style={{ overflowX:"auto", borderRadius:"12px", border:"1px solid #1e293b" }}>
                 <table style={{ width:"100%", borderCollapse:"collapse" }}>
                   <thead>
                     <tr style={{ background:"#0a1520" }}>
-                      {["Ticker","Nome","Qtd","Entrada","Saída","P&L","Retorno","Dias","Data Saída"].map(h => (
+                      {/* ITEM 9: adicionado "Tipo" e "Ação" */}
+                      {["Ticker","Nome","Tipo","Qtd","Entrada","Saída","P&L","Retorno","Dias","Data Saída","Ação"].map(h => (
                         <th key={h} style={{ padding:"14px 14px", textAlign:"left", color:"#64748b",
                           fontSize:"10px", fontWeight:"700", letterSpacing:"0.05em",
                           borderBottom:"1px solid #1e293b", whiteSpace:"nowrap" }}>
@@ -828,6 +855,16 @@ export default function Portfolio() {
                       }}>
                         <td style={{ padding:"14px 14px", fontWeight:"700", color:"#38bdf8", fontSize:"13px" }}>{h.ticker}</td>
                         <td style={{ padding:"14px 14px", color:"#e2e8f0", fontSize:"12px" }}>{h.nome}</td>
+                        {/* ITEM 9: Tag Swing/Longo */}
+                        <td style={{ padding:"14px 14px" }}>
+                          <span style={{
+                            fontSize:"10px", fontWeight:"700", padding:"3px 8px", borderRadius:"4px",
+                            background: h.origem === "swing" ? "rgba(245,158,11,0.15)" : "rgba(56,189,248,0.15)",
+                            color: h.origem === "swing" ? "#f59e0b" : "#38bdf8"
+                          }}>
+                            {h.origem === "swing" ? "⚡ Swing" : "📈 Longo"}
+                          </span>
+                        </td>
                         <td style={{ padding:"14px 14px", color:"#e2e8f0", fontSize:"12px" }}>{h.quantidade}</td>
                         <td style={{ padding:"14px 14px", color:"#94a3b8", fontSize:"12px" }}>
                           {moeda(h.mercado)} {fmt(h.preco_entrada)}
@@ -851,6 +888,13 @@ export default function Portfolio() {
                         </td>
                         <td style={{ padding:"14px 14px", color:"#94a3b8", fontSize:"12px" }}>{h.dias}d</td>
                         <td style={{ padding:"14px 14px", color:"#475569", fontSize:"11px" }}>{h.data_saida}</td>
+                        {/* ITEM 5: Botão apagar individual */}
+                        <td style={{ padding:"14px 14px" }}>
+                          <button onClick={() => apagarHistorico(i)} style={{
+                            padding:"4px 8px", borderRadius:"4px", border:"none", cursor:"pointer",
+                            background:"#dc2626", color:"white", fontSize:"11px", fontWeight:"600"
+                          }}>🗑️</button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
