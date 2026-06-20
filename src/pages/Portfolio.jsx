@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, ReferenceLine, Tooltip } from "recharts"
+import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, ReferenceLine, Tooltip, BarChart, Bar, Cell } from "recharts"
 import api from "../services/api"
 
 const HISTORICO_KEY = "tradeai_portfolio_historico"
@@ -44,9 +44,7 @@ const diasNaOperacao = (dataStr) => {
     const partes = dataStr.split("/")
     if (partes.length === 3) {
       data = new Date(`${partes[2]}-${partes[1]}-${partes[0]}`)
-    } else {
-      return 0
-    }
+    } else { return 0 }
   }
   if (isNaN(data.getTime())) return 0
   return Math.floor((new Date() - data) / (1000 * 60 * 60 * 24))
@@ -69,6 +67,10 @@ export default function Portfolio() {
   const [modalHistorico, setModalHistorico] = useState(null)
   const [dadosHistorico, setDadosHistorico] = useState([])
   const [carregandoHist, setCarregandoHist] = useState(false)
+  // ITEM 10: cotação do dólar
+  const [cotacaoDolar, setCotacaoDolar] = useState(null)
+  // ITEM 2: filtro Swing/Longo
+  const [filtroOrigem, setFiltroOrigem] = useState("todos")
 
   const carregarPortfolio = async () => {
     try {
@@ -97,8 +99,21 @@ export default function Portfolio() {
     }
   }
 
+  // ITEM 10: busca cotação do dólar via BRAPI
+  const buscarCotacaoDolar = async () => {
+    try {
+      const res = await fetch("https://brapi.dev/api/v2/currency?currency=USD-BRL")
+      const data = await res.json()
+      const cotacao = data?.currency?.[0]?.bidPrice
+      if (cotacao) setCotacaoDolar(parseFloat(cotacao))
+    } catch {
+      console.error("Erro ao buscar cotação do dólar")
+    }
+  }
+
   useEffect(() => {
     carregarPortfolio()
+    buscarCotacaoDolar()
     const hist = localStorage.getItem(HISTORICO_KEY)
     if (hist) setHistorico(JSON.parse(hist))
   }, [])
@@ -114,14 +129,10 @@ export default function Portfolio() {
       if (res.data.sucesso) {
         const dados = res.data.dados || []
         setDadosHistorico(dados)
-
-        // ── OPÇÃO B: atualiza preço na tabela com o último fechamento oficial ──
         if (dados.length > 0) {
           const ultimoFechamento = dados[dados.length - 1].fechamento
           setPosicoes(prev => prev.map(pos =>
-            pos.ticker === p.ticker
-              ? { ...pos, preco_atual: ultimoFechamento }
-              : pos
+            pos.ticker === p.ticker ? { ...pos, preco_atual: ultimoFechamento } : pos
           ))
           setUltimaAtualizacao(new Date().toLocaleTimeString("pt-BR"))
         }
@@ -195,16 +206,11 @@ export default function Portfolio() {
     try {
       await api.delete(`${API}/portfolio/${p.ticker}`)
       await api.post(`${API}/portfolio`, {
-        ticker: p.ticker,
-        nome: p.nome,
-        mercado: p.mercado,
+        ticker: p.ticker, nome: p.nome, mercado: p.mercado,
         quantidade: parseFloat(editForm.quantidade),
         preco_medio: parseFloat(editForm.preco_entrada),
-        alvo_lucro: p.alvo_lucro,
-        stop_loss: p.stop_loss,
-        pct_alvo: p.pct_alvo,
-        pct_stop: p.pct_stop,
-        origem: p.origem
+        alvo_lucro: p.alvo_lucro, stop_loss: p.stop_loss,
+        pct_alvo: p.pct_alvo, pct_stop: p.pct_stop, origem: p.origem
       })
       await carregarPortfolio()
       setEditando(null)
@@ -222,14 +228,9 @@ export default function Portfolio() {
     try {
       await api.delete(`${API}/portfolio/${p.ticker}`)
       salvarHistorico({
-        ticker: p.ticker,
-        nome: p.nome,
-        mercado: p.mercado,
-        quantidade: p.quantidade,
-        preco_entrada: p.preco_entrada,
-        preco_saida: saida,
-        pl: pl,
-        pl_pct: plPct,
+        ticker: p.ticker, nome: p.nome, mercado: p.mercado,
+        quantidade: p.quantidade, preco_entrada: p.preco_entrada,
+        preco_saida: saida, pl, pl_pct: plPct,
         data_entrada: p.data,
         data_saida: new Date().toLocaleDateString("pt-BR"),
         dias: diasNaOperacao(p.data),
@@ -246,16 +247,21 @@ export default function Portfolio() {
   const atualizarPrecos = async () => {
     if (posicoes.length === 0) return
     setAtualizando(true)
+    buscarCotacaoDolar()
     try {
       const tickers = posicoes.map(p => p.ticker)
       const res = await api.post(`${API}/precos`, { tickers })
       if (res.data.sucesso) {
         const precos = res.data.precos
-        const novas = posicoes.map(p => ({
-  ...p,
-  preco_atual: precos[p.ticker] != null ? precos[p.ticker] : p.preco_atual
-}))
-setPosicoes([...novas])
+        const precosNormalizados = {}
+        Object.keys(precos).forEach(key => {
+          if (precos[key] != null) precosNormalizados[key.toUpperCase().trim()] = precos[key]
+        })
+        const novas = posicoes.map(p => {
+          const precoValido = precosNormalizados[p.ticker.toUpperCase().trim()]
+          return { ...p, preco_atual: precoValido != null ? parseFloat(precoValido) : p.preco_atual }
+        })
+        setPosicoes([...novas])
         setUltimaAtualizacao(new Date().toLocaleTimeString("pt-BR"))
       }
     } catch {
@@ -267,29 +273,38 @@ setPosicoes([...novas])
 
   const moeda = (mercado) => mercado === "B3" ? "R$" : "US$"
 
-  const invB3 = posicoes.filter(p=>p.mercado==="B3").reduce((acc,p)=>acc+p.quantidade*p.preco_entrada, 0)
-  const atuB3 = posicoes.filter(p=>p.mercado==="B3").reduce((acc,p)=>acc+p.quantidade*p.preco_atual, 0)
+  // ITEM 2: filtra posições por origem
+  const posicoesFiltradas = filtroOrigem === "todos"
+    ? posicoes
+    : posicoes.filter(p => {
+        if (filtroOrigem === "swing") return p.origem === "swing"
+        if (filtroOrigem === "longo") return p.origem !== "swing"
+        return true
+      })
+
+  const invB3 = posicoesFiltradas.filter(p=>p.mercado==="B3").reduce((acc,p)=>acc+p.quantidade*p.preco_entrada, 0)
+  const atuB3 = posicoesFiltradas.filter(p=>p.mercado==="B3").reduce((acc,p)=>acc+p.quantidade*p.preco_atual, 0)
   const lucroB3 = atuB3 - invB3
   const lucroB3Pct = invB3 > 0 ? (lucroB3 / invB3 * 100).toFixed(1) : 0
 
-  const invIntl = posicoes.filter(p=>p.mercado!=="B3").reduce((acc,p)=>acc+p.quantidade*p.preco_entrada, 0)
-  const atuIntl = posicoes.filter(p=>p.mercado!=="B3").reduce((acc,p)=>acc+p.quantidade*p.preco_atual, 0)
+  const invIntl = posicoesFiltradas.filter(p=>p.mercado!=="B3").reduce((acc,p)=>acc+p.quantidade*p.preco_entrada, 0)
+  const atuIntl = posicoesFiltradas.filter(p=>p.mercado!=="B3").reduce((acc,p)=>acc+p.quantidade*p.preco_atual, 0)
   const lucroIntl = atuIntl - invIntl
   const lucroIntlPct = invIntl > 0 ? (lucroIntl / invIntl * 100).toFixed(1) : 0
 
   const lucroRealizadoBR = historico.filter(h=>h.mercado==="B3").reduce((acc,h)=>acc+h.pl, 0)
   const lucroRealizadoUS = historico.filter(h=>h.mercado!=="B3").reduce((acc,h)=>acc+h.pl, 0)
 
-  const totalFicticioGrafico = posicoes.reduce((acc,p)=>acc+p.quantidade*p.preco_entrada, 0)
+  const totalFicticioGrafico = posicoesFiltradas.reduce((acc,p)=>acc+p.quantidade*p.preco_entrada, 0)
 
-  const dadosPorAtivo = posicoes.map(p => ({
+  const dadosPorAtivo = posicoesFiltradas.map(p => ({
     name: p.ticker,
     value: parseFloat((p.quantidade * p.preco_entrada).toFixed(2)),
     percent: totalFicticioGrafico > 0 ? ((p.quantidade * p.preco_entrada / totalFicticioGrafico) * 100).toFixed(1) : 0
   }))
 
   const dadosPorSetor = Object.entries(
-    posicoes.reduce((acc, p) => {
+    posicoesFiltradas.reduce((acc, p) => {
       const setor = getSetor(p.ticker)
       const valor = p.quantidade * p.preco_entrada
       acc[setor] = (acc[setor] || 0) + valor
@@ -303,13 +318,25 @@ setPosicoes([...novas])
 
   const dadosGrafico = modoGrafico === "ativo" ? dadosPorAtivo : dadosPorSetor
 
+  // ITEM 4: agrupa histórico por mês
+  const historicoMensal = historico.reduce((acc, h) => {
+    const partes = h.data_saida ? h.data_saida.split("/") : null
+    if (!partes || partes.length < 3) return acc
+    const chave = `${partes[1]}/${partes[2]}`
+    const label = new Date(`${partes[2]}-${partes[1]}-01`).toLocaleDateString("pt-BR", { month: "short", year: "2-digit" })
+    if (!acc[chave]) acc[chave] = { mes: label, pl_br: 0, pl_us: 0, trades: 0, lucrativos: 0 }
+    if (h.mercado === "B3") acc[chave].pl_br += h.pl
+    else acc[chave].pl_us += h.pl
+    acc[chave].trades++
+    if (h.pl >= 0) acc[chave].lucrativos++
+    return acc
+  }, {})
+  const dadosMensais = Object.values(historicoMensal).sort((a, b) => a.mes.localeCompare(b.mes))
+
   return (
     <div style={{ width: "100%" }}>
       <style>{`
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
       `}</style>
 
       {/* Modal Histórico de Preços */}
@@ -333,11 +360,7 @@ setPosicoes([...novas])
             </p>
             {carregandoHist ? (
               <div style={{ textAlign: "center", padding: "40px", color: "#64748b" }}>
-                <span style={{
-                  width: "24px", height: "24px", border: "2px solid #38bdf8",
-                  borderTopColor: "transparent", borderRadius: "50%",
-                  display: "inline-block", animation: "spin 0.8s linear infinite", marginBottom: "12px"
-                }} />
+                <span style={{ width: "24px", height: "24px", border: "2px solid #38bdf8", borderTopColor: "transparent", borderRadius: "50%", display: "inline-block", animation: "spin 0.8s linear infinite", marginBottom: "12px" }} />
                 <p style={{ fontSize: "13px" }}>Buscando histórico diário...</p>
               </div>
             ) : dadosHistorico.length === 0 ? (
@@ -352,10 +375,8 @@ setPosicoes([...novas])
                       <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                       <XAxis dataKey="data" stroke="#475569" strokeWidth={0.5} style={{ fontSize: "10px" }} />
                       <YAxis stroke="#475569" strokeWidth={0.5} style={{ fontSize: "10px" }} domain={['auto', 'auto']} />
-                      <Tooltip
-                        contentStyle={{ background: "#0f172a", border: "1px solid #334155", borderRadius: "6px", fontSize: "12px" }}
-                        formatter={(value) => [`${moeda(modalHistorico.mercado)} ${fmt(value)}`, "Fechamento"]}
-                      />
+                      <Tooltip contentStyle={{ background: "#0f172a", border: "1px solid #334155", borderRadius: "6px", fontSize: "12px" }}
+                        formatter={(value) => [`${moeda(modalHistorico.mercado)} ${fmt(value)}`, "Fechamento"]} />
                       <ReferenceLine y={modalHistorico.preco_entrada} stroke="#f59e0b" strokeDasharray="3 3" label={{ value: 'Entrada', fill: '#f59e0b', fontSize: 10, position: 'insideTopLeft' }} />
                       <Line type="monotone" dataKey="fechamento" stroke="#38bdf8" strokeWidth={2} dot={{ r: 3, strokeWidth: 1 }} activeDot={{ r: 5 }} />
                     </LineChart>
@@ -377,9 +398,7 @@ setPosicoes([...novas])
                         return (
                           <tr key={idx} style={{ borderBottom: "1px solid #1e293b", background: idx % 2 === 0 ? "#0d1829" : "#0a1520" }}>
                             <td style={{ padding: "10px", color: "#94a3b8" }}>{dia.data}</td>
-                            <td style={{ padding: "10px", color: "#e2e8f0", textAlign: "right", fontWeight: "600" }}>
-                              {moeda(modalHistorico.mercado)} {fmt(dia.fechamento)}
-                            </td>
+                            <td style={{ padding: "10px", color: "#e2e8f0", textAlign: "right", fontWeight: "600" }}>{moeda(modalHistorico.mercado)} {fmt(dia.fechamento)}</td>
                             <td style={{ padding: "10px", textAlign: "right", fontWeight: "700", color: lucro ? "#4ade80" : "#f87171" }}>
                               {lucro ? "▲ +" : "▼ "}{varPct}%
                             </td>
@@ -391,65 +410,34 @@ setPosicoes([...novas])
                 </div>
               </>
             )}
-            <button onClick={() => setModalHistorico(null)} style={{
-              marginTop: "16px", padding: "10px", borderRadius: "8px", border: "1px solid #334155",
-              background: "#1e293b", color: "#94a3b8", cursor: "pointer", fontWeight: "600", fontSize: "13px"
-            }}>Fechar Diário</button>
+            <button onClick={() => setModalHistorico(null)} style={{ marginTop: "16px", padding: "10px", borderRadius: "8px", border: "1px solid #334155", background: "#1e293b", color: "#94a3b8", cursor: "pointer", fontWeight: "600", fontSize: "13px" }}>Fechar Diário</button>
           </div>
         </div>
       )}
 
       {/* Modal Encerrar Posição */}
       {modalEncerrar && (
-        <div onClick={() => setModalEncerrar(null)} style={{
-          position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)",
-          zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px"
-        }}>
-          <div onClick={e => e.stopPropagation()} style={{
-            background: "#0d1829", border: "1px solid #1e293b", borderRadius: "16px",
-            padding: "28px", maxWidth: "420px", width: "100%"
-          }}>
+        <div onClick={() => setModalEncerrar(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: "#0d1829", border: "1px solid #1e293b", borderRadius: "16px", padding: "28px", maxWidth: "420px", width: "100%" }}>
             <h3 style={{ color: "#f59e0b", margin: "0 0 8px 0" }}>🏁 Encerrar Posição</h3>
             <p style={{ color: "#64748b", fontSize: "13px", margin: "0 0 20px 0" }}>
               {modalEncerrar.ticker} — {modalEncerrar.quantidade} cotas @ {moeda(modalEncerrar.mercado)} {fmt(modalEncerrar.preco_entrada)}
             </p>
             <p style={{ color: "#94a3b8", fontSize: "13px", marginBottom: "8px" }}>Preço de saída:</p>
-            <input
-              type="number"
-              value={precoSaida}
-              onChange={e => setPrecoSaida(e.target.value)}
-              placeholder="Ex: 85.50"
-              style={{
-                width: "100%", padding: "12px", borderRadius: "8px",
-                border: "1px solid #334155", background: "#0f172a",
-                color: "#f1f5f9", fontSize: "14px", marginBottom: "16px", boxSizing: "border-box"
-              }}
-            />
+            <input type="number" value={precoSaida} onChange={e => setPrecoSaida(e.target.value)} placeholder="Ex: 85.50"
+              style={{ width: "100%", padding: "12px", borderRadius: "8px", border: "1px solid #334155", background: "#0f172a", color: "#f1f5f9", fontSize: "14px", marginBottom: "16px", boxSizing: "border-box" }} />
             {precoSaida && (
-              <div style={{
-                padding: "12px", borderRadius: "8px", marginBottom: "16px",
-                background: (parseFloat(precoSaida) - modalEncerrar.preco_entrada) >= 0
-                  ? "rgba(74,222,128,0.1)" : "rgba(248,113,113,0.1)"
-              }}>
+              <div style={{ padding: "12px", borderRadius: "8px", marginBottom: "16px", background: (parseFloat(precoSaida) - modalEncerrar.preco_entrada) >= 0 ? "rgba(74,222,128,0.1)" : "rgba(248,113,113,0.1)" }}>
                 <p style={{ margin: 0, fontSize: "13px", color: "#94a3b8" }}>Resultado estimado:</p>
-                <p style={{
-                  margin: "4px 0 0 0", fontSize: "18px", fontWeight: "800",
-                  color: (parseFloat(precoSaida) - modalEncerrar.preco_entrada) >= 0 ? "#4ade80" : "#f87171"
-                }}>
+                <p style={{ margin: "4px 0 0 0", fontSize: "18px", fontWeight: "800", color: (parseFloat(precoSaida) - modalEncerrar.preco_entrada) >= 0 ? "#4ade80" : "#f87171" }}>
                   {moeda(modalEncerrar.mercado)} {fmt((parseFloat(precoSaida) - modalEncerrar.preco_entrada) * modalEncerrar.quantidade)}
                   {" "}({((parseFloat(precoSaida) - modalEncerrar.preco_entrada) / modalEncerrar.preco_entrada * 100).toFixed(2)}%)
                 </p>
               </div>
             )}
             <div style={{ display: "flex", gap: "10px" }}>
-              <button onClick={encerrarPosicao} style={{
-                flex: 1, padding: "12px", borderRadius: "8px", border: "none", cursor: "pointer",
-                background: "linear-gradient(135deg,#16a34a,#15803d)", color: "white", fontWeight: "700", fontSize: "13px"
-              }}>✅ Confirmar Encerramento</button>
-              <button onClick={() => { setModalEncerrar(null); setPrecoSaida("") }} style={{
-                padding: "12px 16px", borderRadius: "8px", border: "1px solid #334155",
-                cursor: "pointer", background: "#1e293b", color: "#94a3b8", fontSize: "13px"
-              }}>Cancelar</button>
+              <button onClick={encerrarPosicao} style={{ flex: 1, padding: "12px", borderRadius: "8px", border: "none", cursor: "pointer", background: "linear-gradient(135deg,#16a34a,#15803d)", color: "white", fontWeight: "700", fontSize: "13px" }}>✅ Confirmar Encerramento</button>
+              <button onClick={() => { setModalEncerrar(null); setPrecoSaida("") }} style={{ padding: "12px 16px", borderRadius: "8px", border: "1px solid #334155", cursor: "pointer", background: "#1e293b", color: "#94a3b8", fontSize: "13px" }}>Cancelar</button>
             </div>
           </div>
         </div>
@@ -459,30 +447,31 @@ setPosicoes([...novas])
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"20px", flexWrap:"wrap", gap:"12px" }}>
         <div>
           <h2 style={{ color:"#38bdf8", margin:"0 0 4px 0", fontSize:"22px", fontWeight:"800" }}>💼 Portfólio</h2>
-          {ultimaAtualizacao && (
-            <span style={{ color:"#64748b", fontSize:"12px" }}>Preços atualizados às {ultimaAtualizacao}</span>
+          {ultimaAtualizacao && <span style={{ color:"#64748b", fontSize:"12px" }}>Preços atualizados às {ultimaAtualizacao}</span>}
+        </div>
+        <div style={{ display:"flex", gap:"8px", alignItems:"center", flexWrap:"wrap" }}>
+          {/* ITEM 10: cotação do dólar */}
+          {cotacaoDolar && (
+            <div style={{ padding:"6px 14px", borderRadius:"8px", background:"rgba(56,189,248,0.08)", border:"1px solid rgba(56,189,248,0.2)", fontSize:"12px", color:"#94a3b8" }}>
+              💵 USD/BRL: <strong style={{ color:"#38bdf8" }}>R$ {cotacaoDolar.toFixed(2)}</strong>
+            </div>
+          )}
+          {posicoes.length > 0 && (
+            <button onClick={atualizarPrecos} disabled={atualizando} style={{
+              padding:"9px 20px", borderRadius:"8px", border:"none", cursor:"pointer",
+              background: atualizando ? "#334155" : "linear-gradient(135deg,#38bdf8,#0ea5e9)",
+              color: atualizando ? "#94a3b8" : "#0f172a", fontWeight:"bold", fontSize:"13px", minWidth:"160px",
+              boxShadow: atualizando ? "none" : "0 2px 8px rgba(56,189,248,0.3)"
+            }}>
+              {atualizando ? (
+                <span style={{ display:"flex", alignItems:"center", gap:"8px", justifyContent:"center" }}>
+                  <span style={{ width:"12px", height:"12px", border:"2px solid #94a3b8", borderTopColor:"transparent", borderRadius:"50%", display:"inline-block", animation:"spin 0.8s linear infinite" }} />
+                  Atualizando...
+                </span>
+              ) : "🔄 Atualizar Preços"}
+            </button>
           )}
         </div>
-        {posicoes.length > 0 && (
-          <button onClick={atualizarPrecos} disabled={atualizando} style={{
-            padding:"9px 20px", borderRadius:"8px", border:"none", cursor:"pointer",
-            background: atualizando ? "#334155" : "linear-gradient(135deg,#38bdf8,#0ea5e9)",
-            color: atualizando ? "#94a3b8" : "#0f172a",
-            fontWeight:"bold", fontSize:"13px", minWidth: "160px",
-            boxShadow: atualizando ? "none" : "0 2px 8px rgba(56,189,248,0.3)"
-          }}>
-            {atualizando ? (
-              <span style={{ display: "flex", alignItems: "center", gap: "8px", justifyContent: "center" }}>
-                <span style={{
-                  width: "12px", height: "12px", border: "2px solid #94a3b8",
-                  borderTopColor: "transparent", borderRadius: "50%",
-                  display: "inline-block", animation: "spin 0.8s linear infinite"
-                }} />
-                Atualizando...
-              </span>
-            ) : "🔄 Atualizar Preços"}
-          </button>
-        )}
       </div>
 
       {/* Cards resumo segmentados */}
@@ -490,70 +479,88 @@ setPosicoes([...novas])
         {[
           { label:"Patrimônio B3 (Investido / Atual)", valor:`R$ ${fmt(invB3)} / R$ ${fmt(atuB3)}`, cor:"#22c55e", bg:"rgba(34,197,94,0.04)" },
           { label:"Lucro em Aberto B3", valor:`R$ ${fmt(lucroB3)} (${lucroB3Pct}%)`, cor: lucroB3 >= 0 ? "#4ade80" : "#f87171", bg:"rgba(34,197,94,0.08)" },
-          { label:"Patrimônio Intl (Investido / Atual)", valor:`US$ ${fmt(invIntl)} / US$ ${fmt(atuIntl)}`, cor:"#38bdf8", bg:"rgba(56,189,248,0.04)" },
-          { label:"Lucro em Aberto Intl", valor:`US$ ${fmt(lucroIntl)} (${lucroIntlPct}%)`, cor: lucroIntl >= 0 ? "#4ade80" : "#f87171", bg:"rgba(56,189,248,0.08)" },
+          {
+            label:"Patrimônio Intl (Investido / Atual)",
+            // ITEM 10: mostra conversão em R$ se tiver cotação
+            valor: cotacaoDolar
+              ? `US$ ${fmt(invIntl)} / US$ ${fmt(atuIntl)}\n≈ R$ ${fmt(atuIntl * cotacaoDolar)}`
+              : `US$ ${fmt(invIntl)} / US$ ${fmt(atuIntl)}`,
+            cor:"#38bdf8", bg:"rgba(56,189,248,0.04)"
+          },
+          {
+            label:"Lucro em Aberto Intl",
+            valor: cotacaoDolar
+              ? `US$ ${fmt(lucroIntl)} (${lucroIntlPct}%)\n≈ R$ ${fmt(lucroIntl * cotacaoDolar)}`
+              : `US$ ${fmt(lucroIntl)} (${lucroIntlPct}%)`,
+            cor: lucroIntl >= 0 ? "#4ade80" : "#f87171", bg:"rgba(56,189,248,0.08)"
+          },
           { label:"Lucro Realizado (BR / US)", valor:`R$ ${fmt(lucroRealizadoBR)} | US$ ${fmt(lucroRealizadoUS)}`, cor:"#a78bfa", bg:"rgba(167,139,250,0.08)" },
         ].map((card, i) => (
-          <div key={i} style={{
-            background:card.bg, border:`1px solid ${card.cor}20`,
-            padding:"16px 20px", borderRadius:"12px", minWidth:"180px", flex:1, textAlign:"center"
-          }}>
+          <div key={i} style={{ background:card.bg, border:`1px solid ${card.cor}20`, padding:"16px 20px", borderRadius:"12px", minWidth:"180px", flex:1, textAlign:"center" }}>
             <p style={{ color:"#64748b", fontSize:"11px", margin:"0 0 6px 0", fontWeight:"500" }}>{card.label}</p>
-            <p style={{ color:card.cor, fontSize:"16px", fontWeight:"800", margin:0 }}>{card.valor}</p>
+            {card.valor.split('\n').map((linha, j) => (
+              <p key={j} style={{ color: j === 0 ? card.cor : "#64748b", fontSize: j === 0 ? "16px" : "11px", fontWeight: j === 0 ? "800" : "500", margin: j === 0 ? 0 : "2px 0 0 0" }}>{linha}</p>
+            ))}
           </div>
         ))}
       </div>
 
-      {/* Gráfico de Barras Horizontais */}
+      {/* ITEM 2: Filtros Swing/Longo + Gráfico */}
       {posicoes.length > 0 && (
         <div style={{ background:"#0d1829", border:"1px solid #1e293b", padding:"20px", borderRadius:"12px", marginBottom:"24px" }}>
-          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"16px" }}>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"16px", flexWrap:"wrap", gap:"8px" }}>
             <h3 style={{ color:"#94a3b8", fontSize:"13px", fontWeight:"600", letterSpacing:"0.05em", margin:0 }}>
               📊 DISTRIBUIÇÃO NOMINAL DO PORTFÓLIO
             </h3>
-            <div style={{ display:"flex", gap:"6px" }}>
+            <div style={{ display:"flex", gap:"6px", flexWrap:"wrap" }}>
+              {/* Filtro Por Ativo/Setor */}
               {["ativo", "setor"].map(modo => (
                 <button key={modo} onClick={() => setModoGrafico(modo)} style={{
                   padding:"5px 14px", borderRadius:"20px", border:"none", cursor:"pointer",
                   fontSize:"12px", fontWeight: modoGrafico === modo ? "700" : "400",
                   background: modoGrafico === modo ? "#38bdf8" : "#1e293b",
-                  color: modoGrafico === modo ? "#0f172a" : "#64748b",
-                  transition:"all 0.2s"
+                  color: modoGrafico === modo ? "#0f172a" : "#64748b", transition:"all 0.2s"
                 }}>
                   {modo === "ativo" ? "Por Ativo" : "Por Setor"}
+                </button>
+              ))}
+              <div style={{ width:"1px", background:"#1e293b", margin:"0 4px" }} />
+              {/* ITEM 2: Filtro Swing/Longo */}
+              {[
+                { id:"todos", label:"Todos" },
+                { id:"swing", label:"⚡ Swing" },
+                { id:"longo", label:"📈 Longo" }
+              ].map(f => (
+                <button key={f.id} onClick={() => setFiltroOrigem(f.id)} style={{
+                  padding:"5px 14px", borderRadius:"20px", border:"none", cursor:"pointer",
+                  fontSize:"12px", fontWeight: filtroOrigem === f.id ? "700" : "400",
+                  background: filtroOrigem === f.id ? (f.id === "swing" ? "#f59e0b" : f.id === "longo" ? "#38bdf8" : "#64748b") : "#1e293b",
+                  color: filtroOrigem === f.id ? "#0f172a" : "#64748b", transition:"all 0.2s"
+                }}>
+                  {f.label}
                 </button>
               ))}
             </div>
           </div>
           <div style={{ display:"flex", flexDirection:"column", gap:"8px" }}>
-            {dadosGrafico
-              .slice()
-              .sort((a, b) => b.value - a.value)
-              .map((item, i) => {
-                const maxVal = Math.max(...dadosGrafico.map(d => d.value))
-                const pct = totalFicticioGrafico > 0
-                  ? ((item.value / totalFicticioGrafico) * 100).toFixed(1)
-                  : 0
-                const largura = maxVal > 0 ? (item.value / maxVal) * 100 : 0
-                return (
-                  <div key={i} style={{ display:"flex", alignItems:"center", gap:"10px" }}>
-                    <div style={{ width:"90px", textAlign:"right", flexShrink:0 }}>
-                      <span style={{ color:"#e2e8f0", fontSize:"12px", fontWeight:"700" }}>{item.name}</span>
-                    </div>
-                    <div style={{ flex:1, background:"#1e293b", borderRadius:"4px", height:"22px", position:"relative" }}>
-                      <div style={{
-                        width:`${largura}%`, height:"100%", borderRadius:"4px",
-                        background: CORES[i % CORES.length],
-                        transition:"width 0.4s ease",
-                        minWidth: largura > 0 ? "4px" : "0"
-                      }} />
-                    </div>
-                    <div style={{ width:"50px", flexShrink:0, textAlign:"right" }}>
-                      <span style={{ color:"#94a3b8", fontSize:"12px", fontWeight:"600" }}>{pct}%</span>
-                    </div>
+            {dadosGrafico.slice().sort((a, b) => b.value - a.value).map((item, i) => {
+              const maxVal = Math.max(...dadosGrafico.map(d => d.value))
+              const pct = totalFicticioGrafico > 0 ? ((item.value / totalFicticioGrafico) * 100).toFixed(1) : 0
+              const largura = maxVal > 0 ? (item.value / maxVal) * 100 : 0
+              return (
+                <div key={i} style={{ display:"flex", alignItems:"center", gap:"10px" }}>
+                  <div style={{ width:"90px", textAlign:"right", flexShrink:0 }}>
+                    <span style={{ color:"#e2e8f0", fontSize:"12px", fontWeight:"700" }}>{item.name}</span>
                   </div>
-                )
-              })}
+                  <div style={{ flex:1, background:"#1e293b", borderRadius:"4px", height:"22px", position:"relative" }}>
+                    <div style={{ width:`${largura}%`, height:"100%", borderRadius:"4px", background: CORES[i % CORES.length], transition:"width 0.4s ease", minWidth: largura > 0 ? "4px" : "0" }} />
+                  </div>
+                  <div style={{ width:"50px", flexShrink:0, textAlign:"right" }}>
+                    <span style={{ color:"#94a3b8", fontSize:"12px", fontWeight:"600" }}>{pct}%</span>
+                  </div>
+                </div>
+              )
+            })}
           </div>
         </div>
       )}
@@ -561,8 +568,9 @@ setPosicoes([...novas])
       {/* Sub-abas */}
       <div style={{ display:"flex", gap:"8px", marginBottom:"16px" }}>
         {[
-          { id: "abertas", label: "💼 Posições Abertas", count: posicoes.length },
-          { id: "historico", label: "📜 Histórico de Trades", count: historico.length }
+          { id: "abertas", label: "💼 Posições Abertas", count: posicoesFiltradas.length },
+          { id: "historico", label: "📜 Histórico de Trades", count: historico.length },
+          { id: "performance", label: "📈 Performance", count: dadosMensais.length }
         ].map(a => (
           <button key={a.id} onClick={() => setAbaAtiva(a.id)} style={{
             padding:"8px 20px", borderRadius:"8px", border:"none", cursor:"pointer",
@@ -583,15 +591,13 @@ setPosicoes([...novas])
             padding:"9px 20px", borderRadius:"8px", cursor:"pointer",
             background: mostrarForm ? "#334155" : "#1e293b",
             color: mostrarForm ? "#94a3b8" : "#38bdf8",
-            fontWeight:"bold", marginBottom:"16px", fontSize:"13px",
-            border:"1px solid #334155"
+            fontWeight:"bold", marginBottom:"16px", fontSize:"13px", border:"1px solid #334155"
           }}>
             {mostrarForm ? "✕ Cancelar" : "+ Adicionar Posição"}
           </button>
 
           {mostrarForm && (
-            <div style={{ background:"#0d1829", border:"1px solid #1e293b", padding:"16px",
-              borderRadius:"12px", marginBottom:"16px", display:"flex", gap:"12px", flexWrap:"wrap" }}>
+            <div style={{ background:"#0d1829", border:"1px solid #1e293b", padding:"16px", borderRadius:"12px", marginBottom:"16px", display:"flex", gap:"12px", flexWrap:"wrap" }}>
               {[
                 { key:"ticker", placeholder:"Ticker (ex: VALE3.SA)" },
                 { key:"nome", placeholder:"Nome (ex: Vale)" },
@@ -600,22 +606,17 @@ setPosicoes([...novas])
               ].map(f => (
                 <input key={f.key} type={f.type||"text"} placeholder={f.placeholder}
                   value={form[f.key]} onChange={e => setForm({...form, [f.key]: e.target.value})}
-                  style={{ padding:"10px", borderRadius:"6px", border:"1px solid #334155",
-                    background:"#0f172a", color:"#f1f5f9", fontSize:"13px", flex:1, minWidth:"150px" }} />
+                  style={{ padding:"10px", borderRadius:"6px", border:"1px solid #334155", background:"#0f172a", color:"#f1f5f9", fontSize:"13px", flex:1, minWidth:"150px" }} />
               ))}
               <select value={form.mercado} onChange={e => setForm({...form, mercado: e.target.value})}
-                style={{ padding:"10px", borderRadius:"6px", border:"1px solid #334155",
-                  background:"#0f172a", color:"#f1f5f9", fontSize:"13px" }}>
+                style={{ padding:"10px", borderRadius:"6px", border:"1px solid #334155", background:"#0f172a", color:"#f1f5f9", fontSize:"13px" }}>
                 <option value="B3">B3</option>
                 <option value="NASDAQ">NASDAQ</option>
                 <option value="NYSE">NYSE</option>
                 <option value="CRYPTO">CRYPTO</option>
                 <option value="COMMODITY">COMMODITY</option>
               </select>
-              <button onClick={adicionar} style={{
-                padding:"10px 20px", borderRadius:"6px", border:"none", cursor:"pointer",
-                background:"linear-gradient(135deg,#16a34a,#15803d)", color:"white", fontWeight:"bold", fontSize:"13px"
-              }}>Adicionar</button>
+              <button onClick={adicionar} style={{ padding:"10px 20px", borderRadius:"6px", border:"none", cursor:"pointer", background:"linear-gradient(135deg,#16a34a,#15803d)", color:"white", fontWeight:"bold", fontSize:"13px" }}>Adicionar</button>
             </div>
           )}
 
@@ -623,11 +624,10 @@ setPosicoes([...novas])
             <div style={{ textAlign:"center", padding:"60px", color:"#64748b" }}>
               <p style={{ fontSize:"15px" }}>Carregando portfólio...</p>
             </div>
-          ) : posicoes.length === 0 ? (
+          ) : posicoesFiltradas.length === 0 ? (
             <div style={{ textAlign:"center", padding:"60px", color:"#64748b" }}>
               <p style={{ fontSize:"40px", marginBottom:"12px" }}>📭</p>
-              <p style={{ fontSize:"15px", marginBottom:"8px" }}>Nenhuma posição aberta</p>
-              <p style={{ fontSize:"13px" }}>Adicione uma posição ou clique em "+ Portfólio" na aba Mercado</p>
+              <p style={{ fontSize:"15px", marginBottom:"8px" }}>Nenhuma posição {filtroOrigem !== "todos" ? `do tipo ${filtroOrigem}` : "aberta"}</p>
             </div>
           ) : (
             <div style={{ overflowX:"auto", borderRadius:"12px", border:"1px solid #1e293b" }}>
@@ -635,16 +635,15 @@ setPosicoes([...novas])
                 <thead>
                   <tr style={{ background:"#0a1520" }}>
                     {["Ticker","Nome","Mercado","Setor","Qtd","Entrada","Valor Invest.","Preço Atual","Valor Atual","P&L","Alvo/Stop","Dias","Ações"].map(h => (
-                      <th key={h} style={{ padding:"14px 14px", textAlign:"left", color:"#64748b",
-                        fontSize:"10px", fontWeight:"700", letterSpacing:"0.05em",
-                        borderBottom:"1px solid #1e293b", whiteSpace:"nowrap" }}>
+                      <th key={h} style={{ padding:"14px 14px", textAlign:"left", color:"#64748b", fontSize:"10px", fontWeight:"700", letterSpacing:"0.05em", borderBottom:"1px solid #1e293b", whiteSpace:"nowrap" }}>
                         {h.toUpperCase()}
                       </th>
                     ))}
                   </tr>
                 </thead>
                 <tbody style={{ opacity: atualizando ? 0.4 : 1, transition: "opacity 0.3s" }}>
-                  {posicoes.map((p, i) => {
+                  {posicoesFiltradas.map((p) => {
+                    const idxReal = posicoes.indexOf(p)
                     const pl = (p.preco_atual - p.preco_entrada) * p.quantidade
                     const plPct = ((p.preco_atual - p.preco_entrada) / p.preco_entrada * 100).toFixed(2)
                     const valorInvestido = p.quantidade * p.preco_entrada
@@ -655,142 +654,83 @@ setPosicoes([...novas])
                     const pctStop = p.pct_stop || ((p.preco_entrada - stop) / p.preco_entrada * 100)
                     const progressoAlvo = Math.min(Math.max(((p.preco_atual - stop) / (alvo - stop)) * 100, 0), 100)
                     const dias = diasNaOperacao(p.data)
-                    const estaEditando = editando === i
+                    const estaEditando = editando === idxReal
                     const emLucro = pl >= 0
                     const setor = getSetor(p.ticker)
                     return (
-                      <tr key={i} style={{
+                      <tr key={p.ticker} style={{
                         borderBottom:"1px solid #0f172a",
-                        background: estaEditando ? "#1e3a4a" : i % 2 === 0 ? "#0d1829" : "#0a1520",
+                        background: estaEditando ? "#1e3a4a" : idxReal % 2 === 0 ? "#0d1829" : "#0a1520",
                         transition:"background 0.15s"
                       }}
                       onMouseEnter={e => { if (!estaEditando) e.currentTarget.style.background = "#1e293b" }}
-                      onMouseLeave={e => { if (!estaEditando) e.currentTarget.style.background = i % 2 === 0 ? "#0d1829" : "#0a1520" }}>
+                      onMouseLeave={e => { if (!estaEditando) e.currentTarget.style.background = idxReal % 2 === 0 ? "#0d1829" : "#0a1520" }}>
                         <td style={{ padding:"14px 14px", fontWeight:"700", color:"#38bdf8", fontSize:"13px", whiteSpace:"nowrap" }}>
                           {p.ticker}
                           <div style={{ marginTop:"3px" }}>
-                            <span style={{
-                              fontSize:"9px", fontWeight:"700", padding:"2px 6px", borderRadius:"4px",
-                              background: p.origem === "swing" ? "rgba(245,158,11,0.15)" : "rgba(56,189,248,0.15)",
-                              color: p.origem === "swing" ? "#f59e0b" : "#38bdf8"
-                            }}>
+                            <span style={{ fontSize:"9px", fontWeight:"700", padding:"2px 6px", borderRadius:"4px", background: p.origem === "swing" ? "rgba(245,158,11,0.15)" : "rgba(56,189,248,0.15)", color: p.origem === "swing" ? "#f59e0b" : "#38bdf8" }}>
                               {p.origem === "swing" ? "⚡ Swing" : "📈 Longo"}
                             </span>
                           </div>
                         </td>
                         <td style={{ padding:"14px 14px", color:"#e2e8f0", fontSize:"12px", whiteSpace:"nowrap" }}>{p.nome}</td>
                         <td style={{ padding:"14px 14px" }}>
-                          <span style={{ padding:"2px 7px", borderRadius:"12px", fontSize:"10px", fontWeight:"600",
-                            background: p.mercado==="B3" ? "rgba(34,197,94,0.15)" : "rgba(56,189,248,0.15)",
-                            color: p.mercado==="B3" ? "#22c55e" : "#38bdf8" }}>
-                            {p.mercado}
-                          </span>
+                          <span style={{ padding:"2px 7px", borderRadius:"12px", fontSize:"10px", fontWeight:"600", background: p.mercado==="B3" ? "rgba(34,197,94,0.15)" : "rgba(56,189,248,0.15)", color: p.mercado==="B3" ? "#22c55e" : "#38bdf8" }}>{p.mercado}</span>
                         </td>
                         <td style={{ padding:"14px 14px" }}>
-                          <span style={{ padding:"2px 7px", borderRadius:"12px", fontSize:"10px", fontWeight:"600",
-                            background:"rgba(167,139,250,0.15)", color:"#a78bfa" }}>
-                            {setor}
-                          </span>
+                          <span style={{ padding:"2px 7px", borderRadius:"12px", fontSize:"10px", fontWeight:"600", background:"rgba(167,139,250,0.15)", color:"#a78bfa" }}>{setor}</span>
                         </td>
                         <td style={{ padding:"14px 14px", color:"#e2e8f0", fontSize:"12px" }}>
                           {estaEditando ? (
-                            <input type="number" value={editForm.quantidade}
-                              onChange={e => setEditForm({...editForm, quantidade: e.target.value})}
-                              style={{ width:"60px", padding:"4px", borderRadius:"4px", border:"1px solid #38bdf8",
-                                background:"#0f172a", color:"#f1f5f9", fontSize:"12px" }} />
+                            <input type="number" value={editForm.quantidade} onChange={e => setEditForm({...editForm, quantidade: e.target.value})}
+                              style={{ width:"60px", padding:"4px", borderRadius:"4px", border:"1px solid #38bdf8", background:"#0f172a", color:"#f1f5f9", fontSize:"12px" }} />
                           ) : p.quantidade}
                         </td>
                         <td style={{ padding:"14px 14px", color:"#e2e8f0", fontSize:"12px" }}>
                           {estaEditando ? (
-                            <input type="number" value={editForm.preco_entrada}
-                              onChange={e => setEditForm({...editForm, preco_entrada: e.target.value})}
-                              style={{ width:"80px", padding:"4px", borderRadius:"4px", border:"1px solid #38bdf8",
-                                background:"#0f172a", color:"#f1f5f9", fontSize:"12px" }} />
+                            <input type="number" value={editForm.preco_entrada} onChange={e => setEditForm({...editForm, preco_entrada: e.target.value})}
+                              style={{ width:"80px", padding:"4px", borderRadius:"4px", border:"1px solid #38bdf8", background:"#0f172a", color:"#f1f5f9", fontSize:"12px" }} />
                           ) : `${moeda(p.mercado)} ${fmt(p.preco_entrada)}`}
                         </td>
-                        <td style={{ padding:"14px 14px", color:"#94a3b8", fontSize:"12px" }}>
-                          {moeda(p.mercado)} {fmt(valorInvestido)}
-                        </td>
+                        <td style={{ padding:"14px 14px", color:"#94a3b8", fontSize:"12px" }}>{moeda(p.mercado)} {fmt(valorInvestido)}</td>
                         <td style={{ padding:"14px 14px", fontWeight:"600", fontSize:"12px" }}>
-                          <span style={{ color: "#e2e8f0" }}>
-                            {moeda(p.mercado)} {fmt(p.preco_atual)}
-                          </span>
+                          <span style={{ color:"#e2e8f0" }}>{moeda(p.mercado)} {fmt(p.preco_atual)}</span>
                         </td>
-                        <td style={{ padding:"14px 14px", color: emLucro ? "#4ade80" : "#f87171", fontSize:"12px", fontWeight:"600" }}>
-                          {moeda(p.mercado)} {fmt(valorAtual)}
-                        </td>
+                        <td style={{ padding:"14px 14px", color: emLucro ? "#4ade80" : "#f87171", fontSize:"12px", fontWeight:"600" }}>{moeda(p.mercado)} {fmt(valorAtual)}</td>
                         <td style={{ padding:"14px 14px", whiteSpace:"nowrap" }}>
                           <div style={{ display:"flex", flexDirection:"column", gap:"4px" }}>
-                            <span style={{ color: emLucro ? "#4ade80" : "#f87171", fontWeight:"700", fontSize:"13px" }}>
-                              {emLucro ? "▲" : "▼"} {moeda(p.mercado)} {fmt(Math.abs(pl))}
-                            </span>
-                            <span style={{
-                              fontSize:"10px", fontWeight:"700",
-                              color: emLucro ? "#4ade80" : "#f87171",
-                              background: emLucro ? "rgba(74,222,128,0.1)" : "rgba(248,113,113,0.1)",
-                              padding:"2px 6px", borderRadius:"4px",
-                              width:"fit-content", display:"inline-block"
-                            }}>
+                            <span style={{ color: emLucro ? "#4ade80" : "#f87171", fontWeight:"700", fontSize:"13px" }}>{emLucro ? "▲" : "▼"} {moeda(p.mercado)} {fmt(Math.abs(pl))}</span>
+                            <span style={{ fontSize:"10px", fontWeight:"700", color: emLucro ? "#4ade80" : "#f87171", background: emLucro ? "rgba(74,222,128,0.1)" : "rgba(248,113,113,0.1)", padding:"2px 6px", borderRadius:"4px", width:"fit-content", display:"inline-block" }}>
                               {emLucro ? "+" : ""}{plPct}%
                             </span>
                           </div>
                         </td>
                         <td style={{ padding:"14px 14px", minWidth:"110px" }}>
                           <div style={{ fontSize:"9px", color:"#64748b", marginBottom:"3px", display:"flex", justifyContent:"space-between" }}>
-                            <span style={{ color:"#f87171" }}>
-                              Stop {fmt(stop)} ({pctStop >= 0 ? "-" : "+"}{Math.abs(pctStop).toFixed(1)}%)
-                            </span>
-                            <span style={{ color:"#4ade80" }}>
-                              Alvo {fmt(alvo)} (+{pctAlvo.toFixed(1)}%)
-                            </span>
+                            <span style={{ color:"#f87171" }}>Stop {fmt(stop)} ({pctStop >= 0 ? "-" : "+"}{Math.abs(pctStop).toFixed(1)}%)</span>
+                            <span style={{ color:"#4ade80" }}>Alvo {fmt(alvo)} (+{pctAlvo.toFixed(1)}%)</span>
                           </div>
                           <div style={{ background:"#1e293b", borderRadius:"4px", height:"6px", width:"100%", position:"relative" }}>
-                            <div style={{
-                              background: progressoAlvo > 50 ? "#4ade80" : progressoAlvo > 20 ? "#f59e0b" : "#f87171",
-                              borderRadius:"4px", height:"6px", width:`${progressoAlvo}%`,
-                              transition:"width 0.3s"
-                            }}/>
+                            <div style={{ background: progressoAlvo > 50 ? "#4ade80" : progressoAlvo > 20 ? "#f59e0b" : "#f87171", borderRadius:"4px", height:"6px", width:`${progressoAlvo}%`, transition:"width 0.3s" }}/>
                           </div>
-                          <div style={{ fontSize:"9px", color:"#64748b", marginTop:"2px", textAlign:"center" }}>
-                            {progressoAlvo.toFixed(0)}% do caminho
-                          </div>
+                          <div style={{ fontSize:"9px", color:"#64748b", marginTop:"2px", textAlign:"center" }}>{progressoAlvo.toFixed(0)}% do caminho</div>
                         </td>
                         <td style={{ padding:"14px 14px" }}>
-                          <span style={{
-                            color: dias > 3 ? "#f87171" : dias > 1 ? "#f59e0b" : "#4ade80",
-                            fontSize:"12px", fontWeight:"700"
-                          }}>
-                            {dias}d
-                          </span>
+                          <span style={{ color: dias > 3 ? "#f87171" : dias > 1 ? "#f59e0b" : "#4ade80", fontSize:"12px", fontWeight:"700" }}>{dias}d</span>
                         </td>
                         <td style={{ padding:"14px 14px" }}>
                           <div style={{ display:"flex", gap:"4px", flexWrap:"wrap" }}>
                             {estaEditando ? (
                               <>
-                                <button onClick={() => salvarEdicao(i)} style={{
-                                  padding:"4px 8px", borderRadius:"4px", border:"none", cursor:"pointer",
-                                  background:"#16a34a", color:"white", fontSize:"11px", fontWeight:"600" }}>✓</button>
-                                <button onClick={() => setEditando(null)} style={{
-                                  padding:"4px 8px", borderRadius:"4px", border:"none", cursor:"pointer",
-                                  background:"#334155", color:"white", fontSize:"11px" }}>✕</button>
+                                <button onClick={() => salvarEdicao(idxReal)} style={{ padding:"4px 8px", borderRadius:"4px", border:"none", cursor:"pointer", background:"#16a34a", color:"white", fontSize:"11px", fontWeight:"600" }}>✓</button>
+                                <button onClick={() => setEditando(null)} style={{ padding:"4px 8px", borderRadius:"4px", border:"none", cursor:"pointer", background:"#334155", color:"white", fontSize:"11px" }}>✕</button>
                               </>
                             ) : (
                               <>
-                                <button onClick={() => abrirHistoricoAtivo(p)} style={{
-                                  padding:"4px 8px", borderRadius:"4px", border:"none", cursor:"pointer",
-                                  background:"#0ea5e9", color:"white", fontSize:"11px", fontWeight:"600" }} title="Ver Diário de Preços">📈</button>
-                                <button onClick={() => setModalEncerrar({idx: i, ...p})} style={{
-                                  padding:"4px 8px", borderRadius:"4px", border:"none", cursor:"pointer",
-                                  background:"#16a34a", color:"white", fontSize:"11px", fontWeight:"600",
-                                  whiteSpace:"nowrap" }}>🏁</button>
-                                <button onClick={() => iniciarEdicao(i)} style={{
-                                  padding:"4px 8px", borderRadius:"4px", border:"none", cursor:"pointer",
-                                  background:"#d97706", color:"white", fontSize:"11px" }}>✏️</button>
-                                <button onClick={() => {
-                                  if (window.confirm(`Remover ${p.ticker} sem registrar no histórico?`)) remover(i)
-                                }} style={{
-                                  padding:"4px 8px", borderRadius:"4px", border:"none", cursor:"pointer",
-                                  background:"#dc2626", color:"white", fontSize:"11px" }}>🗑️</button>
+                                <button onClick={() => abrirHistoricoAtivo(p)} style={{ padding:"4px 8px", borderRadius:"4px", border:"none", cursor:"pointer", background:"#0ea5e9", color:"white", fontSize:"11px", fontWeight:"600" }} title="Ver Diário de Preços">📈</button>
+                                <button onClick={() => setModalEncerrar({idx: idxReal, ...p})} style={{ padding:"4px 8px", borderRadius:"4px", border:"none", cursor:"pointer", background:"#16a34a", color:"white", fontSize:"11px", fontWeight:"600", whiteSpace:"nowrap" }}>🏁</button>
+                                <button onClick={() => iniciarEdicao(idxReal)} style={{ padding:"4px 8px", borderRadius:"4px", border:"none", cursor:"pointer", background:"#d97706", color:"white", fontSize:"11px" }}>✏️</button>
+                                <button onClick={() => { if (window.confirm(`Remover ${p.ticker} sem registrar no histórico?`)) remover(idxReal) }} style={{ padding:"4px 8px", borderRadius:"4px", border:"none", cursor:"pointer", background:"#dc2626", color:"white", fontSize:"11px" }}>🗑️</button>
                               </>
                             )}
                           </div>
@@ -821,34 +761,23 @@ setPosicoes([...novas])
                   { label:"Total de Trades", valor: historico.length, cor:"#38bdf8" },
                   { label:"Trades Lucrativos", valor: historico.filter(h => h.pl >= 0).length, cor:"#4ade80" },
                   { label:"Trades com Prejuízo", valor: historico.filter(h => h.pl < 0).length, cor:"#f87171" },
-                  { label:"P&L Total Realizado (BR / US)", valor:`R$ ${fmt(lucroRealizadoBR)} | US$ ${fmt(lucroRealizadoUS)}`,
-                    cor: (lucroRealizadoBR + lucroRealizadoUS) >= 0 ? "#4ade80" : "#f87171" },
+                  { label:"P&L Total Realizado (BR / US)", valor:`R$ ${fmt(lucroRealizadoBR)} | US$ ${fmt(lucroRealizadoUS)}`, cor: (lucroRealizadoBR + lucroRealizadoUS) >= 0 ? "#4ade80" : "#f87171" },
                 ].map((card, i) => (
-                  <div key={i} style={{
-                    background:"rgba(255,255,255,0.03)", border:"1px solid #1e293b",
-                    padding:"12px 16px", borderRadius:"10px", flex:1, minWidth:"120px", textAlign:"center"
-                  }}>
+                  <div key={i} style={{ background:"rgba(255,255,255,0.03)", border:"1px solid #1e293b", padding:"12px 16px", borderRadius:"10px", flex:1, minWidth:"120px", textAlign:"center" }}>
                     <p style={{ color:"#64748b", fontSize:"11px", margin:"0 0 4px 0" }}>{card.label}</p>
                     <p style={{ color:card.cor, fontSize:"16px", fontWeight:"800", margin:0 }}>{card.valor}</p>
                   </div>
                 ))}
-                <button onClick={apagarTodoHistorico} style={{
-                  padding:"12px 16px", borderRadius:"10px", border:"1px solid #dc2626",
-                  background:"rgba(220,38,38,0.08)", color:"#f87171", fontSize:"12px",
-                  fontWeight:"600", cursor:"pointer", whiteSpace:"nowrap", alignSelf:"stretch"
-                }}>
+                <button onClick={apagarTodoHistorico} style={{ padding:"12px 16px", borderRadius:"10px", border:"1px solid #dc2626", background:"rgba(220,38,38,0.08)", color:"#f87171", fontSize:"12px", fontWeight:"600", cursor:"pointer", whiteSpace:"nowrap", alignSelf:"stretch" }}>
                   🗑️ Apagar Tudo
                 </button>
               </div>
-
               <div style={{ overflowX:"auto", borderRadius:"12px", border:"1px solid #1e293b" }}>
                 <table style={{ width:"100%", borderCollapse:"collapse" }}>
                   <thead>
                     <tr style={{ background:"#0a1520" }}>
                       {["Ticker","Nome","Tipo","Qtd","Entrada","Saída","P&L","Retorno","Dias","Data Saída","Ação"].map(h => (
-                        <th key={h} style={{ padding:"14px 14px", textAlign:"left", color:"#64748b",
-                          fontSize:"10px", fontWeight:"700", letterSpacing:"0.05em",
-                          borderBottom:"1px solid #1e293b", whiteSpace:"nowrap" }}>
+                        <th key={h} style={{ padding:"14px 14px", textAlign:"left", color:"#64748b", fontSize:"10px", fontWeight:"700", letterSpacing:"0.05em", borderBottom:"1px solid #1e293b", whiteSpace:"nowrap" }}>
                           {h.toUpperCase()}
                         </th>
                       ))}
@@ -856,52 +785,132 @@ setPosicoes([...novas])
                   </thead>
                   <tbody>
                     {historico.map((h, i) => (
-                      <tr key={i} style={{
-                        borderBottom:"1px solid #0f172a",
-                        background: i % 2 === 0 ? "#0d1829" : "#0a1520"
-                      }}>
+                      <tr key={i} style={{ borderBottom:"1px solid #0f172a", background: i % 2 === 0 ? "#0d1829" : "#0a1520" }}>
                         <td style={{ padding:"14px 14px", fontWeight:"700", color:"#38bdf8", fontSize:"13px" }}>{h.ticker}</td>
                         <td style={{ padding:"14px 14px", color:"#e2e8f0", fontSize:"12px" }}>{h.nome}</td>
                         <td style={{ padding:"14px 14px" }}>
-                          <span style={{
-                            fontSize:"10px", fontWeight:"700", padding:"3px 8px", borderRadius:"4px",
-                            background: h.origem === "swing" ? "rgba(245,158,11,0.15)" : "rgba(56,189,248,0.15)",
-                            color: h.origem === "swing" ? "#f59e0b" : "#38bdf8"
-                          }}>
+                          <span style={{ fontSize:"10px", fontWeight:"700", padding:"3px 8px", borderRadius:"4px", background: h.origem === "swing" ? "rgba(245,158,11,0.15)" : "rgba(56,189,248,0.15)", color: h.origem === "swing" ? "#f59e0b" : "#38bdf8" }}>
                             {h.origem === "swing" ? "⚡ Swing" : "📈 Longo"}
                           </span>
                         </td>
                         <td style={{ padding:"14px 14px", color:"#e2e8f0", fontSize:"12px" }}>{h.quantidade}</td>
-                        <td style={{ padding:"14px 14px", color:"#94a3b8", fontSize:"12px" }}>
-                          {moeda(h.mercado)} {fmt(h.preco_entrada)}
-                        </td>
-                        <td style={{ padding:"14px 14px", color:"#e2e8f0", fontSize:"12px", fontWeight:"600" }}>
-                          {moeda(h.mercado)} {fmt(h.preco_saida)}
-                        </td>
+                        <td style={{ padding:"14px 14px", color:"#94a3b8", fontSize:"12px" }}>{moeda(h.mercado)} {fmt(h.preco_entrada)}</td>
+                        <td style={{ padding:"14px 14px", color:"#e2e8f0", fontSize:"12px", fontWeight:"600" }}>{moeda(h.mercado)} {fmt(h.preco_saida)}</td>
                         <td style={{ padding:"14px 14px" }}>
                           <span style={{ color: h.pl >= 0 ? "#4ade80" : "#f87171", fontWeight:"700", fontSize:"13px" }}>
                             {h.pl >= 0 ? "▲" : "▼"} {moeda(h.mercado)} {fmt(Math.abs(h.pl))}
                           </span>
                         </td>
                         <td style={{ padding:"14px 14px" }}>
-                          <span style={{
-                            padding:"3px 8px", borderRadius:"12px", fontSize:"11px", fontWeight:"700",
-                            background: h.pl >= 0 ? "rgba(74,222,128,0.1)" : "rgba(248,113,113,0.1)",
-                            color: h.pl >= 0 ? "#4ade80" : "#f87171"
-                          }}>
+                          <span style={{ padding:"3px 8px", borderRadius:"12px", fontSize:"11px", fontWeight:"700", background: h.pl >= 0 ? "rgba(74,222,128,0.1)" : "rgba(248,113,113,0.1)", color: h.pl >= 0 ? "#4ade80" : "#f87171" }}>
                             {h.pl >= 0 ? "+" : ""}{h.pl_pct}%
                           </span>
                         </td>
                         <td style={{ padding:"14px 14px", color:"#94a3b8", fontSize:"12px" }}>{h.dias}d</td>
                         <td style={{ padding:"14px 14px", color:"#475569", fontSize:"11px" }}>{h.data_saida}</td>
                         <td style={{ padding:"14px 14px" }}>
-                          <button onClick={() => apagarHistorico(i)} style={{
-                            padding:"4px 8px", borderRadius:"4px", border:"none", cursor:"pointer",
-                            background:"#dc2626", color:"white", fontSize:"11px", fontWeight:"600"
-                          }}>🗑️</button>
+                          <button onClick={() => apagarHistorico(i)} style={{ padding:"4px 8px", borderRadius:"4px", border:"none", cursor:"pointer", background:"#dc2626", color:"white", fontSize:"11px", fontWeight:"600" }}>🗑️</button>
                         </td>
                       </tr>
                     ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </>
+      )}
+
+      {/* ABA: Performance Mensal (ITEM 4) */}
+      {abaAtiva === "performance" && (
+        <>
+          {dadosMensais.length === 0 ? (
+            <div style={{ textAlign:"center", padding:"60px", color:"#64748b" }}>
+              <p style={{ fontSize:"40px", marginBottom:"12px" }}>📊</p>
+              <p style={{ fontSize:"15px", marginBottom:"8px" }}>Nenhum dado de performance ainda</p>
+              <p style={{ fontSize:"13px" }}>Encerre posições para ver o histórico mensal aqui</p>
+            </div>
+          ) : (
+            <>
+              {/* Gráfico de barras mensal BR */}
+              {dadosMensais.some(d => d.pl_br !== 0) && (
+                <div style={{ background:"#0d1829", border:"1px solid #1e293b", padding:"20px", borderRadius:"12px", marginBottom:"16px" }}>
+                  <h3 style={{ color:"#94a3b8", fontSize:"13px", fontWeight:"600", margin:"0 0 16px 0" }}>📊 P&L MENSAL — MERCADO BRASILEIRO (R$)</h3>
+                  <ResponsiveContainer width="100%" height={200}>
+                    <BarChart data={dadosMensais} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                      <XAxis dataKey="mes" stroke="#475569" style={{ fontSize: "11px" }} />
+                      <YAxis stroke="#475569" style={{ fontSize: "11px" }} />
+                      <Tooltip contentStyle={{ background:"#0f172a", border:"1px solid #334155", borderRadius:"6px", fontSize:"12px" }}
+                        formatter={(value) => [`R$ ${fmt(value)}`, "P&L"]} />
+                      <Bar dataKey="pl_br" radius={[4,4,0,0]}>
+                        {dadosMensais.map((d, i) => (
+                          <Cell key={i} fill={d.pl_br >= 0 ? "#4ade80" : "#f87171"} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+
+              {/* Gráfico de barras mensal US */}
+              {dadosMensais.some(d => d.pl_us !== 0) && (
+                <div style={{ background:"#0d1829", border:"1px solid #1e293b", padding:"20px", borderRadius:"12px", marginBottom:"16px" }}>
+                  <h3 style={{ color:"#94a3b8", fontSize:"13px", fontWeight:"600", margin:"0 0 16px 0" }}>📊 P&L MENSAL — MERCADO INTERNACIONAL (US$)</h3>
+                  <ResponsiveContainer width="100%" height={200}>
+                    <BarChart data={dadosMensais} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                      <XAxis dataKey="mes" stroke="#475569" style={{ fontSize: "11px" }} />
+                      <YAxis stroke="#475569" style={{ fontSize: "11px" }} />
+                      <Tooltip contentStyle={{ background:"#0f172a", border:"1px solid #334155", borderRadius:"6px", fontSize:"12px" }}
+                        formatter={(value) => [`US$ ${fmt(value)}`, "P&L"]} />
+                      <Bar dataKey="pl_us" radius={[4,4,0,0]}>
+                        {dadosMensais.map((d, i) => (
+                          <Cell key={i} fill={d.pl_us >= 0 ? "#38bdf8" : "#f87171"} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+
+              {/* Tabela resumo mensal */}
+              <div style={{ overflowX:"auto", borderRadius:"12px", border:"1px solid #1e293b" }}>
+                <table style={{ width:"100%", borderCollapse:"collapse" }}>
+                  <thead>
+                    <tr style={{ background:"#0a1520" }}>
+                      {["Mês","Trades","Taxa de Acerto","P&L BR (R$)","P&L Intl (US$)"].map(h => (
+                        <th key={h} style={{ padding:"14px 16px", textAlign:"left", color:"#64748b", fontSize:"10px", fontWeight:"700", letterSpacing:"0.05em", borderBottom:"1px solid #1e293b", whiteSpace:"nowrap" }}>
+                          {h.toUpperCase()}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dadosMensais.map((d, i) => {
+                      const taxa = d.trades > 0 ? ((d.lucrativos / d.trades) * 100).toFixed(0) : 0
+                      return (
+                        <tr key={i} style={{ borderBottom:"1px solid #0f172a", background: i % 2 === 0 ? "#0d1829" : "#0a1520" }}>
+                          <td style={{ padding:"14px 16px", color:"#e2e8f0", fontSize:"13px", fontWeight:"700" }}>{d.mes}</td>
+                          <td style={{ padding:"14px 16px", color:"#94a3b8", fontSize:"12px" }}>{d.trades}</td>
+                          <td style={{ padding:"14px 16px" }}>
+                            <span style={{ padding:"3px 8px", borderRadius:"12px", fontSize:"11px", fontWeight:"700", background: parseFloat(taxa) >= 50 ? "rgba(74,222,128,0.1)" : "rgba(248,113,113,0.1)", color: parseFloat(taxa) >= 50 ? "#4ade80" : "#f87171" }}>
+                              {taxa}%
+                            </span>
+                          </td>
+                          <td style={{ padding:"14px 16px" }}>
+                            <span style={{ color: d.pl_br >= 0 ? "#4ade80" : "#f87171", fontWeight:"700", fontSize:"13px" }}>
+                              {d.pl_br >= 0 ? "▲ " : "▼ "}R$ {fmt(Math.abs(d.pl_br))}
+                            </span>
+                          </td>
+                          <td style={{ padding:"14px 16px" }}>
+                            <span style={{ color: d.pl_us >= 0 ? "#38bdf8" : "#f87171", fontWeight:"700", fontSize:"13px" }}>
+                              {d.pl_us >= 0 ? "▲ " : "▼ "}US$ {fmt(Math.abs(d.pl_us))}
+                            </span>
+                          </td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>
