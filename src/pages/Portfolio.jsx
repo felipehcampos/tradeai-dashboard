@@ -486,6 +486,7 @@ export default function Portfolio() {
           {
             label: "📈 Lucro em Aberto",
             valor: `R$ ${fmt(lucroAbertoBRL)}`,
+            pct: patrimonioTotalBRL > 0 ? ` (${(lucroAbertoBRL / (patrimonioTotalBRL - lucroAbertoBRL) * 100).toFixed(1)}%)` : "",
             sub: `B3: R$ ${fmt(lucroAbertoB3)} | Intl: US$ ${fmt(lucroAbertoIntl)}`,
             cor: lucroAbertoBRL >= 0 ? "#4ade80" : "#f87171",
             bg: lucroAbertoBRL >= 0 ? "rgba(74,222,128,0.06)" : "rgba(248,113,113,0.06)",
@@ -494,6 +495,7 @@ export default function Portfolio() {
           {
             label: "✅ Lucro Realizado",
             valor: `R$ ${fmt(lucroRealizadoBRL)}`,
+            pct: mediaRetorno ? ` (média ${parseFloat(mediaRetorno) >= 0 ? "+" : ""}${mediaRetorno}%/trade)` : "",
             sub: `BR: R$ ${fmt(lucroRealizadoBR)} | US: US$ ${fmt(lucroRealizadoUS)}`,
             cor: lucroRealizadoBRL >= 0 ? "#4ade80" : "#f87171",
             bg: lucroRealizadoBRL >= 0 ? "rgba(74,222,128,0.06)" : "rgba(248,113,113,0.06)",
@@ -502,6 +504,7 @@ export default function Portfolio() {
           {
             label: "💰 Resultado Total",
             valor: `R$ ${fmt(resultadoTotalBRL)}`,
+            pct: patrimonioTotalBRL > 0 ? ` (${(resultadoTotalBRL / (patrimonioTotalBRL - resultadoTotalBRL) * 100).toFixed(1)}%)` : "",
             sub: "Aberto + Realizado em R$",
             cor: resultadoTotalBRL >= 0 ? "#a78bfa" : "#f87171",
             bg: "rgba(167,139,250,0.06)", border: "rgba(167,139,250,0.2)"
@@ -509,7 +512,10 @@ export default function Portfolio() {
         ].map((card, i) => (
           <div key={i} style={{ background:card.bg, border:`1px solid ${card.border}`, padding:"14px 18px", borderRadius:"12px", flex:1, minWidth:"180px" }}>
             <p style={{ color:"#64748b", fontSize:"11px", margin:"0 0 4px 0", fontWeight:"500" }}>{card.label}</p>
-            <p style={{ color:card.cor, fontSize:"18px", fontWeight:"800", margin:"0 0 2px 0" }}>{card.valor}</p>
+            <p style={{ color:card.cor, fontSize:"18px", fontWeight:"800", margin:"0 0 2px 0" }}>
+              {card.valor}
+              {card.pct && <span style={{ fontSize:"12px", fontWeight:"600", opacity:0.8 }}>{card.pct}</span>}
+            </p>
             <p style={{ color:"#475569", fontSize:"10px", margin:0 }}>{card.sub}</p>
           </div>
         ))}
