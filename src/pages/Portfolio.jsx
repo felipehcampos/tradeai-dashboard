@@ -283,7 +283,8 @@ export default function Portfolio() {
   const atuIntl = posicoes.filter(p=>p.mercado!=="B3").reduce((acc,p)=>acc+p.quantidade*p.preco_atual, 0)
   const lucroAbertoIntl = atuIntl - invIntl
 
-  const dolar = cotacaoDolar || 5.7 // fallback caso API falhe
+  const dolar = cotacaoDolar || 5.7
+  const patrimonioInvestidoBRL = invB3 + (invIntl * dolar) // base real para cálculo de %
   const patrimonioTotalBRL = atuB3 + (atuIntl * dolar)
   const lucroAbertoBRL = lucroAbertoB3 + (lucroAbertoIntl * dolar)
 
@@ -301,6 +302,19 @@ export default function Portfolio() {
   const taxaAcerto = historico.length > 0
     ? ((historico.filter(h => h.pl >= 0).length / historico.length) * 100).toFixed(0)
     : null
+
+  // ── CONTADORES DE RISCO (pré-calculados) ──
+  const posicoesNoStop = posicoes.filter(p => {
+    const stop = p.stop_loss || (p.preco_entrada * 0.98)
+    const alvo = p.alvo_lucro || (p.preco_entrada * 1.05)
+    return (((p.preco_atual - stop) / (alvo - stop)) * 100) < 20
+  }).length
+
+  const posicoesNoAlvo = posicoes.filter(p => {
+    const stop = p.stop_loss || (p.preco_entrada * 0.98)
+    const alvo = p.alvo_lucro || (p.preco_entrada * 1.05)
+    return (((p.preco_atual - stop) / (alvo - stop)) * 100) > 80
+  }).length
 
   const totalFicticioGrafico = posicoesFiltradas.reduce((acc,p)=>acc+p.quantidade*p.preco_entrada, 0)
 
@@ -486,7 +500,7 @@ export default function Portfolio() {
           {
             label: "📈 Lucro em Aberto",
             valor: `R$ ${fmt(lucroAbertoBRL)}`,
-            pct: patrimonioTotalBRL > 0 ? ` (${(lucroAbertoBRL / (patrimonioTotalBRL - lucroAbertoBRL) * 100).toFixed(1)}%)` : "",
+            pct: patrimonioInvestidoBRL > 0 ? ` (${(lucroAbertoBRL / patrimonioInvestidoBRL * 100).toFixed(1)}%)` : "",
             sub: `B3: R$ ${fmt(lucroAbertoB3)} | Intl: US$ ${fmt(lucroAbertoIntl)}`,
             cor: lucroAbertoBRL >= 0 ? "#4ade80" : "#f87171",
             bg: lucroAbertoBRL >= 0 ? "rgba(74,222,128,0.06)" : "rgba(248,113,113,0.06)",
@@ -504,7 +518,7 @@ export default function Portfolio() {
           {
             label: "💰 Resultado Total",
             valor: `R$ ${fmt(resultadoTotalBRL)}`,
-            pct: patrimonioTotalBRL > 0 ? ` (${(resultadoTotalBRL / (patrimonioTotalBRL - resultadoTotalBRL) * 100).toFixed(1)}%)` : "",
+            pct: patrimonioInvestidoBRL > 0 ? ` (${(resultadoTotalBRL / patrimonioInvestidoBRL * 100).toFixed(1)}%)` : "",
             sub: "Aberto + Realizado em R$",
             cor: resultadoTotalBRL >= 0 ? "#a78bfa" : "#f87171",
             bg: "rgba(167,139,250,0.06)", border: "rgba(167,139,250,0.2)"
@@ -521,53 +535,57 @@ export default function Portfolio() {
         ))}
       </div>
 
-      {/* ── LINHA 2: ESTATÍSTICAS DE TRADES ── */}
-      {historico.length > 0 && (
-        <div style={{ display:"flex", gap:"10px", marginBottom:"24px", flexWrap:"wrap" }}>
-          {[
-            {
-              label: "🎯 Taxa de Acerto",
-              valor: `${taxaAcerto}%`,
-              sub: `${historico.filter(h=>h.pl>=0).length} lucro / ${historico.filter(h=>h.pl<0).length} prejuízo`,
-              cor: parseFloat(taxaAcerto) >= 60 ? "#4ade80" : parseFloat(taxaAcerto) >= 40 ? "#f59e0b" : "#f87171",
-              bg: "rgba(56,189,248,0.04)", border: "rgba(56,189,248,0.15)"
-            },
-            {
-              label: "📊 Retorno Médio por Trade",
-              valor: `${parseFloat(mediaRetorno) >= 0 ? "+" : ""}${mediaRetorno}%`,
-              sub: `${historico.length} trade${historico.length > 1 ? "s" : ""} encerrado${historico.length > 1 ? "s" : ""}`,
-              cor: parseFloat(mediaRetorno) >= 0 ? "#4ade80" : "#f87171",
-              bg: "rgba(74,222,128,0.04)", border: "rgba(74,222,128,0.15)"
-            },
-            {
-              label: "🏆 Melhor Trade",
-              valor: (() => {
-                if (historico.length === 0) return "—"
-                const melhor = historico.reduce((max, h) => parseFloat(h.pl_pct) > parseFloat(max.pl_pct) ? h : max, historico[0])
-                return `${melhor.ticker} +${melhor.pl_pct}%`
-              })(),
-              sub: "maior % de retorno",
-              cor: "#4ade80", bg: "rgba(74,222,128,0.04)", border: "rgba(74,222,128,0.15)"
-            },
-            {
-              label: "📉 Pior Trade",
-              valor: (() => {
-                if (historico.length === 0) return "—"
-                const pior = historico.reduce((min, h) => parseFloat(h.pl_pct) < parseFloat(min.pl_pct) ? h : min, historico[0])
-                return `${pior.ticker} ${parseFloat(pior.pl_pct) >= 0 ? "+" : ""}${pior.pl_pct}%`
-              })(),
-              sub: "menor % de retorno",
-              cor: "#f87171", bg: "rgba(248,113,113,0.04)", border: "rgba(248,113,113,0.15)"
-            },
-          ].map((card, i) => (
-            <div key={i} style={{ background:card.bg, border:`1px solid ${card.border}`, padding:"14px 18px", borderRadius:"12px", flex:1, minWidth:"160px" }}>
-              <p style={{ color:"#64748b", fontSize:"11px", margin:"0 0 4px 0", fontWeight:"500" }}>{card.label}</p>
-              <p style={{ color:card.cor, fontSize:"17px", fontWeight:"800", margin:"0 0 2px 0" }}>{card.valor}</p>
-              <p style={{ color:"#475569", fontSize:"10px", margin:0 }}>{card.sub}</p>
-            </div>
-          ))}
-        </div>
-      )}
+      {/* ── LINHA 2: PERFORMANCE E RISCO ── */}
+      <div style={{ display:"flex", gap:"10px", marginBottom:"24px", flexWrap:"wrap" }}>
+        {[
+          {
+            label: "💼 Patrimônio Investido",
+            valor: `R$ ${fmt(invB3 + (invIntl * dolar))}`,
+            sub: `B3: R$ ${fmt(invB3)} | Intl: US$ ${fmt(invIntl)}`,
+            cor: "#38bdf8", bg: "rgba(56,189,248,0.04)", border: "rgba(56,189,248,0.15)"
+          },
+          ...(historico.length > 0 ? [{
+            label: "🎯 Taxa de Acerto",
+            valor: `${taxaAcerto}%`,
+            sub: `${historico.filter(h=>h.pl>=0).length} lucro / ${historico.filter(h=>h.pl<0).length} prejuízo · ${historico.length} trades`,
+            cor: parseFloat(taxaAcerto) >= 60 ? "#4ade80" : parseFloat(taxaAcerto) >= 40 ? "#f59e0b" : "#f87171",
+            bg: "rgba(74,222,128,0.04)", border: "rgba(74,222,128,0.15)"
+          },
+          {
+            label: "⏱️ Tempo Médio por Trade",
+            valor: (() => {
+              const tradesComDias = historico.filter(h => h.dias != null && h.dias > 0)
+              if (tradesComDias.length === 0) return "—"
+              const media = tradesComDias.reduce((acc, h) => acc + parseInt(h.dias), 0) / tradesComDias.length
+              return `${media.toFixed(0)} dias`
+            })(),
+            sub: "média até encerrar posição",
+            cor: "#f59e0b", bg: "rgba(245,158,11,0.04)", border: "rgba(245,158,11,0.15)"
+          }] : []),
+          {
+            label: "⚠️ Posições no Stop",
+            valor: `${posicoesNoStop} ativo${posicoesNoStop !== 1 ? "s" : ""}`,
+            sub: "progresso < 20% do alvo",
+            cor: posicoesNoStop > 0 ? "#f87171" : "#64748b",
+            bg: posicoesNoStop > 0 ? "rgba(248,113,113,0.06)" : "rgba(100,116,139,0.04)",
+            border: posicoesNoStop > 0 ? "rgba(248,113,113,0.2)" : "rgba(100,116,139,0.15)"
+          },
+          {
+            label: "✅ Posições no Alvo",
+            valor: `${posicoesNoAlvo} ativo${posicoesNoAlvo !== 1 ? "s" : ""}`,
+            sub: "progresso > 80% do alvo",
+            cor: posicoesNoAlvo > 0 ? "#4ade80" : "#64748b",
+            bg: posicoesNoAlvo > 0 ? "rgba(74,222,128,0.06)" : "rgba(100,116,139,0.04)",
+            border: posicoesNoAlvo > 0 ? "rgba(74,222,128,0.2)" : "rgba(100,116,139,0.15)"
+          },
+        ].map((card, i) => (
+          <div key={i} style={{ background:card.bg, border:`1px solid ${card.border}`, padding:"14px 18px", borderRadius:"12px", flex:1, minWidth:"160px" }}>
+            <p style={{ color:"#64748b", fontSize:"11px", margin:"0 0 4px 0", fontWeight:"500" }}>{card.label}</p>
+            <p style={{ color:card.cor, fontSize:"17px", fontWeight:"800", margin:"0 0 2px 0" }}>{card.valor}</p>
+            <p style={{ color:"#475569", fontSize:"10px", margin:0 }}>{card.sub}</p>
+          </div>
+        ))}
+      </div>
 
       {/* ── GRÁFICO + FILTROS ── */}
       {posicoes.length > 0 && (
@@ -691,7 +709,7 @@ export default function Portfolio() {
               <table style={{ width:"100%", borderCollapse:"collapse" }}>
                 <thead>
                   <tr style={{ background:"#0a1520" }}>
-                    {["Ticker","Nome","Mercado","Setor","Qtd","Entrada","Valor Invest.","Preço Atual","Valor Atual","P&L","Alvo/Stop","Dias","Ações"].map(h => (
+                    {["Ticker","Nome","Mercado","Setor","Qtd","Entrada","Valor Invest.","Preço Atual","P&L","Alvo/Stop","Dias","Ações"].map(h => (
                       <th key={h} style={{ padding:"14px 14px", textAlign:"left", color:"#64748b", fontSize:"10px", fontWeight:"700", letterSpacing:"0.05em", borderBottom:"1px solid #1e293b", whiteSpace:"nowrap" }}>
                         {h.toUpperCase()}
                       </th>
@@ -753,7 +771,6 @@ export default function Portfolio() {
                         <td style={{ padding:"14px 14px", fontWeight:"600", fontSize:"12px" }}>
                           <span style={{ color:"#e2e8f0" }}>{moeda(p.mercado)} {fmt(p.preco_atual)}</span>
                         </td>
-                        <td style={{ padding:"14px 14px", color: emLucro ? "#4ade80" : "#f87171", fontSize:"12px", fontWeight:"600" }}>{moeda(p.mercado)} {fmt(valorAtual)}</td>
                         <td style={{ padding:"14px 14px", whiteSpace:"nowrap" }}>
                           <div style={{ display:"flex", flexDirection:"column", gap:"4px" }}>
                             <span style={{ color: emLucro ? "#4ade80" : "#f87171", fontWeight:"700", fontSize:"13px" }}>{emLucro ? "▲" : "▼"} {moeda(p.mercado)} {fmt(Math.abs(pl))}</span>
