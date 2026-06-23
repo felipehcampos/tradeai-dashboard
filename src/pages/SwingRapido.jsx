@@ -3,6 +3,14 @@ import api from "../services/api"
 
 const API = import.meta.env.VITE_API_URL
 
+// ── ITEM 3: Classificação visual por força baseada na confiança do Claude ──
+const forca = (confianca) => {
+  const c = parseInt(confianca) || 0
+  if (c >= 85) return { estrelas: "⭐⭐⭐", label: "Forte",  cor: "#4ade80", bg: "rgba(74,222,128,0.12)"  }
+  if (c >= 70) return { estrelas: "⭐⭐",   label: "Médio",  cor: "#f59e0b", bg: "rgba(245,158,11,0.12)"  }
+  return            { estrelas: "⭐",      label: "Fraco",  cor: "#94a3b8", bg: "rgba(148,163,184,0.08)" }
+}
+
 export default function SwingRapido() {
   const [sinais, setSinais] = useState([])
   const [historico, setHistorico] = useState([])
@@ -18,8 +26,7 @@ export default function SwingRapido() {
   const [reavaliando, setReavaliando] = useState({})
   const [resultadosReavaliacao, setResultadosReavaliacao] = useState({})
   const [modalReavaliacao, setModalReavaliacao] = useState(null)
-  const [bannerStatus, setBannerStatus] = useState(null) // null | "executando" | "concluido"
-
+  const [bannerStatus, setBannerStatus] = useState(null)
   const scannerIntervalRef = useRef(null)
   const pollingStatusRef = useRef(null)
 
@@ -62,7 +69,6 @@ export default function SwingRapido() {
 
   useEffect(() => {
     carregarSinais()
-    // Verifica se o scanner já está rodando ao carregar a página
     api.get(`${API}/scanner/status`).then(res => {
       if (res.data.swing === "executando") {
         setRodando(true)
@@ -166,6 +172,7 @@ export default function SwingRapido() {
   }
 
   const getPrecoExibir = (s) => precosAtuais[s.ticker] || s.preco_atual
+
   const calcularVariacao = (s) => {
     if (!precosAtuais[s.ticker] || !s.preco_atual) return null
     const atual = parseFloat(precosAtuais[s.ticker])
@@ -202,6 +209,7 @@ export default function SwingRapido() {
   }
 
   const mercados = ["TODOS", "B3", "NASDAQ", "NYSE", "CRYPTO", "COMMODITY"]
+
   const sinaisFiltrados = filtroMercado === "TODOS"
     ? sinais
     : sinais.filter(s => s.mercado === filtroMercado)
@@ -209,6 +217,11 @@ export default function SwingRapido() {
   const totalAtivos = sinais.length
   const totalB3 = sinais.filter(s => s.mercado === "B3").length
   const totalIntl = sinais.filter(s => s.mercado !== "B3").length
+
+  // Contadores por força
+  const totalForte = sinais.filter(s => parseInt(s.confianca) >= 85).length
+  const totalMedio = sinais.filter(s => parseInt(s.confianca) >= 70 && parseInt(s.confianca) < 85).length
+  const totalFraco = sinais.filter(s => parseInt(s.confianca) < 70).length
 
   return (
     <div style={{ width: "100%" }}>
@@ -254,6 +267,15 @@ export default function SwingRapido() {
               <span style={{ padding: "4px 10px", borderRadius: "8px", fontSize: "11px", fontWeight: "700", background: "rgba(56,189,248,0.1)", color: "#38bdf8" }}>
                 {modalSinal.tipo_risco === "SISTEMICO" ? "🔵 Sistêmico" : "🔴 Idiossincr."}
               </span>
+              {/* Força no modal */}
+              {modalSinal.confianca && (() => {
+                const f = forca(modalSinal.confianca)
+                return (
+                  <span style={{ padding: "4px 10px", borderRadius: "8px", fontSize: "11px", fontWeight: "700", background: f.bg, color: f.cor }}>
+                    {f.estrelas} {f.label} — {modalSinal.confianca}%
+                  </span>
+                )
+              })()}
             </div>
             <p style={{ color: "#cbd5e1", fontSize: "13px", lineHeight: "1.7", margin: 0 }}>
               💡 {modalSinal.justificativa}
@@ -372,20 +394,11 @@ export default function SwingRapido() {
             boxShadow: atualizandoPrecos ? "none" : "0 2px 8px rgba(16,185,129,0.3)",
             transition: "all 0.2s"
           }}>
-            {atualizandoPrecos ? (
-              <span style={{ display: "flex", alignItems: "center", gap: "8px", justifyContent: "center" }}>
-                <span style={{
-                  width: "12px", height: "12px", border: "2px solid #94a3b8",
-                  borderTopColor: "transparent", borderRadius: "50%",
-                  display: "inline-block", animation: "spin 0.8s linear infinite"
-                }} />
-                Atualizando...
-              </span>
-            ) : "💹 Atualizar Preços"}
+            {atualizandoPrecos ? "Atualizando..." : "🔄 Atualizar Preços"}
           </button>
-
           <button onClick={rodarScanner} disabled={rodando} style={{
-            padding: "9px 20px", borderRadius: "8px", border: "none", cursor: rodando ? "not-allowed" : "pointer",
+            padding: "9px 18px", borderRadius: "8px", border: "none",
+            cursor: rodando ? "not-allowed" : "pointer",
             background: rodando ? "#334155" : "linear-gradient(135deg,#f59e0b,#d97706)",
             color: rodando ? "#94a3b8" : "#0f172a",
             fontWeight: "bold", fontSize: "13px",
@@ -419,10 +432,10 @@ export default function SwingRapido() {
       {/* Cards resumo */}
       <div style={{ display: "flex", gap: "12px", marginBottom: "20px", flexWrap: "wrap" }}>
         {[
-          { label: "⚡ Sinais Ativos", valor: totalAtivos, cor: "#f59e0b", bg: "rgba(245,158,11,0.06)", border: "rgba(245,158,11,0.15)" },
-          { label: "🇧🇷 B3", valor: totalB3, cor: "#22c55e", bg: "rgba(34,197,94,0.06)", border: "rgba(34,197,94,0.15)" },
-          { label: "🌎 Internacional", valor: totalIntl, cor: "#38bdf8", bg: "rgba(56,189,248,0.06)", border: "rgba(56,189,248,0.15)" },
-          { label: "📋 Histórico", valor: historico.length, cor: "#a78bfa", bg: "rgba(167,139,250,0.06)", border: "rgba(167,139,250,0.15)" },
+          { label: "⚡ Sinais Ativos",  valor: totalAtivos, cor: "#f59e0b", bg: "rgba(245,158,11,0.06)",  border: "rgba(245,158,11,0.15)"  },
+          { label: "🇧🇷 B3",            valor: totalB3,     cor: "#22c55e", bg: "rgba(34,197,94,0.06)",   border: "rgba(34,197,94,0.15)"   },
+          { label: "🌎 Internacional",  valor: totalIntl,   cor: "#38bdf8", bg: "rgba(56,189,248,0.06)",  border: "rgba(56,189,248,0.15)"  },
+          { label: "📋 Histórico",      valor: historico.length, cor: "#a78bfa", bg: "rgba(167,139,250,0.06)", border: "rgba(167,139,250,0.15)" },
         ].map((card, i) => (
           <div key={i} style={{
             background: card.bg, border: `1px solid ${card.border}`,
@@ -434,10 +447,30 @@ export default function SwingRapido() {
         ))}
       </div>
 
+      {/* ── ITEM 3: Cards de força (só quando há sinais) ── */}
+      {sinais.length > 0 && (
+        <div style={{ display: "flex", gap: "10px", marginBottom: "20px", flexWrap: "wrap" }}>
+          {[
+            { label: "⭐⭐⭐ Forte",  valor: totalForte, cor: "#4ade80", bg: "rgba(74,222,128,0.06)",  border: "rgba(74,222,128,0.2)",  sub: "Confiança ≥ 85%" },
+            { label: "⭐⭐ Médio",    valor: totalMedio, cor: "#f59e0b", bg: "rgba(245,158,11,0.06)",  border: "rgba(245,158,11,0.2)",  sub: "Confiança 70–84%" },
+            { label: "⭐ Fraco",     valor: totalFraco, cor: "#94a3b8", bg: "rgba(148,163,184,0.04)", border: "rgba(148,163,184,0.15)", sub: "Confiança < 70%" },
+          ].map((card, i) => (
+            <div key={i} style={{
+              background: card.bg, border: `1px solid ${card.border}`,
+              padding: "12px 20px", borderRadius: "10px", flex: 1, minWidth: "130px", textAlign: "center"
+            }}>
+              <p style={{ color: "#64748b", fontSize: "11px", margin: "0 0 4px 0" }}>{card.label}</p>
+              <p style={{ color: card.cor, fontSize: "22px", fontWeight: "800", margin: "0 0 2px 0" }}>{card.valor}</p>
+              <p style={{ color: "#475569", fontSize: "10px", margin: 0 }}>{card.sub}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Tabs Ativos / Histórico */}
       <div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>
         {[
-          { id: "ativos", label: "⚡ Sinais Ativos" },
+          { id: "ativos",    label: "⚡ Sinais Ativos" },
           { id: "historico", label: "📋 Histórico" }
         ].map(v => (
           <button key={v.id} onClick={() => setVistaAtiva(v.id)} style={{
@@ -445,14 +478,14 @@ export default function SwingRapido() {
             fontSize: "13px", fontWeight: vistaAtiva === v.id ? "700" : "400",
             background: vistaAtiva === v.id ? "rgba(245,158,11,0.15)" : "#1e293b",
             color: vistaAtiva === v.id ? "#f59e0b" : "#64748b",
-            borderBottom: vistaAtiva === v.id ? "2px solid #f59e0b" : "2px solid transparent",
+            borderBottom: vistaAtiva === v.id ? "2px solid #f59e0b" : "2px solid transparent"
           }}>
             {v.label}
           </button>
         ))}
       </div>
 
-      {/* Filtros por mercado */}
+      {/* Filtros de mercado */}
       {vistaAtiva === "ativos" && (
         <div style={{ display: "flex", gap: "8px", marginBottom: "16px", flexWrap: "wrap" }}>
           {mercados.map(m => (
@@ -480,7 +513,7 @@ export default function SwingRapido() {
           <p style={{ fontSize: "48px", marginBottom: "12px" }}>📭</p>
           <p style={{ fontSize: "16px", marginBottom: "8px" }}>Nenhum sinal swing ativo</p>
           <p style={{ fontSize: "13px", marginBottom: "16px" }}>
-            O scanner busca quedas ≥3% + RSI ≤38 + volume ≥150% da média
+            O scanner busca quedas ≥2% + RSI ≤42 + volume ≥130% da média (2 de 3)
           </p>
           <button onClick={rodarScanner} disabled={rodando} style={{
             padding: "10px 24px", borderRadius: "8px", border: "none", cursor: "pointer",
@@ -495,11 +528,12 @@ export default function SwingRapido() {
           <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
             <colgroup>
               <col style={{ width: "6%" }} />
-              <col style={{ width: "14%" }} />
+              <col style={{ width: "7%" }} />  {/* FORÇA — nova coluna */}
+              <col style={{ width: "13%" }} />
               <col style={{ width: "7%" }} />
-              <col style={{ width: "6%" }} />
               <col style={{ width: "5%" }} />
               <col style={{ width: "6%" }} />
+              <col style={{ width: "8%" }} />
               <col style={{ width: "8%" }} />
               <col style={{ width: "8%" }} />
               <col style={{ width: "8%" }} />
@@ -510,9 +544,9 @@ export default function SwingRapido() {
             </colgroup>
             <thead>
               <tr style={{ background: "#0a1520" }}>
-                {["Ticker", "Nome / Diagnóstico IA", "Mercado", "Variação", "RSI", "Volume", "Preço", "Alvo", "Stop", "Risco", "Time Stop", "Data", "Ação"].map(h => (
+                {["Ticker", "Força", "Nome / Diagnóstico IA", "Mercado", "Variação", "RSI", "Volume", "Preço", "Alvo", "Stop", "Risco", "Time Stop", "Data", "Ação"].map(h => (
                   <th key={h} style={{
-                    padding: "12px 10px", textAlign: "left", color: "#64748b",
+                    padding: "12px 10px", textAlign: "left", color: h === "Força" ? "#f59e0b" : "#64748b",
                     fontSize: "11px", fontWeight: "700", letterSpacing: "0.05em",
                     borderBottom: "1px solid #1e293b", whiteSpace: "nowrap"
                   }}>
@@ -521,23 +555,39 @@ export default function SwingRapido() {
                 ))}
               </tr>
             </thead>
-            <tbody style={{ opacity: atualizandoPrecos || loading ? 0.4 : 1, transition: "opacity 0.3s ease-in-out" }}>
-              {(vistaAtiva === "ativos" ? sinaisFiltrados : historico).map((s, i) => {
+            <tbody style={{ opacity: atualizandoPrecos || loading ? 0.5 : 1, transition: "opacity 0.3s" }}>
+              {(vistaAtiva === "ativos" ? sinaisFiltrados : historico).map((s, idx) => {
                 const timeStop = calcularTimeStop(s.data_expiracao)
-                const expirado = s.status === "EXPIRADO"
+                const expirado = s.status === "EXPIRADO" || (timeStop && timeStop.texto === "EXPIRADO")
+                const f = forca(s.confianca)
                 return (
-                  <tr key={i} style={{
-                    borderBottom: "1px solid #1e293b",
-                    background: expirado ? "rgba(100,116,139,0.03)" : i % 2 === 0 ? "#0d1829" : "#0a1520",
-                    opacity: expirado ? 0.5 : 1,
+                  <tr key={idx} style={{
+                    borderBottom: "1px solid #0f172a",
+                    background: expirado ? "rgba(0,0,0,0.3)" : idx % 2 === 0 ? "#0d1829" : "#0a1520",
+                    opacity: expirado ? 0.6 : 1,
                     transition: "background 0.15s"
                   }}
-                  onMouseEnter={e => { if (!expirado) e.currentTarget.style.background = "#112235" }}
-                  onMouseLeave={e => { if (!expirado) e.currentTarget.style.background = i % 2 === 0 ? "#0d1829" : "#0a1520" }}>
+                  onMouseEnter={e => { if (!expirado) e.currentTarget.style.background = "#1e293b" }}
+                  onMouseLeave={e => { if (!expirado) e.currentTarget.style.background = idx % 2 === 0 ? "#0d1829" : "#0a1520" }}>
 
+                    {/* TICKER */}
                     <td style={{ padding: "14px 10px", fontWeight: "800", color: "#f59e0b", fontSize: "13px" }}>
                       {s.ticker}
                     </td>
+
+                    {/* ── ITEM 3: FORÇA ── */}
+                    <td style={{ padding: "14px 10px" }}>
+                      <div style={{
+                        display: "inline-flex", flexDirection: "column", alignItems: "center", gap: "2px",
+                        padding: "4px 8px", borderRadius: "8px", background: f.bg
+                      }}>
+                        <span style={{ fontSize: "11px", letterSpacing: "1px" }}>{f.estrelas}</span>
+                        <span style={{ fontSize: "9px", fontWeight: "700", color: f.cor }}>{f.label}</span>
+                        <span style={{ fontSize: "9px", color: "#64748b" }}>{s.confianca}%</span>
+                      </div>
+                    </td>
+
+                    {/* NOME */}
                     <td style={{ padding: "14px 10px", verticalAlign: "middle" }}>
                       <div style={{ color: "#f1f5f9", fontSize: "12px", fontWeight: "600", marginBottom: "6px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         {s.nome}
@@ -552,6 +602,8 @@ export default function SwingRapido() {
                         </button>
                       )}
                     </td>
+
+                    {/* MERCADO */}
                     <td style={{ padding: "14px 10px" }}>
                       <span style={{
                         display: "inline-block", padding: "3px 8px", borderRadius: "12px",
@@ -562,6 +614,8 @@ export default function SwingRapido() {
                         {s.mercado}
                       </span>
                     </td>
+
+                    {/* VARIAÇÃO */}
                     <td style={{ padding: "14px 10px" }}>
                       {(() => {
                         const v = s.variacao_dia !== null && s.variacao_dia !== undefined
@@ -578,6 +632,8 @@ export default function SwingRapido() {
                         )
                       })()}
                     </td>
+
+                    {/* RSI */}
                     <td style={{ padding: "14px 10px" }}>
                       <span style={{
                         color: parseFloat(s.rsi) <= 30 ? "#f87171" : "#f59e0b",
@@ -586,11 +642,15 @@ export default function SwingRapido() {
                         {s.rsi ? parseFloat(s.rsi).toFixed(1) : "—"}
                       </span>
                     </td>
+
+                    {/* VOLUME */}
                     <td style={{ padding: "14px 10px" }}>
                       <span style={{ color: "#4ade80", fontSize: "12px", fontWeight: "700" }}>
                         {s.volume_vs_media ? `${parseFloat(s.volume_vs_media).toFixed(0)}%` : "—"}
                       </span>
                     </td>
+
+                    {/* PREÇO */}
                     <td style={{ padding: "14px 10px", whiteSpace: "nowrap" }}>
                       <span style={{ color: "#cbd5e1", fontSize: "12px", fontWeight: "600" }}>
                         {moeda(s.mercado)} {formatarPreco(getPrecoExibir(s))}
@@ -604,6 +664,8 @@ export default function SwingRapido() {
                         </span>
                       )}
                     </td>
+
+                    {/* ALVO */}
                     <td style={{ padding: "14px 10px" }}>
                       <span style={{ color: "#4ade80", fontSize: "12px", fontWeight: "700" }}>
                         {moeda(s.mercado)} {formatarPreco(s.alvo_lucro)}
@@ -612,6 +674,8 @@ export default function SwingRapido() {
                         <span style={{ color: "#22c55e", fontSize: "10px", display: "block" }}>+{s.pct_alvo}%</span>
                       )}
                     </td>
+
+                    {/* STOP */}
                     <td style={{ padding: "14px 10px" }}>
                       <span style={{ color: "#f87171", fontSize: "12px", fontWeight: "600" }}>
                         {moeda(s.mercado)} {formatarPreco(s.stop_loss)}
@@ -620,6 +684,8 @@ export default function SwingRapido() {
                         <span style={{ color: "#ef4444", fontSize: "10px", display: "block" }}>-{s.pct_stop}%</span>
                       )}
                     </td>
+
+                    {/* RISCO */}
                     <td style={{ padding: "14px 10px" }}>
                       <span style={{
                         display: "inline-block", padding: "3px 6px", borderRadius: "10px",
@@ -630,6 +696,8 @@ export default function SwingRapido() {
                         {s.tipo_risco === "SISTEMICO" ? "🔵 Sist" : "🔴 Idios"}
                       </span>
                     </td>
+
+                    {/* TIME STOP */}
                     <td style={{ padding: "14px 10px" }}>
                       {expirado ? (
                         <span style={{ color: "#64748b", fontSize: "11px", fontWeight: "700" }}>⏰ EXPIRADO</span>
@@ -639,9 +707,13 @@ export default function SwingRapido() {
                         </span>
                       ) : "—"}
                     </td>
+
+                    {/* DATA */}
                     <td style={{ padding: "14px 10px", color: "#475569", fontSize: "11px" }}>
                       {formatarData(s.criado_em)}
                     </td>
+
+                    {/* AÇÃO */}
                     <td style={{ padding: "14px 10px" }}>
                       {!expirado && vistaAtiva === "ativos" && (
                         <button onClick={() => adicionarPortfolio(s)} style={{
@@ -690,6 +762,7 @@ export default function SwingRapido() {
                         )
                       })()}
                     </td>
+
                   </tr>
                 )
               })}
