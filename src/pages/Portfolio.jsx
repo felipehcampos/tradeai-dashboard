@@ -69,6 +69,7 @@ export default function Portfolio() {
   const [carregandoHist, setCarregandoHist] = useState(false)
   const [cotacaoDolar, setCotacaoDolar] = useState(null)
   const [filtroOrigem, setFiltroOrigem] = useState("todos")
+  const [ordemData, setOrdemData] = useState("asc")  // asc = mais antigo primeiro
 
   const carregarPortfolio = async () => {
     try {
@@ -270,9 +271,16 @@ export default function Portfolio() {
 
   const moeda = (mercado) => mercado === "B3" ? "R$" : "US$"
 
-  const posicoesFiltradas = filtroOrigem === "todos"
-    ? posicoes
-    : posicoes.filter(p => filtroOrigem === "swing" ? p.origem === "swing" : p.origem !== "swing")
+  const posicoesFiltradas = (() => {
+    const filtradas = filtroOrigem === "todos"
+      ? posicoes
+      : posicoes.filter(p => filtroOrigem === "swing" ? p.origem === "swing" : p.origem !== "swing")
+    return [...filtradas].sort((a, b) => {
+      const da = new Date(a.data || 0)
+      const db = new Date(b.data || 0)
+      return ordemData === "asc" ? da - db : db - da
+    })
+  })()
 
   // ── CÁLCULOS FINANCEIROS ──
   const invB3 = posicoes.filter(p=>p.mercado==="B3").reduce((acc,p)=>acc+p.quantidade*p.preco_entrada, 0)
@@ -344,12 +352,21 @@ export default function Portfolio() {
     if (!h.data_saida) return acc
     const partes = h.data_saida.split("/")
     if (partes.length < 3) return acc
-    const dia = partes[0], mes = partes[1], ano = partes[2]
-    const chave = `${ano}-${mes}` // chave para ordenar corretamente
+    const mes = partes[1], ano = partes[2]
+    const chave = `${ano}-${mes}`
     const label = new Date(`${ano}-${mes}-01T12:00:00`).toLocaleDateString("pt-BR", { month: "short", year: "2-digit" })
-    if (!acc[chave]) acc[chave] = { mes: label, chave, pl_br: 0, pl_us: 0, trades: 0, lucrativos: 0 }
-    if (h.mercado === "B3") acc[chave].pl_br += parseFloat(h.pl)
-    else acc[chave].pl_us += parseFloat(h.pl)
+    if (!acc[chave]) acc[chave] = { mes: label, chave, pl_br: 0, pl_us: 0, trades: 0, lucrativos: 0, cap_inv_br: 0, cap_inv_us: 0, cap_rec_br: 0, cap_rec_us: 0 }
+    const capInv = parseFloat(h.preco_entrada) * parseFloat(h.quantidade)
+    const capRec = parseFloat(h.preco_saida) * parseFloat(h.quantidade)
+    if (h.mercado === "B3") {
+      acc[chave].pl_br += parseFloat(h.pl)
+      acc[chave].cap_inv_br += capInv
+      acc[chave].cap_rec_br += capRec
+    } else {
+      acc[chave].pl_us += parseFloat(h.pl)
+      acc[chave].cap_inv_us += capInv
+      acc[chave].cap_rec_us += capRec
+    }
     acc[chave].trades++
     if (parseFloat(h.pl) >= 0) acc[chave].lucrativos++
     return acc
@@ -663,13 +680,23 @@ export default function Portfolio() {
       {/* ── ABA: POSIÇÕES ABERTAS ── */}
       {abaAtiva === "abertas" && (
         <>
-          <button onClick={() => setMostrarForm(!mostrarForm)} style={{
-            padding:"9px 20px", borderRadius:"8px", cursor:"pointer",
-            background: mostrarForm ? "#334155" : "#1e293b", color: mostrarForm ? "#94a3b8" : "#38bdf8",
-            fontWeight:"bold", marginBottom:"16px", fontSize:"13px", border:"1px solid #334155"
-          }}>
-            {mostrarForm ? "✕ Cancelar" : "+ Adicionar Posição"}
-          </button>
+          <div style={{ display:"flex", gap:"8px", marginBottom:"16px", alignItems:"center" }}>
+            <button onClick={() => setMostrarForm(!mostrarForm)} style={{
+              padding:"9px 20px", borderRadius:"8px", cursor:"pointer",
+              background: mostrarForm ? "#334155" : "#1e293b", color: mostrarForm ? "#94a3b8" : "#38bdf8",
+              fontWeight:"bold", fontSize:"13px", border:"1px solid #334155"
+            }}>
+              {mostrarForm ? "✕ Cancelar" : "+ Adicionar Posição"}
+            </button>
+            <button onClick={() => setOrdemData(o => o === "asc" ? "desc" : "asc")} style={{
+              padding:"9px 16px", borderRadius:"8px", cursor:"pointer",
+              background:"#1e293b", color:"#94a3b8",
+              fontSize:"12px", fontWeight:"600", border:"1px solid #334155",
+              display:"flex", alignItems:"center", gap:"6px"
+            }}>
+              {ordemData === "asc" ? "📅 Mais antigo primeiro" : "📅 Mais recente primeiro"}
+            </button>
+          </div>
 
           {mostrarForm && (
             <div style={{ background:"#0d1829", border:"1px solid #1e293b", padding:"16px", borderRadius:"12px", marginBottom:"16px", display:"flex", gap:"12px", flexWrap:"wrap" }}>
@@ -943,7 +970,7 @@ export default function Portfolio() {
                 <table style={{ width:"100%", borderCollapse:"collapse" }}>
                   <thead>
                     <tr style={{ background:"#0a1520" }}>
-                      {["Mês","Trades","Taxa de Acerto","Retorno Médio","P&L BR (R$)","P&L Intl (US$)"].map(h => (
+                      {["Mês","Trades","Taxa de Acerto","Retorno Médio","Capital Inv. BR","Capital Rec. BR","P&L BR (R$)","Capital Inv. Intl","Capital Rec. Intl","P&L Intl (US$)"].map(h => (
                         <th key={h} style={{ padding:"14px 16px", textAlign:"left", color:"#64748b", fontSize:"10px", fontWeight:"700", letterSpacing:"0.05em", borderBottom:"1px solid #1e293b", whiteSpace:"nowrap" }}>{h.toUpperCase()}</th>
                       ))}
                     </tr>
@@ -974,15 +1001,51 @@ export default function Portfolio() {
                               {parseFloat(retornoMedioMes) >= 0 ? "+" : ""}{retornoMedioMes}%
                             </span>
                           </td>
+                          {/* Capital BR */}
+                          <td style={{ padding:"14px 16px", color:"#94a3b8", fontSize:"12px" }}>
+                            R$ {fmt(d.cap_inv_br)}
+                          </td>
                           <td style={{ padding:"14px 16px" }}>
-                            <span style={{ color: d.pl_br >= 0 ? "#4ade80" : "#f87171", fontWeight:"700", fontSize:"13px" }}>
-                              {d.pl_br >= 0 ? "▲ " : "▼ "}R$ {fmt(Math.abs(d.pl_br))}
+                            <span style={{ color: d.cap_rec_br >= d.cap_inv_br ? "#4ade80" : "#f87171", fontSize:"12px", fontWeight:"600" }}>
+                              R$ {fmt(d.cap_rec_br)}
                             </span>
                           </td>
                           <td style={{ padding:"14px 16px" }}>
-                            <span style={{ color: d.pl_us >= 0 ? "#38bdf8" : "#f87171", fontWeight:"700", fontSize:"13px" }}>
-                              {d.pl_us >= 0 ? "▲ " : "▼ "}US$ {fmt(Math.abs(d.pl_us))}
-                            </span>
+                            <div style={{ display:"flex", flexDirection:"column", gap:"2px" }}>
+                              <span style={{ color: d.pl_br >= 0 ? "#4ade80" : "#f87171", fontWeight:"700", fontSize:"13px" }}>
+                                {d.pl_br >= 0 ? "▲ " : "▼ "}R$ {fmt(Math.abs(d.pl_br))}
+                              </span>
+                              {d.cap_inv_br > 0 && (
+                                <span style={{ fontSize:"10px", color: d.pl_br >= 0 ? "#4ade80" : "#f87171", opacity:0.8 }}>
+                                  {d.pl_br >= 0 ? "+" : ""}{(d.pl_br / d.cap_inv_br * 100).toFixed(2)}% s/ capital
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          {/* Capital Internacional */}
+                          <td style={{ padding:"14px 16px", color:"#94a3b8", fontSize:"12px" }}>
+                            {d.cap_inv_us > 0 ? `US$ ${fmt(d.cap_inv_us)}` : "—"}
+                          </td>
+                          <td style={{ padding:"14px 16px" }}>
+                            {d.cap_rec_us > 0 ? (
+                              <span style={{ color: d.cap_rec_us >= d.cap_inv_us ? "#38bdf8" : "#f87171", fontSize:"12px", fontWeight:"600" }}>
+                                US$ {fmt(d.cap_rec_us)}
+                              </span>
+                            ) : <span style={{ color:"#475569" }}>—</span>}
+                          </td>
+                          <td style={{ padding:"14px 16px" }}>
+                            {d.pl_us !== 0 ? (
+                              <div style={{ display:"flex", flexDirection:"column", gap:"2px" }}>
+                                <span style={{ color: d.pl_us >= 0 ? "#38bdf8" : "#f87171", fontWeight:"700", fontSize:"13px" }}>
+                                  {d.pl_us >= 0 ? "▲ " : "▼ "}US$ {fmt(Math.abs(d.pl_us))}
+                                </span>
+                                {d.cap_inv_us > 0 && (
+                                  <span style={{ fontSize:"10px", color: d.pl_us >= 0 ? "#38bdf8" : "#f87171", opacity:0.8 }}>
+                                    {d.pl_us >= 0 ? "+" : ""}{(d.pl_us / d.cap_inv_us * 100).toFixed(2)}% s/ capital
+                                  </span>
+                                )}
+                              </div>
+                            ) : <span style={{ color:"#475569" }}>—</span>}
                           </td>
                         </tr>
                       )
