@@ -465,7 +465,7 @@ export default function Portfolio() {
   const inputStyle = { padding:"10px", borderRadius:"6px", border:"1px solid #334155", background:"#0f172a", color:"#f1f5f9", fontSize:"13px" }
 
   return (
-    <div style={{ padding:"20px", maxWidth:"1400px", margin:"0 auto" }}>
+  <div style={{ padding:"20px", width:"100%", boxSizing:"border-box" }}>
 
       {/* Modal Histórico de Preços */}
       {modalHistorico && (
