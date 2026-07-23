@@ -403,13 +403,13 @@ export default function Portfolio() {
   const posicoesNoStop = posicoes.filter(p => {
     const stop = p.stop_loss || (p.preco_entrada * 0.98)
     const alvo = p.alvo_lucro || (p.preco_entrada * 1.05)
-    return (((p.preco_atual - stop) / (alvo - stop)) * 100) < 20
+    return (((p.preco_entrada - p.preco_atual) / (p.preco_entrada - stop)) * 100) > 80
   }).length
 
   const posicoesNoAlvo = posicoes.filter(p => {
     const stop = p.stop_loss || (p.preco_entrada * 0.98)
     const alvo = p.alvo_lucro || (p.preco_entrada * 1.05)
-    return (((p.preco_atual - stop) / (alvo - stop)) * 100) > 80
+    return (((p.preco_atual - p.preco_entrada) / (alvo - p.preco_entrada)) * 100) > 80
   }).length
 
   const totalFicticioGrafico = posicoesFiltradas.reduce((acc,p)=>acc+p.quantidade*p.preco_entrada, 0)
@@ -624,8 +624,8 @@ export default function Portfolio() {
             })(),
             sub: "média até encerrar posição", cor: "#f59e0b", bg: "rgba(245,158,11,0.04)", border: "rgba(245,158,11,0.15)"
           }] : []),
-          { label: "⚠️ Posições no Stop", valor: `${posicoesNoStop} ativo${posicoesNoStop !== 1 ? "s" : ""}`, sub: "progresso < 20% do alvo", cor: posicoesNoStop > 0 ? "#f87171" : "#64748b", bg: posicoesNoStop > 0 ? "rgba(248,113,113,0.06)" : "rgba(100,116,139,0.04)", border: posicoesNoStop > 0 ? "rgba(248,113,113,0.2)" : "rgba(100,116,139,0.15)" },
-          { label: "✅ Posições no Alvo", valor: `${posicoesNoAlvo} ativo${posicoesNoAlvo !== 1 ? "s" : ""}`, sub: "progresso > 80% do alvo", cor: posicoesNoAlvo > 0 ? "#4ade80" : "#64748b", bg: posicoesNoAlvo > 0 ? "rgba(74,222,128,0.06)" : "rgba(100,116,139,0.04)", border: posicoesNoAlvo > 0 ? "rgba(74,222,128,0.2)" : "rgba(100,116,139,0.15)" },
+          { label: "⚠️ Posições no Stop", valor: `${posicoesNoStop} ativo${posicoesNoStop !== 1 ? "s" : ""}`, sub: "80%+ do caminho ate o stop", cor: posicoesNoStop > 0 ? "#f87171" : "#64748b", bg: posicoesNoStop > 0 ? "rgba(248,113,113,0.06)" : "rgba(100,116,139,0.04)", border: posicoesNoStop > 0 ? "rgba(248,113,113,0.2)" : "rgba(100,116,139,0.15)" },
+          { label: "✅ Posições no Alvo", valor: `${posicoesNoAlvo} ativo${posicoesNoAlvo !== 1 ? "s" : ""}`, sub: "80%+ do caminho ate o alvo", cor: posicoesNoAlvo > 0 ? "#4ade80" : "#64748b", bg: posicoesNoAlvo > 0 ? "rgba(74,222,128,0.06)" : "rgba(100,116,139,0.04)", border: posicoesNoAlvo > 0 ? "rgba(74,222,128,0.2)" : "rgba(100,116,139,0.15)" },
         ].map((card, i) => (
           <div key={i} style={{ padding:"14px", borderRadius:"12px", background: card.bg, border:`1px solid ${card.border}` }}>
             <div style={{ fontSize:"11px", color:"#94a3b8", marginBottom:"6px" }}>{card.label}</div>
