@@ -748,7 +748,8 @@ export default function Portfolio() {
                     const stop = p.stop_loss || (p.preco_entrada * 0.98)
                     const pctAlvo = p.pct_alvo || ((alvo - p.preco_entrada) / p.preco_entrada * 100)
                     const pctStop = p.pct_stop || ((p.preco_entrada - stop) / p.preco_entrada * 100)
-                    const progressoAlvo = Math.min(Math.max(((p.preco_atual - stop) / (alvo - stop)) * 100, 0), 100)
+                    const progressoReal = ((p.preco_atual - p.preco_entrada) / (alvo - p.preco_entrada)) * 100
+                    const progressoAlvo = Math.min(Math.max(progressoReal, 0), 100)
                     const dias = p.dias != null ? p.dias : diasNaOperacao(p.data)
                     const estaEditando = editando === p.id
                     const emLucro = pl >= 0
@@ -793,7 +794,7 @@ export default function Portfolio() {
                           <div style={{ background:"#1e293b", borderRadius:"4px", height:"6px", overflow:"hidden" }}>
                             <div style={{ background: progressoAlvo > 50 ? "#4ade80" : progressoAlvo > 20 ? "#f59e0b" : "#f87171", borderRadius:"4px", height:"6px", width:`${progressoAlvo}%`, transition:"width 0.3s" }} />
                           </div>
-                          <div style={{ fontSize:"10px", color:"#64748b", textAlign:"center", marginTop:"2px" }}>{progressoAlvo.toFixed(0)}% do caminho</div>
+                          <div style={{ fontSize:"10px", color: progressoReal < 0 ? "#f87171" : "#64748b", textAlign:"center", marginTop:"2px" }}>{progressoReal.toFixed(0)}% do caminho</div>
                         </td>
                         <td style={{ padding:"12px 10px" }}>
                           <span style={{ color: dias > 3 ? "#f87171" : dias > 1 ? "#f59e0b" : "#4ade80", fontSize:"12px", fontWeight:"700" }}>{dias}d</span>
