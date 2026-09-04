@@ -392,6 +392,17 @@ export default function Portfolio() {
 
   const resultadoTotalBRL = lucroAbertoBRL + lucroRealizadoBRL
 
+  // ── CAPITAL MOVIMENTADO: tudo que ja foi comprado (fechados + abertos) ──
+  // Diferente do capital em risco: aqui o mesmo dinheiro reusado em varios
+  // trades conta cada vez, mostrando o giro total da operacao.
+  const capMovFechadoBR = historico
+    .filter(h => h.mercado === "B3")
+    .reduce((acc,h) => acc + (parseFloat(h.preco_entrada)||0) * (parseFloat(h.quantidade)||0), 0)
+  const capMovFechadoUS = historico
+    .filter(h => h.mercado !== "B3")
+    .reduce((acc,h) => acc + (parseFloat(h.preco_entrada)||0) * (parseFloat(h.quantidade)||0), 0)
+  const capitalMovimentadoBRL = capMovFechadoBR + (capMovFechadoUS * dolar) + patrimonioInvestidoBRL
+
   const mediaRetorno = historico.length > 0
     ? (historico.reduce((acc, h) => acc + parseFloat(h.pl_pct), 0) / historico.length).toFixed(2)
     : null
@@ -589,10 +600,10 @@ export default function Portfolio() {
       {/* ── LINHA 1: VISÃO CONSOLIDADA ── */}
       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(240px, 1fr))", gap:"12px", marginBottom:"12px" }}>
         {[
-          { label: "💼 Patrimônio Total", valor: `R$ ${fmt(patrimonioTotalBRL)}`, sub: cotacaoDolar ? `B3 + Intl convertido (USD ${fmt(cotacaoDolar)})` : "B3 + Intl convertido", cor: "#38bdf8", bg: "rgba(56,189,248,0.06)", border: "rgba(56,189,248,0.2)" },
-          { label: "📈 Lucro em Aberto", valor: `R$ ${fmt(lucroAbertoBRL)}`, pct: patrimonioInvestidoBRL > 0 ? ` (${(lucroAbertoBRL / patrimonioInvestidoBRL * 100).toFixed(1)}%)` : "", sub: `B3: R$ ${fmt(lucroAbertoB3)} | Intl: US$ ${fmt(lucroAbertoIntl)}`, cor: lucroAbertoBRL >= 0 ? "#4ade80" : "#f87171", bg: lucroAbertoBRL >= 0 ? "rgba(74,222,128,0.06)" : "rgba(248,113,113,0.06)", border: lucroAbertoBRL >= 0 ? "rgba(74,222,128,0.2)" : "rgba(248,113,113,0.2)" },
-          { label: "✅ Lucro Realizado", valor: `R$ ${fmt(lucroRealizadoBRL)}`, pct: mediaRetorno ? ` (média ${parseFloat(mediaRetorno) >= 0 ? "+" : ""}${mediaRetorno}%/trade)` : "", sub: `BR: R$ ${fmt(lucroRealizadoBR)} | US: US$ ${fmt(lucroRealizadoUS)}`, cor: lucroRealizadoBRL >= 0 ? "#4ade80" : "#f87171", bg: lucroRealizadoBRL >= 0 ? "rgba(74,222,128,0.06)" : "rgba(248,113,113,0.06)", border: lucroRealizadoBRL >= 0 ? "rgba(74,222,128,0.2)" : "rgba(248,113,113,0.2)" },
-          { label: "💰 Resultado Total", valor: `R$ ${fmt(resultadoTotalBRL)}`, pct: patrimonioInvestidoBRL > 0 ? ` (${(resultadoTotalBRL / patrimonioInvestidoBRL * 100).toFixed(1)}%)` : "", sub: "Aberto + Realizado em R$", cor: resultadoTotalBRL >= 0 ? "#a78bfa" : "#f87171", bg: "rgba(167,139,250,0.06)", border: "rgba(167,139,250,0.2)" },
+                    { label: "Capital em aberto", valor: `R$ ${fmt(patrimonioInvestidoBRL)}`, sub: `${posicoes.length} posiç${posicoes.length !== 1 ? "ões" : "ão"} aberta${posicoes.length !== 1 ? "s" : ""} · vale R$ ${fmt(patrimonioTotalBRL)} hoje`, cor: "#38bdf8", bg: "rgba(56,189,248,0.06)", border: "rgba(56,189,248,0.2)" },
+          { label: "Lucro em aberto", valor: `R$ ${fmt(lucroAbertoBRL)}`, pct: patrimonioInvestidoBRL > 0 ? ` (${lucroAbertoBRL >= 0 ? "+" : ""}${(lucroAbertoBRL / patrimonioInvestidoBRL * 100).toFixed(1)}%)` : "", sub: "ainda não realizado — pode mudar", cor: lucroAbertoBRL >= 0 ? "#4ade80" : "#f87171", bg: lucroAbertoBRL >= 0 ? "rgba(74,222,128,0.06)" : "rgba(248,113,113,0.06)", border: lucroAbertoBRL >= 0 ? "rgba(74,222,128,0.2)" : "rgba(248,113,113,0.2)" },
+          { label: "Lucro realizado", valor: `R$ ${fmt(lucroRealizadoBRL)}`, pct: mediaRetorno ? ` (${parseFloat(mediaRetorno) >= 0 ? "+" : ""}${mediaRetorno}% por trade)` : "", sub: `${historico.length} trades encerrados · dinheiro no bolso`, cor: lucroRealizadoBRL >= 0 ? "#4ade80" : "#f87171", bg: lucroRealizadoBRL >= 0 ? "rgba(74,222,128,0.06)" : "rgba(248,113,113,0.06)", border: lucroRealizadoBRL >= 0 ? "rgba(74,222,128,0.2)" : "rgba(248,113,113,0.2)" },
+          { label: "Resultado acumulado", valor: `R$ ${fmt(resultadoTotalBRL)}`, sub: "realizado + em aberto", cor: resultadoTotalBRL >= 0 ? "#a78bfa" : "#f87171", bg: "rgba(167,139,250,0.06)", border: "rgba(167,139,250,0.2)" },
         ].map((card, i) => (
           <div key={i} style={{ padding:"16px", borderRadius:"12px", background: card.bg, border:`1px solid ${card.border}` }}>
             <div style={{ fontSize:"12px", color:"#94a3b8", marginBottom:"6px" }}>{card.label}</div>
@@ -607,7 +618,7 @@ export default function Portfolio() {
       {/* ── LINHA 2: PERFORMANCE E RISCO ── */}
       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(200px, 1fr))", gap:"12px", marginBottom:"24px" }}>
         {[
-          { label: "💼 Patrimônio Investido", valor: `R$ ${fmt(invB3 + (invIntl * dolar))}`, sub: `B3: R$ ${fmt(invB3)} | Intl: US$ ${fmt(invIntl)}`, cor: "#38bdf8", bg: "rgba(56,189,248,0.04)", border: "rgba(56,189,248,0.15)" },
+                    { label: "Total movimentado", valor: `R$ ${fmt(capitalMovimentadoBRL)}`, sub: "soma de tudo já comprado (o mesmo dinheiro conta cada vez que gira)", cor: "#94a3b8", bg: "rgba(148,163,184,0.04)", border: "rgba(148,163,184,0.15)" },
           ...(historico.length > 0 ? [{
             label: "🎯 Taxa de Acerto", valor: `${taxaAcerto}%`,
             sub: `${historico.filter(h=>h.pl>=0).length} lucro / ${historico.filter(h=>h.pl<0).length} prejuízo · ${historico.length} trades`,
