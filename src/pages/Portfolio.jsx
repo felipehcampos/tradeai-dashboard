@@ -402,6 +402,69 @@ export default function Portfolio() {
     .filter(h => h.mercado !== "B3")
     .reduce((acc,h) => acc + (parseFloat(h.preco_entrada)||0) * (parseFloat(h.quantidade)||0), 0)
   const capitalMovimentadoBRL = capMovFechadoBR + (capMovFechadoUS * dolar) + patrimonioInvestidoBRL
+  // ── METRICAS FINANCEIRAS (aba Performance) ──
+  // Dinheiro que entrou e saiu de cada trade fechado, ja convertido pra BRL.
+  const _capInv = (h) => {
+    const v = (parseFloat(h.preco_entrada) || 0) * (parseFloat(h.quantidade) || 0)
+    return h.mercado === "B3" ? v : v * dolar
+  }
+  const _capRec = (h) => {
+    const v = (parseFloat(h.preco_saida) || 0) * (parseFloat(h.quantidade) || 0)
+    return h.mercado === "B3" ? v : v * dolar
+  }
+
+  const totalComprado = historico.reduce((acc, h) => acc + _capInv(h), 0)
+  const totalVendido  = historico.reduce((acc, h) => acc + _capRec(h), 0)
+  const retornoSobreMovimentado = totalComprado > 0
+    ? ((totalVendido - totalComprado) / totalComprado * 100)
+    : 0
+
+  const vencedores = historico.filter(h => parseFloat(h.pl) >= 0)
+  const perdedores = historico.filter(h => parseFloat(h.pl) < 0)
+
+  const ganhoMedio = vencedores.length > 0
+    ? vencedores.reduce((acc, h) => acc + parseFloat(h.pl_pct || 0), 0) / vencedores.length
+    : 0
+  const perdaMedia = perdedores.length > 0
+    ? perdedores.reduce((acc, h) => acc + parseFloat(h.pl_pct || 0), 0) / perdedores.length
+    : 0
+
+  const melhorTrade = historico.length > 0
+    ? historico.reduce((a, b) => parseFloat(a.pl_pct || 0) > parseFloat(b.pl_pct || 0) ? a : b)
+    : null
+  const piorTrade = historico.length > 0
+    ? historico.reduce((a, b) => parseFloat(a.pl_pct || 0) < parseFloat(b.pl_pct || 0) ? a : b)
+    : null
+
+  // Curva de lucro acumulado, do trade mais antigo pro mais novo.
+  const curvaAcumulada = (() => {
+    const ordenado = [...historico]
+      .filter(h => h.data_saida)
+      .sort((a, b) => new Date(a.data_saida) - new Date(b.data_saida))
+    let soma = 0
+    return ordenado.map(h => {
+      const pl = h.mercado === "B3" ? parseFloat(h.pl || 0) : parseFloat(h.pl || 0) * dolar
+      soma += pl
+      return {
+        data: new Date(h.data_saida).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }),
+        ticker: h.ticker,
+        acumulado: parseFloat(soma.toFixed(2))
+      }
+    })
+  })()
+
+  // MAE: quanto cada trade chegou a ficar negativo antes de terminar.
+  // Serve pra saber se o stop esta apertado demais (matando vencedores).
+  const tradesComMAE = historico
+    .filter(h => h.mae_pct !== null && h.mae_pct !== undefined)
+    .map(h => ({
+      ...h,
+      maeNum: parseFloat(h.mae_pct),
+      resultNum: parseFloat(h.pl_pct || 0)
+    }))
+    .sort((a, b) => a.maeNum - b.maeNum)
+
+  const vencedoresQueSofreram = tradesComMAE.filter(t => t.resultNum >= 0 && t.maeNum <= -4).length
 
   const mediaRetorno = historico.length > 0
     ? (historico.reduce((acc, h) => acc + parseFloat(h.pl_pct), 0) / historico.length).toFixed(2)
@@ -948,6 +1011,132 @@ export default function Portfolio() {
 
       {/* ── ABA: PERFORMANCE MENSAL ── */}
       {abaAtiva === "performance" && (
+        {/* ── O CAMINHO DO DINHEIRO ── */}
+          <div style={{ background:"#0d1829", border:"1px solid #1e293b", borderRadius:"12px", padding:"24px", marginBottom:"20px" }}>
+            <div style={{ fontSize:"13px", fontWeight:"700", color:"#94a3b8", marginBottom:"20px" }}>O CAMINHO DO DINHEIRO</div>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-around", flexWrap:"wrap", gap:"16px" }}>
+              <div style={{ textAlign:"center", minWidth:"140px" }}>
+                <div style={{ fontSize:"11px", color:"#64748b", marginBottom:"6px" }}>Comprei</div>
+                <div style={{ fontSize:"26px", fontWeight:"bold", color:"#cbd5e1" }}>R$ {fmt(totalComprado)}</div>
+                <div style={{ fontSize:"10px", color:"#475569", marginTop:"4px" }}>{historico.length} trades</div>
+              </div>
+              <div style={{ fontSize:"24px", color:"#334155" }}>→</div>
+              <div style={{ textAlign:"center", minWidth:"140px" }}>
+                <div style={{ fontSize:"11px", color:"#64748b", marginBottom:"6px" }}>Vendi</div>
+                <div style={{ fontSize:"26px", fontWeight:"bold", color:"#cbd5e1" }}>R$ {fmt(totalVendido)}</div>
+                <div style={{ fontSize:"10px", color:"#475569", marginTop:"4px" }}>tudo que voltou</div>
+              </div>
+              <div style={{ fontSize:"24px", color:"#334155" }}>=</div>
+              <div style={{ textAlign:"center", minWidth:"160px" }}>
+                <div style={{ fontSize:"11px", color:"#64748b", marginBottom:"6px" }}>Sobrou</div>
+                <div style={{ fontSize:"30px", fontWeight:"bold", color: (totalVendido - totalComprado) >= 0 ? "#4ade80" : "#f87171" }}>
+                  R$ {fmt(totalVendido - totalComprado)}
+                </div>
+                <div style={{ fontSize:"12px", color: retornoSobreMovimentado >= 0 ? "#4ade80" : "#f87171", marginTop:"4px", fontWeight:"600" }}>
+                  {retornoSobreMovimentado >= 0 ? "+" : ""}{retornoSobreMovimentado.toFixed(2)}% sobre o movimentado
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ── COMO VOCE OPERA ── */}
+          <div style={{ background:"#0d1829", border:"1px solid #1e293b", borderRadius:"12px", padding:"20px", marginBottom:"20px" }}>
+            <div style={{ fontSize:"13px", fontWeight:"700", color:"#94a3b8", marginBottom:"16px" }}>COMO VOCÊ OPERA</div>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(150px, 1fr))", gap:"16px" }}>
+              <div>
+                <div style={{ fontSize:"11px", color:"#64748b", marginBottom:"4px" }}>Quando acerta, ganha</div>
+                <div style={{ fontSize:"22px", fontWeight:"bold", color:"#4ade80" }}>+{ganhoMedio.toFixed(2)}%</div>
+                <div style={{ fontSize:"10px", color:"#475569" }}>média de {vencedores.length} trades</div>
+              </div>
+              <div>
+                <div style={{ fontSize:"11px", color:"#64748b", marginBottom:"4px" }}>Quando erra, perde</div>
+                <div style={{ fontSize:"22px", fontWeight:"bold", color:"#f87171" }}>{perdaMedia.toFixed(2)}%</div>
+                <div style={{ fontSize:"10px", color:"#475569" }}>média de {perdedores.length} trades</div>
+              </div>
+              <div>
+                <div style={{ fontSize:"11px", color:"#64748b", marginBottom:"4px" }}>Melhor trade</div>
+                <div style={{ fontSize:"22px", fontWeight:"bold", color:"#4ade80" }}>
+                  {melhorTrade ? `+${parseFloat(melhorTrade.pl_pct).toFixed(2)}%` : "—"}
+                </div>
+                <div style={{ fontSize:"10px", color:"#475569" }}>{melhorTrade ? melhorTrade.ticker : ""}</div>
+              </div>
+              <div>
+                <div style={{ fontSize:"11px", color:"#64748b", marginBottom:"4px" }}>Pior trade</div>
+                <div style={{ fontSize:"22px", fontWeight:"bold", color:"#f87171" }}>
+                  {piorTrade ? `${parseFloat(piorTrade.pl_pct).toFixed(2)}%` : "—"}
+                </div>
+                <div style={{ fontSize:"10px", color:"#475569" }}>{piorTrade ? piorTrade.ticker : ""}</div>
+              </div>
+              <div>
+                <div style={{ fontSize:"11px", color:"#64748b", marginBottom:"4px" }}>Acerto</div>
+                <div style={{ fontSize:"22px", fontWeight:"bold", color: parseFloat(taxaAcerto) >= 60 ? "#4ade80" : "#f59e0b" }}>{taxaAcerto}%</div>
+                <div style={{ fontSize:"10px", color:"#475569" }}>{vencedores.length} de {historico.length}</div>
+              </div>
+            </div>
+            {perdedores.length > 0 && ganhoMedio > 0 && (
+              <div style={{ marginTop:"16px", paddingTop:"16px", borderTop:"1px solid #1e293b", fontSize:"12px", color:"#94a3b8" }}>
+                Você ganha {(ganhoMedio / Math.abs(perdaMedia)).toFixed(1)}x mais quando acerta do que perde quando erra.
+              </div>
+            )}
+          </div>
+
+          {/* ── LUCRO ACUMULADO ── */}
+          {curvaAcumulada.length > 1 && (
+            <div style={{ background:"#0d1829", border:"1px solid #1e293b", borderRadius:"12px", padding:"20px", marginBottom:"20px" }}>
+              <div style={{ fontSize:"13px", fontWeight:"700", color:"#94a3b8", marginBottom:"16px" }}>LUCRO ACUMULADO</div>
+              <ResponsiveContainer width="100%" height={240}>
+                <LineChart data={curvaAcumulada}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                  <XAxis dataKey="data" tick={{ fontSize:11, fill:"#64748b" }} />
+                  <YAxis tick={{ fontSize:11, fill:"#64748b" }} />
+                  <Tooltip
+                    contentStyle={{ background:"#0f172a", border:"1px solid #1e293b", borderRadius:"8px" }}
+                    formatter={(value) => [`R$ ${fmt(value)}`, "Acumulado"]}
+                    labelFormatter={(label, payload) => payload && payload[0] ? `${payload[0].payload.ticker} · ${label}` : label}
+                  />
+                  <Line type="monotone" dataKey="acumulado" stroke="#4ade80" strokeWidth={2} dot={{ r:3, fill:"#4ade80" }} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+
+          {/* ── CALIBRAGEM DO STOP ── */}
+          {tradesComMAE.length > 0 && (
+            <div style={{ background:"#0d1829", border:"1px solid #1e293b", borderRadius:"12px", padding:"20px", marginBottom:"20px" }}>
+              <div style={{ fontSize:"13px", fontWeight:"700", color:"#94a3b8", marginBottom:"8px" }}>CALIBRAGEM DO STOP</div>
+              <div style={{ fontSize:"12px", color:"#64748b", marginBottom:"16px" }}>
+                Quanto cada trade chegou a ficar negativo antes de terminar. Vencedores que sofreram muito indicam stop apertado demais.
+              </div>
+              {vencedoresQueSofreram > 0 && (
+                <div style={{ padding:"10px 14px", borderRadius:"8px", background:"rgba(245,158,11,0.08)", border:"1px solid rgba(245,158,11,0.2)", marginBottom:"16px", fontSize:"12px", color:"#f59e0b" }}>
+                  {vencedoresQueSofreram} trade{vencedoresQueSofreram !== 1 ? "s" : ""} que deu{vencedoresQueSofreram !== 1 ? "ram" : ""} lucro chegou a mais de 4% negativo antes de virar.
+                </div>
+              )}
+              <div style={{ display:"flex", flexDirection:"column", gap:"8px" }}>
+                {tradesComMAE.map((t, i) => {
+                  const larguraMAE = Math.min(Math.abs(t.maeNum) * 8, 100)
+                  return (
+                    <div key={i} style={{ display:"flex", alignItems:"center", gap:"12px", fontSize:"12px" }}>
+                      <div style={{ width:"80px", color:"#cbd5e1", fontWeight:"600" }}>{t.ticker.replace(".SA","")}</div>
+                      <div style={{ width:"70px", color: t.maeNum <= -4 ? "#f87171" : "#64748b", textAlign:"right" }}>
+                        {t.maeNum.toFixed(2)}%
+                      </div>
+                      <div style={{ flex:1, height:"6px", background:"#1e293b", borderRadius:"3px", overflow:"hidden" }}>
+                        <div style={{ width:`${larguraMAE}%`, height:"100%", background: t.maeNum <= -4 ? "#f87171" : "#475569", borderRadius:"3px" }} />
+                      </div>
+                      <div style={{ width:"70px", textAlign:"right", color: t.resultNum >= 0 ? "#4ade80" : "#f87171", fontWeight:"600" }}>
+                        {t.resultNum >= 0 ? "+" : ""}{t.resultNum.toFixed(2)}%
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+              <div style={{ display:"flex", gap:"20px", marginTop:"16px", paddingTop:"12px", borderTop:"1px solid #1e293b", fontSize:"11px", color:"#475569" }}>
+                <span>Barra = quanto ficou negativo no pior momento</span>
+                <span>Direita = resultado final</span>
+              </div>
+            </div>
+          )}
         <>
           {dadosMensais.length === 0 ? (
             <div style={{ textAlign:"center", padding:"60px 20px", color:"#64748b" }}>
