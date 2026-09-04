@@ -1010,6 +1010,7 @@ export default function Portfolio() {
       )}
 
       {/* ── ABA: PERFORMANCE MENSAL ── */}
+        <>
       {abaAtiva === "performance" && (
         {/* ── O CAMINHO DO DINHEIRO ── */}
           <div style={{ background:"#0d1829", border:"1px solid #1e293b", borderRadius:"12px", padding:"24px", marginBottom:"20px" }}>
@@ -1137,7 +1138,6 @@ export default function Portfolio() {
               </div>
             </div>
           )}
-        <>
           {dadosMensais.length === 0 ? (
             <div style={{ textAlign:"center", padding:"60px 20px", color:"#64748b" }}>
               <div style={{ fontSize:"40px", marginBottom:"12px" }}>📊</div>
