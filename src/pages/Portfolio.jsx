@@ -1009,9 +1009,8 @@ export default function Portfolio() {
         </>
       )}
 
-      {/* ── ABA: PERFORMANCE MENSAL ── */}
-        <>
       {abaAtiva === "performance" && (
+        <>
         {/* ── O CAMINHO DO DINHEIRO ── */}
           <div style={{ background:"#0d1829", border:"1px solid #1e293b", borderRadius:"12px", padding:"24px", marginBottom:"20px" }}>
             <div style={{ fontSize:"13px", fontWeight:"700", color:"#94a3b8", marginBottom:"20px" }}>O CAMINHO DO DINHEIRO</div>
