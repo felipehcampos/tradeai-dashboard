@@ -112,7 +112,9 @@ export default function Portfolio() {
           pct_stop: p.pct_stop != null ? parseFloat(p.pct_stop) : null,
           origem: normOrigem(p.origem),
           data: p.data_entrada || p.criado_em,
-          dias: p.dias != null ? parseInt(p.dias) : diasNaOperacao(p.data_entrada || p.criado_em)
+          dias: p.dias != null ? parseInt(p.dias) : diasNaOperacao(p.data_entrada || p.criado_em),
+          mfe_pct: p.mfe_pct != null ? parseFloat(p.mfe_pct) : null,
+          mae_pct: p.mae_pct != null ? parseFloat(p.mae_pct) : null
         }))
         setPosicoes(mapeado)
       }
@@ -145,7 +147,9 @@ export default function Portfolio() {
           pl_pct: h.resultado_pct != null ? parseFloat(h.resultado_pct) : 0,
           status_final: h.status_final || "MANUAL",
           // P&L absoluto reconstruído (o banco guarda %, o dashboard usa R$/US$)
-          pl: (parseFloat(h.preco_saida || 0) - parseFloat(h.preco_entrada || 0)) * parseFloat(h.quantidade || 0)
+          pl: (parseFloat(h.preco_saida || 0) - parseFloat(h.preco_entrada || 0)) * parseFloat(h.quantidade || 0),
+          mfe_pct: h.mfe_pct != null ? parseFloat(h.mfe_pct) : null,
+          mae_pct: h.mae_pct != null ? parseFloat(h.mae_pct) : null
         }))
         setHistorico(mapeado)
       }
