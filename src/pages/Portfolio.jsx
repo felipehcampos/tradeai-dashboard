@@ -808,7 +808,7 @@ export default function Portfolio() {
               <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"13px", minWidth:"1100px" }}>
                 <thead>
                   <tr style={{ borderBottom:"1px solid #1e293b" }}>
-                    {["Ticker","Nome","Mercado","Setor","Qtd","Entrada","Valor Invest.","Preço Atual","P&L","Alvo/Stop","Dias","Ações"].map(h => (
+                                        {["Ticker","Nome","Mercado","Setor","Qtd","Entrada","Valor Invest.","Preço Atual","P&L","MFE / MAE","Alvo/Stop","Dias","Ações"].map(h=> (
                       <th key={h} style={{ padding:"12px 10px", textAlign:"left", color:"#64748b", fontSize:"11px", fontWeight:"600", textTransform:"uppercase", whiteSpace:"nowrap" }}>{h}</th>
                     ))}
                   </tr>
@@ -859,6 +859,14 @@ export default function Portfolio() {
                             {emLucro ? "▲" : "▼"} {moeda(p.mercado)} {fmt(Math.abs(pl))}
                           </div>
                           <div style={{ fontSize:"11px", color: emLucro ? "#4ade80" : "#f87171" }}>{emLucro ? "+" : ""}{plPct}%</div>
+                        </td>
+                                                <td style={{ padding:"12px 10px", fontSize:"11px" }}>
+                          <div style={{ color:"#4ade80" }}>
+                            {p.mfe_pct != null ? `+${parseFloat(p.mfe_pct).toFixed(2)}%` : "—"}
+                          </div>
+                          <div style={{ color:"#f87171", marginTop:"2px" }}>
+                            {p.mae_pct != null ? `${parseFloat(p.mae_pct).toFixed(2)}%` : "—"}
+                          </div>
                         </td>
                         <td style={{ padding:"12px 10px", minWidth:"180px" }}>
                           <div style={{ display:"flex", justifyContent:"space-between", fontSize:"10px", marginBottom:"3px" }}>
@@ -928,7 +936,7 @@ export default function Portfolio() {
                 <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"13px", minWidth:"1000px" }}>
                   <thead>
                     <tr style={{ borderBottom:"1px solid #1e293b" }}>
-                      {["Ticker","Nome","Tipo","Qtd","Entrada","Saída","P&L","Retorno","Dias","Data Saída","Ações"].map(h => (
+                      {["Ticker","Nome","Tipo","Qtd","Entrada","Saída","P&L","Retorno","MFE / MAE","Dias","Data Saída","Ações"].map(h => (
                         <th key={h} style={{ padding:"12px 10px", textAlign:"left", color:"#64748b", fontSize:"11px", fontWeight:"600", textTransform:"uppercase", whiteSpace:"nowrap" }}>{h}</th>
                       ))}
                     </tr>
@@ -959,6 +967,8 @@ export default function Portfolio() {
                                 </div>
                               </td>
                               <td style={{ padding:"8px" }}></td>
+                                                            <td style={{ padding:"8px" }}></td>
+                              <td style={{ padding:"8px" }}></td>
                               <td style={{ padding:"8px" }}>
                                 <div style={{ display:"flex", gap:"4px" }}>
                                   <button onClick={() => salvarEdicaoHist(h.id)} style={{ padding:"4px 8px", borderRadius:"4px", border:"none", cursor:"pointer", background:"#16a34a", color:"white", fontSize:"11px", fontWeight:"600" }}>✓</button>
@@ -979,6 +989,14 @@ export default function Portfolio() {
                               <td style={{ padding:"12px 10px", color:"#94a3b8" }}>{moeda(h.mercado)} {fmt(h.preco_entrada)}</td>
                               <td style={{ padding:"12px 10px", color:"#94a3b8" }}>{moeda(h.mercado)} {fmt(h.preco_saida)}</td>
                               <td style={{ padding:"12px 10px" }}>
+                                                              <td style={{ padding:"12px 10px", fontSize:"11px" }}>
+                                <div style={{ color:"#4ade80" }}>
+                                  {h.mfe_pct != null ? `+${parseFloat(h.mfe_pct).toFixed(2)}%` : "—"}
+                                </div>
+                                <div style={{ color:"#f87171", marginTop:"2px" }}>
+                                  {h.mae_pct != null ? `${parseFloat(h.mae_pct).toFixed(2)}%` : "—"}
+                                </div>
+                              </td>
                                 <span style={{ color: h.pl >= 0 ? "#4ade80" : "#f87171", fontWeight:"700", fontSize:"13px" }}>
                                   {h.pl >= 0 ? "▲" : "▼"} {moeda(h.mercado)} {fmt(Math.abs(h.pl))}
                                 </span>
