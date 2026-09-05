@@ -14,6 +14,7 @@ export default function Mercado() {
   const [totalAnalisados, setTotalAnalisados] = useState(0)
   const [bannerStatus, setBannerStatus] = useState(null) // null | "executando" | "concluido"
   const [sinaisAntesDoScan, setSinaisAntesDoScan] = useState(0)
+  const [ordenacao, setOrdenacao] = useState({ campo: null, direcao: "desc" })
   const pollingRef = useRef(null)
 
   const carregarSinais = () => {
@@ -22,11 +23,14 @@ export default function Mercado() {
       .then(r => {
         const dados = r.data.dados || []
         setTotalAnalisados(dados.length)
+        // Ordem padrao: COMPRAR antes de MANTER, sem criterio de qualidade
+        // dentro de cada grupo. A confianca nao entra: a auditoria mostrou que
+        // ela e anti-preditiva (sinais abaixo de 70 renderam mais).
         const filtrados = dados.filter(s => s.sinal !== "EVITAR")
         filtrados.sort((a, b) => {
           if (a.sinal === "COMPRAR" && b.sinal !== "COMPRAR") return -1
           if (a.sinal !== "COMPRAR" && b.sinal === "COMPRAR") return 1
-          return b.confianca - a.confianca
+          return 0
         })
         setSinais(filtrados)
       })
@@ -160,8 +164,50 @@ export default function Mercado() {
     return parseFloat(((precoNovo - precoAntigo) / precoAntigo * 100).toFixed(2))
   }
 
+  // ── ORDENACAO POR COLUNA ──
+  // Extrai o valor comparavel de cada campo. Nulos vao sempre pro fim,
+  // independente da direcao, pra nao poluir o topo da lista.
+  const valorOrdenacao = (s, campo) => {
+    const preco = parseFloat(s.preco_atual) || 0
+    switch (campo) {
+      case "ticker":    return s.ticker || ""
+      case "nome":      return s.nome || ""
+      case "sinal":     return s.sinal === "COMPRAR" ? 1 : 0
+      case "desconto":  return s.dist_media_6m != null ? parseFloat(s.dist_media_6m) : null
+      case "esticado":  return (s.mme_20 != null && parseFloat(s.mme_20) > 0)
+                          ? ((preco - parseFloat(s.mme_20)) / parseFloat(s.mme_20)) * 100 : null
+      case "volume":    return s.volume != null ? parseFloat(s.volume) : null
+      case "preco":     return preco
+      case "alvo":      return parseFloat(s.alvo_lucro) || null
+      case "stop":      return parseFloat(s.stop_loss) || null
+      case "sentim":    return s.score_sentimento != null ? parseFloat(s.score_sentimento) : null
+      case "data":      return s.criado_em ? new Date(s.criado_em).getTime() : null
+      default:          return null
+    }
+  }
+
+  const alternarOrdenacao = (campo) => {
+    setOrdenacao(prev => prev.campo === campo
+      ? { campo, direcao: prev.direcao === "asc" ? "desc" : "asc" }
+      : { campo, direcao: "asc" })
+  }
+
   const mercados = ["TODOS", "B3", "NASDAQ", "NYSE", "CRYPTO", "COMMODITY"]
-  const sinaisFiltrados = filtroMercado === "TODOS" ? sinais : sinais.filter(s => s.mercado === filtroMercado)
+  const sinaisPorMercado = filtroMercado === "TODOS" ? sinais : sinais.filter(s => s.mercado === filtroMercado)
+  const sinaisFiltrados = (() => {
+    if (!ordenacao.campo) return sinaisPorMercado
+    const copia = [...sinaisPorMercado]
+    copia.sort((a, b) => {
+      const va = valorOrdenacao(a, ordenacao.campo)
+      const vb = valorOrdenacao(b, ordenacao.campo)
+      if (va == null && vb == null) return 0
+      if (va == null) return 1
+      if (vb == null) return -1
+      const cmp = typeof va === "string" ? va.localeCompare(vb) : va - vb
+      return ordenacao.direcao === "asc" ? cmp : -cmp
+    })
+    return copia
+  })()
   const totalComprar = sinais.filter(s => s.sinal === "COMPRAR").length
   const totalManter = sinais.filter(s => s.sinal === "MANTER").length
   const temPrecosAtuais = Object.keys(precosAtuais).length > 0
@@ -318,6 +364,19 @@ export default function Mercado() {
           <span><strong style={{ color: "#94a3b8" }}>Desconto</strong> — abaixo da média de 6 meses. Verde = descontado de verdade.</span>
           <span><strong style={{ color: "#94a3b8" }}>Esticado</strong> — distância da MME20. Verde = colado na média, ainda não correu.</span>
           <span><strong style={{ color: "#94a3b8" }}>Volume</strong> — verde acima de 5M, vermelho abaixo de 2M.</span>
+          <span style={{ color: "#475569" }}>Clique no cabeçalho para ordenar.</span>
+          {ordenacao.campo && (
+            <button
+              onClick={() => setOrdenacao({ campo: null, direcao: "desc" })}
+              style={{
+                padding: "2px 10px", borderRadius: "6px", border: "1px solid #334155",
+                background: "transparent", color: "#38bdf8", fontSize: "11px",
+                cursor: "pointer", marginLeft: "auto"
+              }}
+            >
+              Limpar ordenação
+            </button>
+          )}
         </div>
       )}
 
@@ -366,15 +425,46 @@ export default function Mercado() {
             </colgroup>
             <thead>
               <tr style={{ background: "#0a1520" }}>
-                {["Ticker", "Nome", "Mercado", "Sinal", "Desconto", "Esticado", "Volume", "Preço Atual", "Alvo", "Stop", "Sentim.", "Data", "Ação"].map(h => (
-                  <th key={h} style={{
-                    padding: "14px 10px", textAlign: "left", color: "#64748b",
-                    fontSize: "11px", fontWeight: "700", letterSpacing: "0.06em",
-                    borderBottom: "1px solid #1e293b", whiteSpace: "nowrap"
-                  }}>
-                    {h.toUpperCase()}
-                  </th>
-                ))}
+                {[
+                  { label: "Ticker", campo: "ticker" },
+                  { label: "Nome", campo: "nome" },
+                  { label: "Mercado", campo: null },
+                  { label: "Sinal", campo: "sinal" },
+                  { label: "Desconto", campo: "desconto" },
+                  { label: "Esticado", campo: "esticado" },
+                  { label: "Volume", campo: "volume" },
+                  { label: "Preço Atual", campo: "preco" },
+                  { label: "Alvo", campo: "alvo" },
+                  { label: "Stop", campo: "stop" },
+                  { label: "Sentim.", campo: "sentim" },
+                  { label: "Data", campo: "data" },
+                  { label: "Ação", campo: null }
+                ].map(col => {
+                  const ativa = ordenacao.campo === col.campo && col.campo != null
+                  return (
+                    <th
+                      key={col.label}
+                      onClick={col.campo ? () => alternarOrdenacao(col.campo) : undefined}
+                      style={{
+                        padding: "14px 10px", textAlign: "left",
+                        color: ativa ? "#38bdf8" : "#64748b",
+                        fontSize: "11px", fontWeight: "700", letterSpacing: "0.06em",
+                        borderBottom: ativa ? "2px solid #38bdf8" : "1px solid #1e293b",
+                        whiteSpace: "nowrap",
+                        cursor: col.campo ? "pointer" : "default",
+                        userSelect: "none",
+                        transition: "color 0.15s"
+                      }}
+                    >
+                      {col.label.toUpperCase()}
+                      {col.campo && (
+                        <span style={{ marginLeft: "4px", fontSize: "9px", opacity: ativa ? 1 : 0.3 }}>
+                          {ativa ? (ordenacao.direcao === "asc" ? "\u25B2" : "\u25BC") : "\u21C5"}
+                        </span>
+                      )}
+                    </th>
+                  )
+                })}
               </tr>
             </thead>
             <tbody style={{ opacity: atualizandoPrecos || loading ? 0.4 : 1, transition: "opacity 0.3s ease-in-out" }}>
