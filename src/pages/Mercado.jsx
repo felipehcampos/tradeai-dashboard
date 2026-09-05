@@ -308,6 +308,19 @@ export default function Mercado() {
         ))}
       </div>
 
+      {/* Legenda das colunas de leitura */}
+      {!loading && sinaisFiltrados.length > 0 && (
+        <div style={{
+          display: "flex", gap: "20px", flexWrap: "wrap", marginBottom: "12px",
+          padding: "10px 14px", background: "#0d1829", border: "1px solid #1e293b",
+          borderRadius: "8px", fontSize: "11px", color: "#64748b"
+        }}>
+          <span><strong style={{ color: "#94a3b8" }}>Desconto</strong> — abaixo da média de 6 meses. Verde = descontado de verdade.</span>
+          <span><strong style={{ color: "#94a3b8" }}>Esticado</strong> — distância da MME20. Verde = colado na média, ainda não correu.</span>
+          <span><strong style={{ color: "#94a3b8" }}>Volume</strong> — verde acima de 5M, vermelho abaixo de 2M.</span>
+        </div>
+      )}
+
       {/* Tabela */}
       {loading ? (
         <div style={{ textAlign: "center", padding: "60px", color: "#64748b" }}>
@@ -335,23 +348,25 @@ export default function Mercado() {
         </div>
       ) : (
         <div style={{ overflowX: "auto", borderRadius: "12px", border: "1px solid #1e293b", width: "100%" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed", minWidth: "1100px" }}>
             <colgroup>
               <col style={{ width: "7%" }} />
-              <col style={{ width: "16%" }} />
+              <col style={{ width: "13%" }} />
+              <col style={{ width: "7%" }} />
               <col style={{ width: "8%" }} />
-              <col style={{ width: "9%" }} />
-              <col style={{ width: "10%" }} />
-              <col style={{ width: "10%" }} />
-              <col style={{ width: "10%" }} />
-              <col style={{ width: "10%" }} />
+              <col style={{ width: "7%" }} />
+              <col style={{ width: "7%" }} />
               <col style={{ width: "6%" }} />
-              <col style={{ width: "7%" }} />
-              <col style={{ width: "7%" }} />
+              <col style={{ width: "9%" }} />
+              <col style={{ width: "9%" }} />
+              <col style={{ width: "9%" }} />
+              <col style={{ width: "6%" }} />
+              <col style={{ width: "6%" }} />
+              <col style={{ width: "6%" }} />
             </colgroup>
             <thead>
               <tr style={{ background: "#0a1520" }}>
-                {["Ticker", "Nome", "Mercado", "Sinal", "Confiança", "Preço Atual", "Alvo", "Stop", "Humor", "Data", "Ação"].map(h => (
+                {["Ticker", "Nome", "Mercado", "Sinal", "Desconto", "Esticado", "Volume", "Preço Atual", "Alvo", "Stop", "Sentim.", "Data", "Ação"].map(h => (
                   <th key={h} style={{
                     padding: "14px 10px", textAlign: "left", color: "#64748b",
                     fontSize: "11px", fontWeight: "700", letterSpacing: "0.06em",
@@ -369,6 +384,11 @@ export default function Mercado() {
                 const precoBase = parseFloat(s.preco_atual) || 1
                 const percentualAlvo = s.pct_alvo || ((parseFloat(s.alvo_lucro) - precoBase) / precoBase * 100).toFixed(1)
                 const percentualStop = s.pct_stop || ((precoBase - parseFloat(s.stop_loss)) / precoBase * 100).toFixed(1)
+                const descontoMedia = s.dist_media_6m != null ? parseFloat(s.dist_media_6m) : null
+                const distMME = (s.mme_20 != null && parseFloat(s.mme_20) > 0)
+                  ? ((precoBase - parseFloat(s.mme_20)) / parseFloat(s.mme_20)) * 100
+                  : null
+                const volMi = s.volume != null ? parseFloat(s.volume) / 1000000 : null
                 return (
                   <tr key={i}
                     style={{
@@ -407,16 +427,32 @@ export default function Mercado() {
                         {s.sinal === "COMPRAR" ? "▲" : "◆"} {s.sinal}
                       </span>
                     </td>
-                    <td style={{ padding: "14px 10px" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                        <div style={{ background: "#1e293b", borderRadius: "4px", height: "5px", width: "40px", flexShrink: 0 }}>
-                          <div style={{
-                            background: s.confianca >= 70 ? "#4ade80" : s.confianca >= 55 ? "#fbbf24" : "#f87171",
-                            borderRadius: "4px", height: "5px", width: `${s.confianca}%`
-                          }} />
-                        </div>
-                        <span style={{ color: "#e2e8f0", fontSize: "12px", fontWeight: "600" }}>{s.confianca}%</span>
-                      </div>
+                    <td style={{
+                      padding: "14px 10px", fontSize: "12px", fontWeight: "600", whiteSpace: "nowrap",
+                      color: descontoMedia == null ? "#475569"
+                        : descontoMedia <= -5 ? "#4ade80"
+                        : descontoMedia < 0 ? "#94a3b8"
+                        : "#f87171"
+                    }}>
+                      {descontoMedia != null ? `${descontoMedia.toFixed(1)}%` : "—"}
+                    </td>
+                    <td style={{
+                      padding: "14px 10px", fontSize: "12px", fontWeight: "600", whiteSpace: "nowrap",
+                      color: distMME == null ? "#475569"
+                        : Math.abs(distMME) <= 2 ? "#4ade80"
+                        : distMME <= 5 ? "#fbbf24"
+                        : "#f87171"
+                    }}>
+                      {distMME != null ? `${distMME >= 0 ? "+" : ""}${distMME.toFixed(1)}%` : "—"}
+                    </td>
+                    <td style={{
+                      padding: "14px 10px", fontSize: "12px", fontWeight: "600", whiteSpace: "nowrap",
+                      color: volMi == null ? "#475569"
+                        : volMi >= 5 ? "#4ade80"
+                        : volMi >= 2 ? "#fbbf24"
+                        : "#f87171"
+                    }}>
+                      {volMi != null ? `${volMi.toFixed(1)}M` : "—"}
                     </td>
                     <td style={{ padding: "14px 10px", whiteSpace: "nowrap" }}>
                       <span style={{ color: "#e2e8f0", fontSize: "12px", fontWeight: "600" }}>
@@ -443,10 +479,15 @@ export default function Mercado() {
                       </span>
                       <span style={{ color: "#ef4444", fontSize: "10px", display: "block" }}>-{percentualStop}%</span>
                     </td>
-                    <td style={{ padding: "14px 10px", textAlign: "center" }}>
-                      <span style={{ fontSize: "18px" }}>
-                        {s.score_sentimento > 0.3 ? "😊" : s.score_sentimento < -0.3 ? "😟" : "😐"}
-                      </span>
+                    <td style={{
+                      padding: "14px 10px", textAlign: "center", fontSize: "12px", fontWeight: "600",
+                      color: s.score_sentimento > 0.3 ? "#4ade80"
+                        : s.score_sentimento < -0.3 ? "#f87171"
+                        : "#94a3b8"
+                    }}>
+                      {s.score_sentimento != null
+                        ? `${s.score_sentimento > 0 ? "+" : ""}${parseFloat(s.score_sentimento).toFixed(2)}`
+                        : "—"}
                     </td>
                     <td style={{ padding: "14px 10px", color: "#64748b", fontSize: "11px", whiteSpace: "nowrap" }}>
                       {formatarData(s.criado_em)}
