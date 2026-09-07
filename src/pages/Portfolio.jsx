@@ -971,7 +971,6 @@ export default function Portfolio() {
                                 </div>
                               </td>
                               <td style={{ padding:"8px" }}></td>
-                                                            <td style={{ padding:"8px" }}></td>
                               <td style={{ padding:"8px" }}></td>
                               <td style={{ padding:"8px" }}>
                                 <div style={{ display:"flex", gap:"4px" }}>
@@ -993,14 +992,6 @@ export default function Portfolio() {
                               <td style={{ padding:"12px 10px", color:"#94a3b8" }}>{moeda(h.mercado)} {fmt(h.preco_entrada)}</td>
                               <td style={{ padding:"12px 10px", color:"#94a3b8" }}>{moeda(h.mercado)} {fmt(h.preco_saida)}</td>
                               <td style={{ padding:"12px 10px" }}>
-                                                              <td style={{ padding:"12px 10px", fontSize:"11px" }}>
-                                <div style={{ color:"#4ade80" }}>
-                                  {h.mfe_pct != null ? `+${parseFloat(h.mfe_pct).toFixed(2)}%` : "—"}
-                                </div>
-                                <div style={{ color:"#f87171", marginTop:"2px" }}>
-                                  {h.mae_pct != null ? `${parseFloat(h.mae_pct).toFixed(2)}%` : "—"}
-                                </div>
-                              </td>
                                 <span style={{ color: h.pl >= 0 ? "#4ade80" : "#f87171", fontWeight:"700", fontSize:"13px" }}>
                                   {h.pl >= 0 ? "▲" : "▼"} {moeda(h.mercado)} {fmt(Math.abs(h.pl))}
                                 </span>
@@ -1009,6 +1000,14 @@ export default function Portfolio() {
                                 <span style={{ padding:"2px 8px", borderRadius:"8px", fontSize:"12px", fontWeight:"600", background: h.pl >= 0 ? "rgba(74,222,128,0.1)" : "rgba(248,113,113,0.1)", color: h.pl >= 0 ? "#4ade80" : "#f87171" }}>
                                   {h.pl >= 0 ? "+" : ""}{h.pl_pct}%
                                 </span>
+                              </td>
+                              <td style={{ padding:"12px 10px", fontSize:"11px" }}>
+                                <div style={{ color:"#4ade80" }}>
+                                  {h.mfe_pct != null ? `+${parseFloat(h.mfe_pct).toFixed(2)}%` : "—"}
+                                </div>
+                                <div style={{ color:"#f87171", marginTop:"2px" }}>
+                                  {h.mae_pct != null ? `${parseFloat(h.mae_pct).toFixed(2)}%` : "—"}
+                                </div>
                               </td>
                               <td style={{ padding:"12px 10px", color:"#94a3b8" }}>{h.dias}d</td>
                               <td style={{ padding:"12px 10px", color:"#94a3b8" }}>{fmtData(h.data_saida)}</td>
