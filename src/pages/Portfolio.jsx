@@ -1055,7 +1055,7 @@ export default function Portfolio() {
                   R$ {fmt(totalVendido - totalComprado)}
                 </div>
                 <div style={{ fontSize:"12px", color: retornoSobreMovimentado >= 0 ? "#4ade80" : "#f87171", marginTop:"4px", fontWeight:"600" }}>
-                  {retornoSobreMovimentado >= 0 ? "+" : ""}{retornoSobreMovimentado.toFixed(2)}% sobre o movimentado
+                                    {retornoSobreMovimentado >= 0 ? "+" : ""}{retornoSobreMovimentado.toFixed(2)}% sobre o comprado
                 </div>
               </div>
             </div>
