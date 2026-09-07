@@ -245,18 +245,18 @@ export default function Portfolio() {
     setEditForm({ quantidade: p.quantidade, preco_entrada: p.preco_entrada })
   }
 
-  const salvarEdicao = async (p) => {
+    const salvarEdicao = async (p) => {
     try {
-      // Sem endpoint PUT de portfolio: recria a linha por id, preservando origem/data/alvo/stop
-      await api.delete(`${API}/portfolio/${p.id}`)
-      await api.post(`${API}/portfolio`, {
-        ticker: p.ticker, nome: p.nome, mercado: p.mercado, setor: p.setor,
+      // UPDATE in-place via PUT — preserva mfe_pct/mae_pct e os extremos.
+      const res = await api.put(`${API}/portfolio/${p.id}`, {
         quantidade: parseFloat(editForm.quantidade),
         preco_medio: parseFloat(editForm.preco_entrada),
-        alvo_lucro: p.alvo_lucro, stop_loss: p.stop_loss,
-        pct_alvo: p.pct_alvo, pct_stop: p.pct_stop,
-        origem: p.origem, data_entrada: p.data
+        preco_entrada: parseFloat(editForm.preco_entrada),
       })
+      if (res.data?.sucesso === false) {
+        alert(res.data.erro || "Erro ao salvar edição.")
+        return
+      }
       await carregarPortfolio()
       setEditando(null)
     } catch {
