@@ -92,6 +92,10 @@ export default function Portfolio() {
   const [ordemData, setOrdemData] = useState("asc")
   const [editHist, setEditHist] = useState(null)      // id do trade do histórico em edição
   const [editHistForm, setEditHistForm] = useState({})
+  // ── Modal de histórico de preços: período e camadas ──
+  const [histPeriodo, setHistPeriodo] = useState("30d")       // "30d" | "3m" | "6m"
+  const [histMostrarEntrada, setHistMostrarEntrada] = useState(true)
+  const [histMostrarAlvoStop, setHistMostrarAlvoStop] = useState(true)
 
   const carregarPortfolio = async () => {
     try {
@@ -175,18 +179,19 @@ export default function Portfolio() {
     buscarCotacaoDolar()
   }, [])
 
-  const abrirHistoricoAtivo = async (p) => {
-    setModalHistorico(p)
+  // Busca o histórico de preços de uma posição para um período dado.
+  // Atualiza o preço atual da posição só na primeira abertura (não ao trocar período).
+  const buscarHistoricoAtivo = async (p, periodo, atualizarPreco = false) => {
     setCarregandoHist(true)
     setDadosHistorico([])
     try {
       const res = await api.get(`${API}/portfolio/historico/${p.ticker}`, {
-        params: { data_inicio: p.data }
+        params: { data_inicio: p.data, periodo }
       })
       if (res.data.sucesso) {
         const dados = res.data.dados || []
         setDadosHistorico(dados)
-        if (dados.length > 0) {
+        if (atualizarPreco && dados.length > 0) {
           const ultimoFechamento = dados[dados.length - 1].fechamento
           setPosicoes(prev => prev.map(pos =>
             pos.id === p.id ? { ...pos, preco_atual: ultimoFechamento } : pos
@@ -199,6 +204,20 @@ export default function Portfolio() {
     } finally {
       setCarregandoHist(false)
     }
+  }
+
+  // Abre o modal: período padrão 30d e busca inicial (atualiza o preço atual).
+  const abrirHistoricoAtivo = async (p) => {
+    setModalHistorico(p)
+    setHistPeriodo("30d")
+    await buscarHistoricoAtivo(p, "30d", true)
+  }
+
+  // Troca o período dentro do modal (rebusca sem mexer no preço atual).
+  const trocarPeriodoHist = async (novoPeriodo) => {
+    if (!modalHistorico) return
+    setHistPeriodo(novoPeriodo)
+    await buscarHistoricoAtivo(modalHistorico, novoPeriodo, false)
   }
 
   const adicionar = async () => {
@@ -553,9 +572,34 @@ export default function Portfolio() {
               <div style={{ fontSize:"17px", fontWeight:"bold", color:"#f1f5f9" }}>📈 Histórico — {modalHistorico.ticker}</div>
               <button onClick={() => setModalHistorico(null)} style={{ background:"none", border:"none", color:"#64748b", cursor:"pointer", fontSize:"16px" }}>✕</button>
             </div>
-            <div style={{ fontSize:"13px", color:"#94a3b8", marginBottom:"16px" }}>
+            <div style={{ fontSize:"13px", color:"#94a3b8", marginBottom:"12px" }}>
               Preço de Entrada Original: {moeda(modalHistorico.mercado)} {fmt(modalHistorico.preco_entrada)}
             </div>
+
+            {/* ── Controles: período e camadas ── */}
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:"10px", marginBottom:"14px" }}>
+              <div style={{ display:"flex", gap:"6px" }}>
+                {[{id:"30d",label:"30d"},{id:"3m",label:"3m"},{id:"6m",label:"6m"}].map(per => (
+                  <button key={per.id} onClick={() => trocarPeriodoHist(per.id)} disabled={carregandoHist}
+                    style={{ padding:"5px 14px", borderRadius:"20px", border:"none", cursor: carregandoHist ? "default" : "pointer", fontSize:"12px", fontWeight: histPeriodo === per.id ? "700" : "400", background: histPeriodo === per.id ? "#38bdf8" : "#1e293b", color: histPeriodo === per.id ? "#0f172a" : "#64748b", transition:"all 0.2s" }}>
+                    {per.label}
+                  </button>
+                ))}
+              </div>
+              <div style={{ display:"flex", gap:"6px" }}>
+                <button onClick={() => setHistMostrarEntrada(v => !v)}
+                  style={{ padding:"5px 12px", borderRadius:"20px", border:`1px solid ${histMostrarEntrada ? "#f59e0b" : "#334155"}`, cursor:"pointer", fontSize:"11px", fontWeight:"600", background: histMostrarEntrada ? "rgba(245,158,11,0.15)" : "#1e293b", color: histMostrarEntrada ? "#f59e0b" : "#64748b", transition:"all 0.2s" }}>
+                  Entrada
+                </button>
+                {(modalHistorico.alvo_lucro || modalHistorico.stop_loss) && (
+                  <button onClick={() => setHistMostrarAlvoStop(v => !v)}
+                    style={{ padding:"5px 12px", borderRadius:"20px", border:`1px solid ${histMostrarAlvoStop ? "#4ade80" : "#334155"}`, cursor:"pointer", fontSize:"11px", fontWeight:"600", background: histMostrarAlvoStop ? "rgba(74,222,128,0.12)" : "#1e293b", color: histMostrarAlvoStop ? "#4ade80" : "#64748b", transition:"all 0.2s" }}>
+                    Alvo/Stop
+                  </button>
+                )}
+              </div>
+            </div>
+
             {carregandoHist ? (
               <div style={{ textAlign:"center", padding:"40px", color:"#64748b" }}>
                 <div style={{ fontSize:"13px" }}>Buscando histórico diário...</div>
@@ -566,14 +610,25 @@ export default function Portfolio() {
               </div>
             ) : (
               <>
-                <div style={{ height:"200px", marginBottom:"16px" }}>
+                <div style={{ height:"320px", marginBottom:"16px" }}>
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={dadosHistorico}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                      <XAxis dataKey="data" tick={{ fontSize:10, fill:"#64748b" }} />
+                      <XAxis dataKey="data" tick={{ fontSize:10, fill:"#64748b" }} minTickGap={24} />
                       <YAxis tick={{ fontSize:10, fill:"#64748b" }} domain={['auto','auto']} />
                       <Tooltip formatter={(value) => [`${moeda(modalHistorico.mercado)} ${fmt(value)}`, "Fechamento"]} />
-                      <ReferenceLine y={modalHistorico.preco_entrada} stroke="#f59e0b" strokeDasharray="4 4" />
+                      {histMostrarEntrada && (
+                        <ReferenceLine y={modalHistorico.preco_entrada} stroke="#f59e0b" strokeDasharray="4 4"
+                          label={{ value: `Entrada ${fmt(modalHistorico.preco_entrada)}`, position: "insideTopLeft", fill: "#f59e0b", fontSize: 10 }} />
+                      )}
+                      {histMostrarAlvoStop && modalHistorico.alvo_lucro && (
+                        <ReferenceLine y={modalHistorico.alvo_lucro} stroke="#4ade80" strokeDasharray="4 4"
+                          label={{ value: `Alvo ${fmt(modalHistorico.alvo_lucro)}`, position: "insideTopLeft", fill: "#4ade80", fontSize: 10 }} />
+                      )}
+                      {histMostrarAlvoStop && modalHistorico.stop_loss && (
+                        <ReferenceLine y={modalHistorico.stop_loss} stroke="#f87171" strokeDasharray="4 4"
+                          label={{ value: `Stop ${fmt(modalHistorico.stop_loss)}`, position: "insideBottomLeft", fill: "#f87171", fontSize: 10 }} />
+                      )}
                       <Line type="monotone" dataKey="fechamento" stroke="#38bdf8" strokeWidth={2} dot={false} />
                     </LineChart>
                   </ResponsiveContainer>
