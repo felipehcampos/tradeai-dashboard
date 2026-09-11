@@ -609,8 +609,8 @@ export default function Portfolio() {
                 <div style={{ fontSize:"13px" }}>Nenhum dado encontrado.</div>
               </div>
             ) : (
-              <>
-                <div style={{ height:"420px", marginBottom:"16px", flexShrink:0 }}>
+              <div style={{ display:"flex", gap:"16px", flexWrap:"wrap", flex:1, minHeight:0 }}>
+                <div style={{ height:"420px", flex:"1 1 60%", minWidth:"340px" }}>
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={dadosHistorico} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
@@ -633,13 +633,13 @@ export default function Portfolio() {
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
-                <div style={{ overflowY:"auto", flex:1, border:"1px solid #1e293b", borderRadius:"10px" }}>
-                  <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"13px" }}>
+                <div style={{ height:"420px", flex:"1 1 34%", minWidth:"260px", overflowY:"auto", border:"1px solid #1e293b", borderRadius:"10px" }}>
+                  <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"14px" }}>
                     <thead>
                       <tr style={{ position:"sticky", top:0, background:"#0d1829", zIndex:1 }}>
                         <th style={{ padding:"10px 12px", textAlign:"left", color:"#64748b", borderBottom:"1px solid #1e293b" }}>DATA</th>
-                        <th style={{ padding:"10px 12px", textAlign:"right", color:"#64748b", borderBottom:"1px solid #1e293b" }}>FECHAMENTO</th>
-                        <th style={{ padding:"10px 12px", textAlign:"right", color:"#64748b", borderBottom:"1px solid #1e293b" }}>P&L DESDE ENTRADA</th>
+                        <th style={{ padding:"10px 12px", textAlign:"right", color:"#64748b", borderBottom:"1px solid #1e293b" }}>FECH.</th>
+                        <th style={{ padding:"10px 12px", textAlign:"right", color:"#64748b", borderBottom:"1px solid #1e293b" }}>P&L</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -648,9 +648,9 @@ export default function Portfolio() {
                         const lucro = dia.fechamento >= modalHistorico.preco_entrada
                         return (
                           <tr key={idx} style={{ borderBottom:"1px solid #1e293b" }}>
-                            <td style={{ padding:"8px 12px", color:"#94a3b8" }}>{dia.data}</td>
-                            <td style={{ padding:"8px 12px", textAlign:"right", color:"#f1f5f9" }}>{moeda(modalHistorico.mercado)} {fmt(dia.fechamento)}</td>
-                            <td style={{ padding:"8px 12px", textAlign:"right", color: lucro ? "#4ade80" : "#f87171" }}>
+                            <td style={{ padding:"9px 12px", color:"#94a3b8" }}>{dia.data}</td>
+                            <td style={{ padding:"9px 12px", textAlign:"right", color:"#f1f5f9" }}>{moeda(modalHistorico.mercado)} {fmt(dia.fechamento)}</td>
+                            <td style={{ padding:"9px 12px", textAlign:"right", color: lucro ? "#4ade80" : "#f87171", fontWeight:"600" }}>
                               {lucro ? "▲ +" : "▼ "}{varPct}%
                             </td>
                           </tr>
@@ -659,7 +659,7 @@ export default function Portfolio() {
                     </tbody>
                   </table>
                 </div>
-              </>
+              </div>
             )}
             <button onClick={() => setModalHistorico(null)} style={{ marginTop:"16px", padding:"12px", borderRadius:"8px", border:"1px solid #334155", background:"#1e293b", color:"#94a3b8", cursor:"pointer", fontWeight:"600", fontSize:"13px", flexShrink:0 }}>Fechar</button>
           </div>
