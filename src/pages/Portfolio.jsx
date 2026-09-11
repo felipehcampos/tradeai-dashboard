@@ -610,7 +610,7 @@ export default function Portfolio() {
               </div>
             ) : (
               <div style={{ display:"flex", gap:"16px", flexWrap:"wrap", flex:1, minHeight:0 }}>
-                <div style={{ height:"420px", flex:"1 1 60%", minWidth:"340px" }}>
+                <div style={{ flex:"1 1 60%", minWidth:"340px", minHeight:"360px" }}>
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={dadosHistorico} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
@@ -633,7 +633,7 @@ export default function Portfolio() {
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
-                <div style={{ height:"420px", flex:"1 1 34%", minWidth:"260px", overflowY:"auto", border:"1px solid #1e293b", borderRadius:"10px" }}>
+                <div style={{ flex:"1 1 34%", minWidth:"260px", minHeight:"360px", overflowY:"auto", border:"1px solid #1e293b", borderRadius:"10px" }}>
                   <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"14px" }}>
                     <thead>
                       <tr style={{ position:"sticky", top:0, background:"#0d1829", zIndex:1 }}>
