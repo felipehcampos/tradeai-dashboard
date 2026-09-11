@@ -567,7 +567,7 @@ export default function Portfolio() {
       {/* Modal Histórico de Preços */}
       {modalHistorico && (
         <div onClick={() => setModalHistorico(null)} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.75)", zIndex:1100, display:"flex", alignItems:"center", justifyContent:"center", padding:"20px" }}>
-          <div onClick={e => e.stopPropagation()} style={{ background:"#0d1829", border:"1px solid #1e293b", borderRadius:"16px", padding:"24px", maxWidth:"560px", width:"100%", maxHeight:"85vh", display:"flex", flexDirection:"column" }}>
+          <div onClick={e => e.stopPropagation()} style={{ background:"#0d1829", border:"1px solid #1e293b", borderRadius:"16px", padding:"24px", maxWidth:"1000px", width:"95%", height:"90vh", display:"flex", flexDirection:"column" }}>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"12px" }}>
               <div style={{ fontSize:"17px", fontWeight:"bold", color:"#f1f5f9" }}>📈 Histórico — {modalHistorico.ticker}</div>
               <button onClick={() => setModalHistorico(null)} style={{ background:"none", border:"none", color:"#64748b", cursor:"pointer", fontSize:"16px" }}>✕</button>
@@ -610,36 +610,36 @@ export default function Portfolio() {
               </div>
             ) : (
               <>
-                <div style={{ height:"320px", marginBottom:"16px" }}>
+                <div style={{ height:"420px", marginBottom:"16px", flexShrink:0 }}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={dadosHistorico}>
+                    <LineChart data={dadosHistorico} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                      <XAxis dataKey="data" tick={{ fontSize:10, fill:"#64748b" }} minTickGap={24} />
-                      <YAxis tick={{ fontSize:10, fill:"#64748b" }} domain={['auto','auto']} />
+                      <XAxis dataKey="data" tick={{ fontSize:11, fill:"#64748b" }} minTickGap={40} />
+                      <YAxis tick={{ fontSize:11, fill:"#64748b" }} domain={['auto','auto']} width={52} />
                       <Tooltip formatter={(value) => [`${moeda(modalHistorico.mercado)} ${fmt(value)}`, "Fechamento"]} />
                       {histMostrarEntrada && (
-                        <ReferenceLine y={modalHistorico.preco_entrada} stroke="#f59e0b" strokeDasharray="4 4"
-                          label={{ value: `Entrada ${fmt(modalHistorico.preco_entrada)}`, position: "insideTopLeft", fill: "#f59e0b", fontSize: 10 }} />
+                        <ReferenceLine y={modalHistorico.preco_entrada} stroke="#f59e0b" strokeDasharray="5 4" strokeWidth={1.5}
+                          label={{ value: `Entrada ${fmt(modalHistorico.preco_entrada)}`, position: "right", fill: "#f59e0b", fontSize: 11 }} />
                       )}
                       {histMostrarAlvoStop && modalHistorico.alvo_lucro && (
-                        <ReferenceLine y={modalHistorico.alvo_lucro} stroke="#4ade80" strokeDasharray="4 4"
-                          label={{ value: `Alvo ${fmt(modalHistorico.alvo_lucro)}`, position: "insideTopLeft", fill: "#4ade80", fontSize: 10 }} />
+                        <ReferenceLine y={modalHistorico.alvo_lucro} stroke="#4ade80" strokeDasharray="5 4" strokeWidth={1.5}
+                          label={{ value: `Alvo ${fmt(modalHistorico.alvo_lucro)}`, position: "right", fill: "#4ade80", fontSize: 11 }} />
                       )}
                       {histMostrarAlvoStop && modalHistorico.stop_loss && (
-                        <ReferenceLine y={modalHistorico.stop_loss} stroke="#f87171" strokeDasharray="4 4"
-                          label={{ value: `Stop ${fmt(modalHistorico.stop_loss)}`, position: "insideBottomLeft", fill: "#f87171", fontSize: 10 }} />
+                        <ReferenceLine y={modalHistorico.stop_loss} stroke="#f87171" strokeDasharray="5 4" strokeWidth={1.5}
+                          label={{ value: `Stop ${fmt(modalHistorico.stop_loss)}`, position: "right", fill: "#f87171", fontSize: 11 }} />
                       )}
-                      <Line type="monotone" dataKey="fechamento" stroke="#38bdf8" strokeWidth={2} dot={false} />
+                      <Line type="monotone" dataKey="fechamento" stroke="#38bdf8" strokeWidth={2.5} dot={false} />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
-                <div style={{ overflowY:"auto", flex:1 }}>
-                  <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"12px" }}>
+                <div style={{ overflowY:"auto", flex:1, border:"1px solid #1e293b", borderRadius:"10px" }}>
+                  <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"13px" }}>
                     <thead>
-                      <tr style={{ position:"sticky", top:0, background:"#0d1829" }}>
-                        <th style={{ padding:"6px", textAlign:"left", color:"#64748b" }}>DATA</th>
-                        <th style={{ padding:"6px", textAlign:"right", color:"#64748b" }}>FECHAMENTO</th>
-                        <th style={{ padding:"6px", textAlign:"right", color:"#64748b" }}>P&L DESDE ENTRADA</th>
+                      <tr style={{ position:"sticky", top:0, background:"#0d1829", zIndex:1 }}>
+                        <th style={{ padding:"10px 12px", textAlign:"left", color:"#64748b", borderBottom:"1px solid #1e293b" }}>DATA</th>
+                        <th style={{ padding:"10px 12px", textAlign:"right", color:"#64748b", borderBottom:"1px solid #1e293b" }}>FECHAMENTO</th>
+                        <th style={{ padding:"10px 12px", textAlign:"right", color:"#64748b", borderBottom:"1px solid #1e293b" }}>P&L DESDE ENTRADA</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -648,9 +648,9 @@ export default function Portfolio() {
                         const lucro = dia.fechamento >= modalHistorico.preco_entrada
                         return (
                           <tr key={idx} style={{ borderBottom:"1px solid #1e293b" }}>
-                            <td style={{ padding:"6px", color:"#94a3b8" }}>{dia.data}</td>
-                            <td style={{ padding:"6px", textAlign:"right", color:"#f1f5f9" }}>{moeda(modalHistorico.mercado)} {fmt(dia.fechamento)}</td>
-                            <td style={{ padding:"6px", textAlign:"right", color: lucro ? "#4ade80" : "#f87171" }}>
+                            <td style={{ padding:"8px 12px", color:"#94a3b8" }}>{dia.data}</td>
+                            <td style={{ padding:"8px 12px", textAlign:"right", color:"#f1f5f9" }}>{moeda(modalHistorico.mercado)} {fmt(dia.fechamento)}</td>
+                            <td style={{ padding:"8px 12px", textAlign:"right", color: lucro ? "#4ade80" : "#f87171" }}>
                               {lucro ? "▲ +" : "▼ "}{varPct}%
                             </td>
                           </tr>
@@ -661,7 +661,7 @@ export default function Portfolio() {
                 </div>
               </>
             )}
-            <button onClick={() => setModalHistorico(null)} style={{ marginTop:"16px", padding:"10px", borderRadius:"8px", border:"1px solid #334155", background:"#1e293b", color:"#94a3b8", cursor:"pointer", fontWeight:"600", fontSize:"13px" }}>Fechar</button>
+            <button onClick={() => setModalHistorico(null)} style={{ marginTop:"16px", padding:"12px", borderRadius:"8px", border:"1px solid #334155", background:"#1e293b", color:"#94a3b8", cursor:"pointer", fontWeight:"600", fontSize:"13px", flexShrink:0 }}>Fechar</button>
           </div>
         </div>
       )}
