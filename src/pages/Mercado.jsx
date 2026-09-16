@@ -15,6 +15,7 @@ export default function Mercado() {
   const [bannerStatus, setBannerStatus] = useState(null) // null | "executando" | "concluido"
   const [sinaisAntesDoScan, setSinaisAntesDoScan] = useState(0)
   const [ordenacao, setOrdenacao] = useState({ campo: null, direcao: "desc" })
+  const [favoritados, setFavoritados] = useState({})  // { ticker: "ok" | "erro" } feedback do botão ⭐
   const pollingRef = useRef(null)
 
   const carregarSinais = () => {
@@ -139,6 +140,36 @@ export default function Mercado() {
   }
 
   const moeda = (s) => s.mercado === "B3" ? "R$" : "US$"
+
+  // ── Envia um ativo do scanner direto para a aba Favoritos (observação) ──
+  // Fica no Mercado após clicar (permite marcar vários) e dá feedback no botão.
+  const adicionarFavorito = async (s) => {
+    try {
+      const res = await api.post(`${API}/favoritos`, {
+        ticker: s.ticker,
+        nome: s.nome,
+        mercado: s.mercado,
+      })
+      const ok = res.data && res.data.sucesso !== false
+      setFavoritados(prev => ({ ...prev, [s.ticker]: ok ? "ok" : "erro" }))
+      setTimeout(() => {
+        setFavoritados(prev => {
+          const novo = { ...prev }
+          delete novo[s.ticker]
+          return novo
+        })
+      }, 2500)
+    } catch {
+      setFavoritados(prev => ({ ...prev, [s.ticker]: "erro" }))
+      setTimeout(() => {
+        setFavoritados(prev => {
+          const novo = { ...prev }
+          delete novo[s.ticker]
+          return novo
+        })
+      }, 2500)
+    }
+  }
 
   const formatarData = (data) => {
     if (!data) return ""
@@ -583,14 +614,29 @@ export default function Mercado() {
                       {formatarData(s.criado_em)}
                     </td>
                     <td style={{ padding: "14px 10px" }}>
-                      <button onClick={() => adicionarPortfolio(s)} style={{
-                        padding: "6px 10px", borderRadius: "6px", border: "none", cursor: "pointer",
-                        background: "linear-gradient(135deg,#16a34a,#15803d)",
-                        color: "white", fontSize: "11px", fontWeight: "700",
-                        whiteSpace: "nowrap", boxShadow: "0 2px 4px rgba(22,163,74,0.3)"
-                      }}>
-                        + Portfólio
-                      </button>
+                      <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
+                        <button onClick={() => adicionarPortfolio(s)} style={{
+                          padding: "6px 10px", borderRadius: "6px", border: "none", cursor: "pointer",
+                          background: "linear-gradient(135deg,#16a34a,#15803d)",
+                          color: "white", fontSize: "11px", fontWeight: "700",
+                          whiteSpace: "nowrap", boxShadow: "0 2px 4px rgba(22,163,74,0.3)"
+                        }}>
+                          + Portfólio
+                        </button>
+                        <button onClick={() => adicionarFavorito(s)} title="Enviar para Favoritos"
+                          style={{
+                            padding: "6px 9px", borderRadius: "6px", border: "1px solid #334155", cursor: "pointer",
+                            background: favoritados[s.ticker] === "ok" ? "rgba(74,222,128,0.15)"
+                                      : favoritados[s.ticker] === "erro" ? "rgba(248,113,113,0.15)"
+                                      : "#1e293b",
+                            color: favoritados[s.ticker] === "ok" ? "#4ade80"
+                                 : favoritados[s.ticker] === "erro" ? "#f87171"
+                                 : "#f59e0b",
+                            fontSize: "11px", fontWeight: "700", whiteSpace: "nowrap"
+                          }}>
+                          {favoritados[s.ticker] === "ok" ? "✓" : favoritados[s.ticker] === "erro" ? "✕" : "⭐"}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 )
