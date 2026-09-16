@@ -3,14 +3,14 @@ import Mercado from "./pages/Mercado"
 import Portfolio from "./pages/Portfolio"
 import Alertas from "./pages/Alertas"
 import IAAnalise from "./pages/IAAnalise"
-import SwingRapido from "./pages/SwingRapido"
+import Favoritos from "./pages/Favoritos"
 import Noticias from "./pages/Noticias"
 import Login from "./Login"
 
 const ABAS = [
   { id: "mercado",   label: "Mercado",    icon: "🌎" },
   { id: "portfolio", label: "Portfólio",  icon: "💼" },
-  { id: "swing",     label: "Swing",      icon: "⚡" },
+  { id: "favoritos", label: "Favoritos",  icon: "⭐" },
   { id: "alertas",   label: "Alertas",    icon: "🔔" },
   { id: "noticias",  label: "Notícias",   icon: "📰" },
   { id: "ia",        label: "IA Análise", icon: "🤖" },
@@ -114,7 +114,7 @@ export default function App() {
       }}>
         {aba === "mercado"   && <Mercado />}
         {aba === "portfolio" && <Portfolio />}
-        {aba === "swing"     && <SwingRapido />}
+        {aba === "favoritos" && <Favoritos />}
         {aba === "alertas"   && <Alertas />}
         {aba === "noticias"  && <Noticias />}
         {aba === "ia"        && <IAAnalise />}
