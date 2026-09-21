@@ -210,7 +210,7 @@ export default function Favoritos() {
 
             {/* Botões de período */}
             <div style={{ display: "flex", gap: "6px", marginBottom: "14px" }}>
-              {[{ id: "30d", label: "30d" }, { id: "3m", label: "3m" }, { id: "6m", label: "6m" }].map(per => (
+              {[{ id: "30d", label: "30d" }, { id: "3m", label: "3m" }, { id: "6m", label: "6m" }, { id: "12m", label: "12m" }].map(per => (
                 <button key={per.id} onClick={() => trocarPeriodoHist(per.id)} disabled={carregandoHist}
                   style={{ padding: "5px 14px", borderRadius: "20px", border: "none", cursor: carregandoHist ? "default" : "pointer", fontSize: "12px", fontWeight: histPeriodo === per.id ? "700" : "400", background: histPeriodo === per.id ? "#38bdf8" : "#1e293b", color: histPeriodo === per.id ? "#0f172a" : "#64748b" }}>
                   {per.label}
