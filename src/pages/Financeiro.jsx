@@ -93,11 +93,13 @@ export default function Financeiro() {
           border: `1px solid ${bateu ? "rgba(74,222,128,0.3)" : "rgba(248,113,113,0.3)"}`,
           borderRadius: "14px", padding: "20px"
         }}>
-          <div style={{ fontSize: "12px", color: "#94a3b8", marginBottom: "6px" }}>{bateu ? "Bateu o CDI em" : "Abaixo do CDI em"}</div>
+          <div style={{ fontSize: "12px", color: "#94a3b8", marginBottom: "6px" }}>Rendeu do CDI</div>
           <div style={{ fontSize: "24px", fontWeight: "800", color: bateu ? "#4ade80" : "#f87171" }}>
-            {di.diferenca_pct >= 0 ? "+" : ""}{di.diferenca_pct.toFixed(2)} pp
+            {di.pct_do_cdi != null ? `${di.pct_do_cdi.toFixed(0)}%` : "—"}
           </div>
-          <div style={{ fontSize: "11px", color: "#64748b", marginTop: "4px" }}>{bateu ? "acima do rendimento seguro" : "abaixo do rendimento seguro"}</div>
+          <div style={{ fontSize: "11px", color: "#64748b", marginTop: "4px" }}>
+            {di.diferenca_pct >= 0 ? "+" : ""}{di.diferenca_pct.toFixed(2)} pp {bateu ? "acima" : "abaixo"} do CDI
+          </div>
         </div>
       </div>
 
@@ -152,7 +154,7 @@ export default function Financeiro() {
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px", minWidth: "560px" }}>
             <thead>
               <tr style={{ borderBottom: "1px solid #1e293b" }}>
-                {["Período", "Trades", "Seu rendimento", "CDI", "Diferença"].map(h => (
+                {["Período", "Trades", "Seu rendimento", "CDI", "% do CDI", "Diferença"].map(h => (
                   <th key={h} style={{ padding: "10px 12px", textAlign: h === "Período" ? "left" : "right", color: "#64748b", fontSize: "11px", fontWeight: "600", textTransform: "uppercase" }}>{h}</th>
                 ))}
               </tr>
@@ -164,6 +166,9 @@ export default function Financeiro() {
                   <td style={{ padding: "10px 12px", textAlign: "right", color: "#94a3b8" }}>{p.trades}</td>
                   <td style={{ padding: "10px 12px", textAlign: "right", color: p.pct_real >= 0 ? "#4ade80" : "#f87171", fontWeight: "600" }}>{fmtPct(p.pct_real)}</td>
                   <td style={{ padding: "10px 12px", textAlign: "right", color: "#a78bfa" }}>{fmtPct(p.pct_cdi)}</td>
+                  <td style={{ padding: "10px 12px", textAlign: "right", color: p.pct_do_cdi != null && p.pct_do_cdi >= 100 ? "#4ade80" : "#94a3b8", fontWeight: "600" }}>
+                    {p.pct_do_cdi != null ? `${p.pct_do_cdi.toFixed(0)}%` : "—"}
+                  </td>
                   <td style={{ padding: "10px 12px", textAlign: "right", color: p.diferenca_pct >= 0 ? "#4ade80" : "#f87171", fontWeight: "600" }}>
                     {p.diferenca_pct >= 0 ? "+" : ""}{p.diferenca_pct.toFixed(2)} pp
                   </td>
