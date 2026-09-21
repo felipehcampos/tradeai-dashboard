@@ -6,10 +6,12 @@ import IAAnalise from "./pages/IAAnalise"
 import Favoritos from "./pages/Favoritos"
 import Noticias from "./pages/Noticias"
 import Login from "./Login"
+import Financeiro from "./pages/Financeiro"
 
 const ABAS = [
   { id: "mercado",   label: "Mercado",    icon: "🌎" },
   { id: "portfolio", label: "Portfólio",  icon: "💼" },
+  { id: "financeiro", label: "Financeiro", icon: "💰" },
   { id: "favoritos", label: "Favoritos",  icon: "⭐" },
   { id: "alertas",   label: "Alertas",    icon: "🔔" },
   { id: "noticias",  label: "Notícias",   icon: "📰" },
@@ -114,6 +116,7 @@ export default function App() {
       }}>
         {aba === "mercado"   && <Mercado />}
         {aba === "portfolio" && <Portfolio />}
+        {aba === "financeiro" && <Financeiro />}
         {aba === "favoritos" && <Favoritos />}
         {aba === "alertas"   && <Alertas />}
         {aba === "noticias"  && <Noticias />}
