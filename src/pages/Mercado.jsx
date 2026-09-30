@@ -204,6 +204,7 @@ export default function Mercado() {
       case "ticker":    return s.ticker || ""
       case "nome":      return s.nome || ""
       case "sinal":     return s.sinal === "COMPRAR" ? 1 : 0
+      case "atr":       return s.atr_cor === "VERDE" ? 1 : s.atr_cor === "VERMELHO" ? 0 : null
       case "desconto":  return s.dist_media_6m != null ? parseFloat(s.dist_media_6m) : null
       case "esticado":  return (s.mme_20 != null && parseFloat(s.mme_20) > 0)
                           ? ((preco - parseFloat(s.mme_20)) / parseFloat(s.mme_20)) * 100 : null
@@ -439,18 +440,19 @@ export default function Mercado() {
       ) : (
         <div style={{ overflowX: "auto", borderRadius: "12px", border: "1px solid #1e293b", width: "100%" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed", minWidth: "1100px" }}>
-            <colgroup>
+              <colgroup>
               <col style={{ width: "7%" }} />
-              <col style={{ width: "13%" }} />
-              <col style={{ width: "7%" }} />
+              <col style={{ width: "10%" }} />
+              <col style={{ width: "5%" }} />
               <col style={{ width: "8%" }} />
               <col style={{ width: "7%" }} />
               <col style={{ width: "7%" }} />
+              <col style={{ width: "7%" }} />
               <col style={{ width: "6%" }} />
+              <col style={{ width: "8%" }} />
               <col style={{ width: "9%" }} />
               <col style={{ width: "9%" }} />
-              <col style={{ width: "9%" }} />
-              <col style={{ width: "6%" }} />
+              <col style={{ width: "5%" }} />
               <col style={{ width: "6%" }} />
               <col style={{ width: "6%" }} />
             </colgroup>
@@ -461,6 +463,7 @@ export default function Mercado() {
                   { label: "Nome", campo: "nome" },
                   { label: "Mercado", campo: null },
                   { label: "Sinal", campo: "sinal" },
+                  { label: "ATR", campo: "atr" },
                   { label: "Desconto", campo: "desconto" },
                   { label: "Esticado", campo: "esticado" },
                   { label: "Volume", campo: "volume" },
@@ -547,6 +550,25 @@ export default function Mercado() {
                       }}>
                         {s.sinal === "COMPRAR" ? "▲" : "◆"} {s.sinal}
                       </span>
+                    </td>
+                                        <td style={{ padding: "14px 10px", whiteSpace: "nowrap" }}>
+                      {s.atr_cor ? (() => {
+                        const verde = s.atr_cor === "VERDE"
+                        const dist = verde ? s.atr_margem_pct : s.atr_falta_pct
+                        const ref = s.atr_data_ref ? s.atr_data_ref.split("-").reverse().slice(0, 2).join("/") : null
+                        return (
+                          <div title={`ATR Trailing Stop (21,3) no dia do sinal${ref ? ` (${ref})` : ""} · linha ${formatarPreco(s.atr_linha)}`}>
+                            <span style={{ padding: "3px 8px", borderRadius: "6px", fontSize: "11px", fontWeight: "700", background: verde ? "rgba(74,222,128,0.12)" : "rgba(248,113,113,0.12)", color: verde ? "#4ade80" : "#f87171" }}>
+                              {verde ? "🟢 Alta" : "🔴 Queda"}
+                            </span>
+                            {dist != null && (
+                              <span style={{ display: "block", fontSize: "10px", marginTop: "3px", color: dist < 2 ? "#f59e0b" : "#64748b" }}>
+                                {verde ? `margem ${Number(dist).toFixed(1)}%` : `falta +${Number(dist).toFixed(1)}%`}
+                              </span>
+                            )}
+                          </div>
+                        )
+                      })() : <span style={{ color: "#475569", fontSize: "12px" }}>—</span>}
                     </td>
                     <td style={{
                       padding: "14px 10px", fontSize: "12px", fontWeight: "600", whiteSpace: "nowrap",
