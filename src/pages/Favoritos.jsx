@@ -339,7 +339,7 @@ export default function Favoritos() {
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px", minWidth: "1000px" }}>
             <thead>
               <tr style={{ borderBottom: "1px solid #1e293b" }}>
-                {["Ticker", "Preço", "RSI", "Esticado", "MMA200", "Desconto 6m", "Selo", "Nota", "Ações"].map(h => (
+                {["Ticker", "Preço", "RSI", "Esticado", "MMA200", "Desconto 6m", "Selo", "ATR", "Nota", "Ações"].map(h => (
                   <th key={h} style={{ padding: "12px 10px", textAlign: "left", color: "#64748b", fontSize: "11px", fontWeight: "600", textTransform: "uppercase", whiteSpace: "nowrap" }}>{h}</th>
                 ))}
               </tr>
@@ -380,6 +380,29 @@ export default function Favoritos() {
                         <span style={{ fontSize: "11px", color: "#64748b" }}>sem dados</span>
                       )}
                     </td>
+                                        <td style={{ padding: "12px 10px", whiteSpace: "nowrap" }}>
+                      {temInd && f.atr_cor ? (() => {
+                        const verde = f.atr_cor === "VERDE"
+                        const dist = verde ? f.atr_margem_pct : f.atr_falta_pct
+                        const perto = dist != null && dist < 2
+                        const desde = f.atr_desde ? f.atr_desde.split("-").reverse().slice(0, 2).join("/") : null
+                        return (
+                          <div>
+                            <span style={{ padding: "2px 8px", borderRadius: "6px", fontSize: "11px", fontWeight: "600", background: verde ? "rgba(74,222,128,0.12)" : "rgba(248,113,113,0.12)", color: verde ? "#4ade80" : "#f87171" }}>
+                              {verde ? "🟢 Alta" : "🔴 Queda"}
+                            </span>
+                            <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "4px" }}>
+                              linha {moeda(f.mercado)} {fmt(f.atr_linha)}{desde ? ` · desde ${desde}` : ""}
+                            </div>
+                            {dist != null && (
+                              <div style={{ fontSize: "11px", color: perto ? "#f59e0b" : "#64748b" }}>
+                                {verde ? `margem ${dist.toFixed(1)}%` : `falta +${dist.toFixed(1)}%`}{perto ? " · confira na XP" : ""}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })() : "—"}
+                    </td>
                     <td style={{ padding: "12px 10px", color: "#94a3b8", fontSize: "11px", maxWidth: "140px" }}>{f.nota_pessoal || ""}</td>
                     <td style={{ padding: "12px 10px" }}>
                       <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
@@ -400,7 +423,7 @@ export default function Favoritos() {
       )}
 
       <div style={{ fontSize: "11px", color: "#475569", marginTop: "14px" }}>
-        Os indicadores são a prévia do candle de hoje — mudam conforme o preço do momento. O selo usa os cortes do checklist essencial (RSI, esticado, MMA200, desconto 6m). Alvo/stop no "+ Portfólio" são sugestões editáveis, não vêm do scanner.
+        Os indicadores são a prévia do candle de hoje — mudam conforme o preço do momento. O selo usa os cortes do checklist essencial (RSI, esticado, MMA200, desconto 6m). Alvo/stop no "+ Portfólio" são sugestões editáveis, não vêm do scanner. ATR = ATR Trailing Stop (21,3), a mesma linha do gráfico da XP: 🟢 tendência de alta, 🔴 de queda. A menos de 2% da linha, a cor pode divergir da XP — confira no gráfico.
       </div>
     </div>
   )
