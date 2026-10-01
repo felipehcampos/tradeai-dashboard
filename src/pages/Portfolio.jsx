@@ -97,6 +97,23 @@ export default function Portfolio() {
   const [histMostrarEntrada, setHistMostrarEntrada] = useState(true)
   const [histMostrarAlvoStop, setHistMostrarAlvoStop] = useState(true)
 
+    // ── ATR Trailing Stop (21,3) das posições: na compra e agora (30/09/2026) ──
+  const [atrPos, setAtrPos] = useState({})
+  const [atrCarregado, setAtrCarregado] = useState(false)
+
+  const carregarAtr = async (lista) => {
+    try {
+      const precos = {}
+      lista.forEach(p => { if (p.preco_atual) precos[p.ticker.toUpperCase().trim()] = p.preco_atual })
+      const res = await api.post(`${API}/portfolio/atr`, { precos })
+      if (res.data.sucesso) setAtrPos(res.data.dados || {})
+    } catch {
+      console.error("Erro ao carregar ATR do portfólio")
+    } finally {
+      setAtrCarregado(true)
+    }
+  }
+
   const carregarPortfolio = async () => {
     try {
       const res = await api.get(`${API}/portfolio`)
@@ -121,6 +138,7 @@ export default function Portfolio() {
           mae_pct: p.mae_pct != null ? parseFloat(p.mae_pct) : null
         }))
         setPosicoes(mapeado)
+        carregarAtr(mapeado)
       }
     } catch {
       console.error("Erro ao carregar portfólio")
@@ -373,6 +391,7 @@ export default function Portfolio() {
           return { ...p, preco_atual: precoValido != null ? parseFloat(precoValido) : p.preco_atual }
         })
         setPosicoes([...novas])
+        carregarAtr(novas)
         setUltimaAtualizacao(new Date().toLocaleTimeString("pt-BR"))
       }
     } catch {
@@ -864,10 +883,10 @@ export default function Portfolio() {
             </div>
           ) : (
             <div style={{ overflowX:"auto", background:"#0d1829", borderRadius:"12px", border:"1px solid #1e293b" }}>
-              <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"13px", minWidth:"1100px" }}>
+              <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"13px", minWidth:"1200px" }}>
                 <thead>
                   <tr style={{ borderBottom:"1px solid #1e293b" }}>
-                                        {["Ticker","Nome","Mercado","Setor","Qtd","Entrada","Valor Invest.","Preço Atual","P&L","MFE / MAE","Alvo/Stop","Dias","Ações"].map(h=> (
+                                        {["Ticker","Nome","Mercado","Setor","Qtd","Entrada","Valor Invest.","Preço Atual","P&L","MFE / MAE","Alvo/Stop","ATR","Dias","Ações"].map(h=> (
                       <th key={h} style={{ padding:"12px 10px", textAlign:"left", color:"#64748b", fontSize:"11px", fontWeight:"600", textTransform:"uppercase", whiteSpace:"nowrap" }}>{h}</th>
                     ))}
                   </tr>
@@ -936,6 +955,30 @@ export default function Portfolio() {
                             <div style={{ background: progressoAlvo > 50 ? "#4ade80" : progressoAlvo > 20 ? "#f59e0b" : "#f87171", borderRadius:"4px", height:"6px", width:`${progressoAlvo}%`, transition:"width 0.3s" }} />
                           </div>
                           <div style={{ fontSize:"10px", color: progressoReal < 0 ? "#f87171" : "#64748b", textAlign:"center", marginTop:"2px" }}>{progressoReal.toFixed(0)}% do caminho</div>
+                        </td>
+                                                <td style={{ padding:"12px 10px", whiteSpace:"nowrap" }}>
+                          {(() => {
+                            const a = atrPos[String(p.id)]
+                            if (!a || !a.atr_cor) return <span style={{ color:"#475569", fontSize:"12px" }}>{atrCarregado ? "—" : "…"}</span>
+                            const verde = a.atr_cor === "VERDE"
+                            const dist = verde ? a.atr_margem_pct : a.atr_falta_pct
+                            const perto = dist != null && dist < 2
+                            const corCompra = a.atr_compra_cor === "VERDE" ? "🟢" : a.atr_compra_cor === "VERMELHO" ? "🔴" : "—"
+                            const desde = a.atr_desde ? a.atr_desde.split("-").reverse().slice(0, 2).join("/") : null
+                            return (
+                              <div title={`ATR Trailing Stop (21,3) · linha ${fmt(a.atr_linha)}${desde ? ` · nessa cor desde ${desde}` : ""}`}>
+                                <span style={{ padding:"2px 8px", borderRadius:"6px", fontSize:"11px", fontWeight:"700", background: verde ? "rgba(74,222,128,0.12)" : "rgba(248,113,113,0.12)", color: verde ? "#4ade80" : "#f87171" }}>
+                                  {verde ? "🟢 Alta" : "🔴 Queda"}
+                                </span>
+                                {dist != null && (
+                                  <div style={{ fontSize:"10px", marginTop:"3px", color: perto ? "#f59e0b" : "#64748b" }}>
+                                    {verde ? `margem ${Number(dist).toFixed(1)}%` : `falta +${Number(dist).toFixed(1)}%`}{perto ? " · confira na XP" : ""}
+                                  </div>
+                                )}
+                                <div style={{ fontSize:"10px", marginTop:"2px", color:"#64748b" }}>na compra: {corCompra}</div>
+                              </div>
+                            )
+                          })()}
                         </td>
                         <td style={{ padding:"12px 10px" }}>
                           <span style={{ color: dias > 3 ? "#f87171" : dias > 1 ? "#f59e0b" : "#4ade80", fontSize:"12px", fontWeight:"700" }}>{dias}d</span>
