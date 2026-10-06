@@ -17,7 +17,50 @@ export default function Mercado() {
   const [ordenacao, setOrdenacao] = useState({ campo: null, direcao: "desc" })
   const [favoritados, setFavoritados] = useState({})  // { ticker: "ok" | "erro" } feedback do botão ⭐
   const pollingRef = useRef(null)
-
+  // ── BDRs (06/10/2026) ──
+  // Cada sinal americano com BDR na lista oficial vira TAMBÉM uma linha própria,
+  // mercado "BDR", com preço/alvo/stop em reais e o ATR DO BDR. A análise da
+  // empresa (sinal, desconto, sentimento) é a da ação original.
+  const criarLinhasBdr = (dados) => {
+    const vistos = new Set()
+    const linhas = []
+    for (const s of dados) {
+      if (!s.bdr_ok || !s.bdr_codigo || vistos.has(s.bdr_codigo)) continue
+      vistos.add(s.bdr_codigo)
+      linhas.push({
+        ...s,
+        ticker: s.bdr_ticker,
+        nome: `${s.nome || s.ticker} (BDR)`,
+        mercado: "BDR",
+        preco_atual: s.bdr_preco,
+        alvo_lucro: s.bdr_alvo,
+        stop_loss: s.bdr_stop,
+        pct_alvo: null,
+        pct_stop: null,
+        mme_20: null,
+        volume: s.bdr_vol_30d,
+        atr_cor: s.bdr_atr_cor,
+        atr_linha: s.bdr_atr_linha,
+        atr_falta_pct: s.bdr_atr_falta_pct,
+        atr_margem_pct: s.bdr_atr_margem_pct,
+        atr_desde: s.bdr_atr_desde,
+        atr_data_ref: s.bdr_data_ref,
+        _bdr: true,
+        _original: s.ticker,
+      })
+    }
+    return linhas
+  }
+  const fmtDiaMes = (iso) => iso ? String(iso).slice(0, 10).split("-").reverse().slice(0, 2).join("/") : ""
+  // Pregão que o scanner deveria ter usado: antes das 18h, o dia útil anterior;
+  // depois, o próprio dia. (Feriado americano pode gerar um aviso falso.)
+  const fechamentoEsperado = (criado) => {
+    const d = new Date(criado)
+    if (isNaN(d.getTime())) return null
+    if (d.getHours() < 18) d.setDate(d.getDate() - 1)
+    while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() - 1)
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+  }
   const carregarSinais = () => {
     setLoading(true)
     api.get(`${API}/sinais`)
@@ -27,13 +70,19 @@ export default function Mercado() {
         // Ordem padrao: COMPRAR antes de MANTER, sem criterio de qualidade
         // dentro de cada grupo. A confianca nao entra: a auditoria mostrou que
         // ela e anti-preditiva (sinais abaixo de 70 renderam mais).
-        const filtrados = dados.filter(s => s.sinal !== "EVITAR")
+        const filtrados = [...dados, ...criarLinhasBdr(dados)].filter(s => s.sinal !== "EVITAR")
         filtrados.sort((a, b) => {
           if (a.sinal === "COMPRAR" && b.sinal !== "COMPRAR") return -1
           if (a.sinal !== "COMPRAR" && b.sinal === "COMPRAR") return 1
           return 0
         })
-        setSinais(filtrados)
+                setSinais(filtrados)
+        const bdrTickers = filtrados.filter(x => x._bdr).map(x => x.ticker)
+        if (bdrTickers.length) {
+          api.post(`${API}/precos`, { tickers: bdrTickers })
+            .then(p => { if (p.data.sucesso) setPrecosAtuais(prev => ({ ...prev, ...p.data.precos })) })
+            .catch(() => {})
+        }
       })
       .catch(() => { setSinais([]); setTotalAnalisados(0) })
       .finally(() => {
@@ -120,7 +169,7 @@ export default function Mercado() {
       const res = await api.post(`${API}/portfolio`, {
         ticker: s.ticker,
         nome: s.nome,
-        mercado: s.mercado,
+        mercado: s._bdr ? "B3" : s.mercado,
         quantidade: 1,
         preco_medio: precoAtual,
         alvo_lucro: parseFloat(s.alvo_lucro) || null,
@@ -139,7 +188,7 @@ export default function Mercado() {
     }
   }
 
-  const moeda = (s) => s.mercado === "B3" ? "R$" : "US$"
+    const moeda = (s) => (s.mercado === "B3" || s.mercado === "BDR") ? "R$" : "US$"
 
   // ── Envia um ativo do scanner direto para a aba Favoritos (observação) ──
   // Fica no Mercado após clicar (permite marcar vários) e dá feedback no botão.
@@ -148,7 +197,7 @@ export default function Mercado() {
       const res = await api.post(`${API}/favoritos`, {
         ticker: s.ticker,
         nome: s.nome,
-        mercado: s.mercado,
+        mercado: s._bdr ? "B3" : s.mercado,
       })
       const ok = res.data && res.data.sucesso !== false
       setFavoritados(prev => ({ ...prev, [s.ticker]: ok ? "ok" : "erro" }))
@@ -224,7 +273,7 @@ export default function Mercado() {
       : { campo, direcao: "asc" })
   }
 
-  const mercados = ["TODOS", "B3", "NASDAQ", "NYSE", "CRYPTO", "COMMODITY"]
+    const mercados = ["TODOS", "B3", "BDR", "NASDAQ", "NYSE", "CRYPTO", "COMMODITY"]
   const sinaisPorMercado = filtroMercado === "TODOS" ? sinais : sinais.filter(s => s.mercado === filtroMercado)
   const sinaisFiltrados = (() => {
     if (!ordenacao.campo) return sinaisPorMercado
@@ -240,8 +289,8 @@ export default function Mercado() {
     })
     return copia
   })()
-  const totalComprar = sinais.filter(s => s.sinal === "COMPRAR").length
-  const totalManter = sinais.filter(s => s.sinal === "MANTER").length
+    const totalComprar = sinais.filter(s => s.sinal === "COMPRAR" && !s._bdr).length
+  const totalManter = sinais.filter(s => s.sinal === "MANTER" && !s._bdr).length
   const temPrecosAtuais = Object.keys(precosAtuais).length > 0
 
   return (
@@ -441,14 +490,14 @@ export default function Mercado() {
         <div style={{ overflowX: "auto", borderRadius: "12px", border: "1px solid #1e293b", width: "100%" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed", minWidth: "1100px" }}>
               <colgroup>
-              <col style={{ width: "7%" }} />
-              <col style={{ width: "10%" }} />
+              <col style={{ width: "11%" }} />
+              <col style={{ width: "8%" }} />
               <col style={{ width: "5%" }} />
               <col style={{ width: "8%" }} />
               <col style={{ width: "7%" }} />
               <col style={{ width: "7%" }} />
-              <col style={{ width: "7%" }} />
               <col style={{ width: "6%" }} />
+              <col style={{ width: "5%" }} />
               <col style={{ width: "8%" }} />
               <col style={{ width: "9%" }} />
               <col style={{ width: "9%" }} />
@@ -523,8 +572,33 @@ export default function Mercado() {
                     onMouseEnter={e => e.currentTarget.style.background = "#1e293b"}
                     onMouseLeave={e => e.currentTarget.style.background = i % 2 === 0 ? "#0d1829" : "#0a1520"}
                   >
-                    <td style={{ padding: "14px 10px", fontWeight: "700", color: "#38bdf8", fontSize: "13px", whiteSpace: "nowrap" }}>
-                      {s.ticker}
+                    <td style={{ padding: "14px 10px", fontWeight: "700", color: "#38bdf8", fontSize: "13px", whiteSpace: "normal", lineHeight: "1.35" }}>
+                                            {s.ticker}
+                      {s._bdr && (
+                        <div style={{ fontSize: "10px", fontWeight: "400", color: "#94a3b8", marginTop: "3px" }}>
+                          BDR de {s._original} · liquidez {String(s.bdr_liquidez || "").toLowerCase()}
+                        </div>
+                      )}
+                      {s.mercado !== "B3" && s.atr_data_ref && (() => {
+                        const esperado = fechamentoEsperado(s.criado_em)
+                        const atrasado = esperado && s.atr_data_ref < esperado
+                        return (
+                          <div style={{ fontSize: "10px", fontWeight: "400", marginTop: "2px", color: atrasado ? "#f59e0b" : "#64748b" }}>
+                            {atrasado ? "⚠️ " : ""}fech. {fmtDiaMes(s.atr_data_ref)}{atrasado ? " (atrasado)" : ""}
+                          </div>
+                        )
+                      })()}
+                      {s._bdr && precosAtuais[s.ticker] && (() => {
+                        const base = parseFloat(s.preco_atual), alvo = parseFloat(s.alvo_lucro), agora = parseFloat(precosAtuais[s.ticker])
+                        if (!base || !alvo || alvo <= base) return null
+                        const caminho = (agora - base) / (alvo - base) * 100
+                        if (caminho < 50) return null
+                        return (
+                          <div style={{ fontSize: "10px", fontWeight: "600", marginTop: "2px", color: "#f87171" }}>
+                            ⚠️ {agora >= alvo ? "já passou do alvo" : `já andou ${caminho.toFixed(0)}% até o alvo`}
+                          </div>
+                        )
+                      })()}
                     </td>
                     <td style={{ padding: "14px 10px", color: "#e2e8f0", fontSize: "12px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {s.nome}
