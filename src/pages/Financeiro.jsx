@@ -37,7 +37,11 @@ export default function Financeiro() {
   // ── MÉTRICAS DE PERFORMANCE (calculadas do histórico) ──
   const fechados = (historico || []).filter(h => h.data_saida)
   const totalTrades = fechados.length
-  const plVal = (h) => parseFloat(h.pl ?? h.resultado ?? 0)
+  const plVal = (h) => {
+    const q = parseFloat(h.quantidade) || 0, e = parseFloat(h.preco_entrada), sai = parseFloat(h.preco_saida)
+    if (isNaN(e) || isNaN(sai)) return 0
+    return (sai - e) * q   // lucro em R$ do trade (14/10/2026)
+  }
   const plPct = (h) => parseFloat(h.pl_pct ?? h.resultado_pct ?? 0)
   const vencedores = fechados.filter(h => plVal(h) >= 0)
   const perdedores = fechados.filter(h => plVal(h) < 0)
