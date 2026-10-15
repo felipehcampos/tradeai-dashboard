@@ -829,8 +829,7 @@ export default function Portfolio() {
       <div style={{ display:"flex", gap:"8px", marginBottom:"20px", flexWrap:"wrap" }}>
         {[
           { id:"abertas", label:"💼 Posições Abertas", count: posicoesFiltradas.length },
-          { id:"historico", label:"📜 Histórico de Trades", count: historico.length },
-          { id:"performance", label:"📈 Performance", count: dadosMensais.length }
+          { id:"historico", label:"📜 Histórico de Trades", count: historico.length }
         ].map(a => (
           <button key={a.id} onClick={() => setAbaAtiva(a.id)} style={{ padding:"8px 20px", borderRadius:"8px", border:"none", cursor:"pointer", fontSize:"13px", fontWeight: abaAtiva === a.id ? "700" : "400", background: abaAtiva === a.id ? "rgba(56,189,248,0.15)" : "#1e293b", color: abaAtiva === a.id ? "#38bdf8" : "#64748b", borderBottom: abaAtiva === a.id ? "2px solid #38bdf8" : "2px solid transparent" }}>
             {a.label} {a.count}
