@@ -16,6 +16,7 @@ export default function Mercado() {
   const [sinaisAntesDoScan, setSinaisAntesDoScan] = useState(0)
   const [ordenacao, setOrdenacao] = useState({ campo: null, direcao: "desc" })
   const [favoritados, setFavoritados] = useState({})  // { ticker: "ok" | "erro" } feedback do botão ⭐
+  const [atrAgora, setAtrAgora] = useState({})  // { "GOGL34.SA": {atr_cor, atr_margem_pct, ...} } — ATR com o preço do momento (BDRs)
   const pollingRef = useRef(null)
   // ── BDRs (06/10/2026) ──
   // Cada sinal americano com BDR na lista oficial vira TAMBÉM uma linha própria,
@@ -81,6 +82,10 @@ export default function Mercado() {
         if (bdrTickers.length) {
           api.post(`${API}/precos`, { tickers: bdrTickers })
             .then(p => { if (p.data.sucesso) setPrecosAtuais(prev => ({ ...prev, ...p.data.precos })) })
+            .catch(() => {})
+          // ATR de agora dos BDRs (15/10/2026) — carrega depois, não atrasa a tabela
+          api.post(`${API}/mercado/atr-agora`, { tickers: bdrTickers })
+            .then(p => { if (p.data.sucesso) setAtrAgora(p.data.dados || {}) })
             .catch(() => {})
         }
       })
@@ -640,6 +645,17 @@ export default function Mercado() {
                                 {verde ? `margem ${Number(dist).toFixed(1)}%` : `falta +${Number(dist).toFixed(1)}%`}
                               </span>
                             )}
+                            {s._bdr && atrAgora[s.ticker]?.atr_cor && (() => {
+                              const ag = atrAgora[s.ticker]
+                              const vAg = ag.atr_cor === "VERDE"
+                              const dAg = vAg ? ag.atr_margem_pct : ag.atr_falta_pct
+                              return (
+                                <span title={`ATR agora, com o preço do momento${ag.preco_usado ? ` (R$ ${formatarPreco(ag.preco_usado)})` : ""} · linha ${formatarPreco(ag.atr_linha)}`}
+                                  style={{ display: "block", fontSize: "10px", marginTop: "4px", paddingTop: "3px", borderTop: "1px solid #1e293b", color: vAg ? "#4ade80" : "#f87171" }}>
+                                  agora {vAg ? "🟢" : "🔴"}{dAg != null ? (vAg ? ` margem ${Number(dAg).toFixed(1)}%` : ` falta +${Number(dAg).toFixed(1)}%`) : ""}
+                                </span>
+                              )
+                            })()}
                           </div>
                         )
                       })() : <span style={{ color: "#475569", fontSize: "12px" }}>—</span>}
