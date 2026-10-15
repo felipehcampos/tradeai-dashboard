@@ -538,7 +538,7 @@ export default function Portfolio() {
 
   const dadosPorSetor = Object.entries(
     posicoesFiltradas.reduce((acc, p) => {
-      const setor = getSetor(p.ticker)
+      const setor = p.setor || getSetor(p.ticker)   // setor salvo pelo backend (15/10/2026)
       const valor = p.quantidade * p.preco_entrada
       acc[setor] = (acc[setor] || 0) + valor
       return acc
