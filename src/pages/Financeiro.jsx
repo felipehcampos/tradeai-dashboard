@@ -58,11 +58,24 @@ export default function Financeiro() {
   })()
   const curva = (() => {
     const ord = [...fechados].sort((a, b) => new Date(a.data_saida) - new Date(b.data_saida))
+    // Um ponto por DIA de venda (antes era um por trade e a data se repetia no eixo).
+    // Vendas do mesmo dia somam juntas; o tooltip lista os ativos.
     let soma = 0
-    return ord.map(h => {
+    const pontos = []
+    for (const h of ord) {
       soma += plVal(h)
-      return { data: new Date(h.data_saida).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }), ticker: h.ticker, acumulado: parseFloat(soma.toFixed(2)) }
-    })
+      const d = new Date(h.data_saida)
+      const chave = isNaN(d.getTime()) ? String(h.data_saida) : d.toDateString()
+      const tk = String(h.ticker || "").replace(".SA", "")
+      const ult = pontos[pontos.length - 1]
+      if (ult && ult._chave === chave) {
+        ult.acumulado = parseFloat(soma.toFixed(2))
+        if (!ult.tickers.includes(tk)) ult.tickers.push(tk)
+      } else {
+        pontos.push({ _chave: chave, data: d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }), tickers: [tk], acumulado: parseFloat(soma.toFixed(2)) })
+      }
+    }
+    return pontos.map(p => ({ ...p, ticker: p.tickers.join(", ") }))
   })()
 
   const di = cdi?.desde_inicio
@@ -244,8 +257,8 @@ export default function Financeiro() {
                 <YAxis tick={{ fontSize: 11, fill: "#64748b" }} tickFormatter={(v) => `${v}%`} width={44} />
                 <Tooltip formatter={(value, name) => [`${value.toFixed(2)}%`, name === "real" ? "Seu rendimento" : "CDI"]} contentStyle={{ background: "#0f172a", border: "1px solid #334155", borderRadius: "8px" }} />
                 <Legend formatter={(v) => v === "real" ? "Seu rendimento" : "CDI"} wrapperStyle={{ fontSize: "12px" }} />
-                <Bar dataKey="real" fill="#4ade80" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="benchmark" fill="#38bdf8" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="real" fill="#38bdf8" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="benchmark" fill="#64748b" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -320,7 +333,7 @@ export default function Financeiro() {
                     <td style={{ padding: "12px", color: "#e2e8f0" }}>{p.label}</td>
                     <td style={{ padding: "12px", textAlign: "right", color: "#94a3b8" }}>{p.trades}</td>
                     <td style={{ padding: "12px", textAlign: "right", color: p.pct_real >= 0 ? "#4ade80" : "#f87171", fontWeight: "600" }}>{fmtPct(p.pct_real)}</td>
-                    <td style={{ padding: "12px", textAlign: "right", color: "#38bdf8" }}>{fmtPct(p.pct_cdi)}</td>
+                    <td style={{ padding: "12px", textAlign: "right", color: "#94a3b8" }}>{fmtPct(p.pct_cdi)}</td>
                     <td style={{ padding: "12px", textAlign: "right", color: p.pct_do_cdi != null && p.pct_do_cdi >= 100 ? "#4ade80" : "#94a3b8", fontWeight: "600" }}>
                       {p.pct_do_cdi != null ? `${p.pct_do_cdi.toFixed(0)}%` : "—"}
                     </td>
