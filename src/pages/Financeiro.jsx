@@ -13,13 +13,16 @@ export default function Financeiro() {
   const [posicoes, setPosicoes] = useState([])
   const [carregando, setCarregando] = useState(true)
   const [erro, setErro] = useState(null)
+  const [proventos, setProventos] = useState(null)   // totais de /dividendos/recebidos
 
   useEffect(() => {
     Promise.all([
       api.get(`${API}/financeiro/cdi`).then(r => r.data).catch(() => ({ sucesso: false })),
       api.get(`${API}/historico`).then(r => r.data).catch(() => ({ sucesso: false })),
       api.get(`${API}/portfolio`).then(r => r.data).catch(() => ({ sucesso: false })),
-    ]).then(([cdiRes, histRes, portRes]) => {
+      api.get(`${API}/dividendos/recebidos`).then(r => r.data).catch(() => ({ sucesso: false })),
+    ]).then(([cdiRes, histRes, portRes, divRes]) => {
+      if (divRes.sucesso) setProventos(divRes.totais)
       if (cdiRes.sucesso) setCdi(cdiRes.dados)
       if (histRes.sucesso) setHistorico(histRes.dados || [])
       if (portRes.sucesso) setPosicoes(portRes.dados || [])
@@ -157,6 +160,16 @@ export default function Financeiro() {
           <div style={label}>💜 Resultado total</div>
           <p style={bigNum(resultadoTotal >= 0 ? "#a78bfa" : "#f87171")}>{fmtBRL(resultadoTotal)} {capitalTotal > 0 && <span style={{ fontSize: "15px" }}>({resultadoTotal >= 0 ? "+" : ""}{(resultadoTotal / capitalTotal * 100).toFixed(1)}%)</span>}</p>
           <div style={sub}>realizado + em aberto, juntos</div>
+        </div>
+        <div style={card({ background: "rgba(251,191,36,0.06)", border: "1px solid rgba(251,191,36,0.2)" })}
+             title={proventos ? `Dividendos e JCP a que seus trades B3 tiveram direito (data-com com você posicionado).\nJCP já com 15% de IR descontado.\nTrades fechados: ${fmtBRL(proventos.fechados_liquido)} · posições abertas: ${fmtBRL(proventos.abertas_liquido)}\nPlano BRAPI Startup: proventos de até 1 ano.` : ""}>
+          <div style={label}>🪙 Dividendos e JCP</div>
+          <p style={bigNum("#fbbf24")}>{proventos ? fmtBRL(proventos.total_liquido) : "—"}</p>
+          <div style={sub}>
+            {proventos
+              ? <>recebido {fmtBRL(proventos.recebido)} · a receber {fmtBRL(proventos.a_receber)}<br />realizado com proventos: <span style={{ color: (lucroRealizado + proventos.fechados_liquido) >= 0 ? "#4ade80" : "#f87171", fontWeight: "600" }}>{fmtBRL(lucroRealizado + proventos.fechados_liquido)}</span></>
+              : "proventos indisponíveis agora"}
+          </div>
         </div>
       </div>
 
