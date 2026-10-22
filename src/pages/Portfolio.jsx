@@ -116,6 +116,7 @@ export default function Portfolio() {
 
   // ── Próximas datas-com de dividendos/JCP das posições B3 (22/10/2026) ──
   const [dividendosPos, setDividendosPos] = useState({})
+  const [dividendosHist, setDividendosHist] = useState({})   // {id: {total_liquido, eventos...}}
   const carregarDividendos = async (lista) => {
     try {
       const tickers = [...new Set(lista.map(p => (p.ticker || "").toUpperCase().trim()).filter(t => t.endsWith(".SA")))]
@@ -189,9 +190,20 @@ export default function Portfolio() {
           mae_pct: h.mae_pct != null ? parseFloat(h.mae_pct) : null
         }))
         setHistorico(mapeado)
+        carregarDividendosHist()
       }
     } catch {
       console.error("Erro ao carregar histórico")
+    }
+  }
+
+  // Proventos (dividendos/JCP) a que cada trade fechado teve direito — só B3
+  const carregarDividendosHist = async () => {
+    try {
+      const res = await api.get(`${API}/dividendos/recebidos`)
+      if (res.data?.sucesso) setDividendosHist(res.data.historico || {})
+    } catch {
+      console.error("Erro ao carregar dividendos do histórico")
     }
   }
 
@@ -1064,7 +1076,7 @@ export default function Portfolio() {
                 <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"13px", minWidth:"1000px" }}>
                   <thead>
                     <tr style={{ borderBottom:"1px solid #1e293b" }}>
-                      {["Ticker","Nome","Tipo","Qtd","Entrada","Saída","P&L","Retorno","MFE / MAE","Dias","Data Saída","Ações"].map(h => (
+                      {["Ticker","Nome","Tipo","Qtd","Entrada","Saída","P&L","Retorno","Dividendos","MFE / MAE","Dias","Data Saída","Ações"].map(h => (
                         <th key={h} style={{ padding:"12px 10px", textAlign:"left", color:"#64748b", fontSize:"11px", fontWeight:"600", textTransform:"uppercase", whiteSpace:"nowrap" }}>{h}</th>
                       ))}
                     </tr>
@@ -1087,7 +1099,7 @@ export default function Portfolio() {
                               <td style={{ padding:"8px" }}><input type="number" value={editHistForm.quantidade} onChange={e=>setEditHistForm({...editHistForm, quantidade:e.target.value})} style={{ width:"60px", ...inputStyle, padding:"4px" }} /></td>
                               <td style={{ padding:"8px" }}><input type="number" value={editHistForm.preco_entrada} onChange={e=>setEditHistForm({...editHistForm, preco_entrada:e.target.value})} style={{ width:"80px", ...inputStyle, padding:"4px" }} /></td>
                               <td style={{ padding:"8px" }}><input type="number" value={editHistForm.preco_saida} onChange={e=>setEditHistForm({...editHistForm, preco_saida:e.target.value})} style={{ width:"80px", ...inputStyle, padding:"4px" }} /></td>
-                              <td colSpan={2} style={{ padding:"8px", fontSize:"11px", color:"#64748b" }}>recalculado ao salvar</td>
+                              <td colSpan={3} style={{ padding:"8px", fontSize:"11px", color:"#64748b" }}>recalculado ao salvar</td>
                               <td style={{ padding:"8px" }}>
                                 <div style={{ display:"flex", flexDirection:"column", gap:"4px" }}>
                                   <input type="date" value={editHistForm.data_entrada} onChange={e=>setEditHistForm({...editHistForm, data_entrada:e.target.value})} style={{ ...inputStyle, padding:"3px", fontSize:"11px" }} title="Entrada" />
@@ -1124,6 +1136,21 @@ export default function Portfolio() {
                                 <span style={{ padding:"2px 8px", borderRadius:"8px", fontSize:"12px", fontWeight:"600", background: h.pl >= 0 ? "rgba(74,222,128,0.1)" : "rgba(248,113,113,0.1)", color: h.pl >= 0 ? "#4ade80" : "#f87171" }}>
                                   {h.pl >= 0 ? "+" : ""}{h.pl_pct}%
                                 </span>
+                              </td>
+                              <td style={{ padding:"12px 10px", fontSize:"12px" }}>
+                                {(() => {
+                                  const dv = dividendosHist[String(h.id)]
+                                  if (!dv || !dv.eventos || dv.eventos.length === 0) return <span style={{ color:"#475569" }}>—</span>
+                                  const dica = dv.eventos.map(e =>
+                                    `${fmtDia(e.data_com)} · ${e.tipo} R$ ${e.por_acao.toFixed(4)}/ação → R$ ${e.liquido.toFixed(2)} líquido · ${e.pago ? "pago" : `a receber${e.pagamento ? " em " + e.pagamento.split("-").reverse().join("/") : ""}`}`
+                                  ).join("\n") + `\nLucro com proventos: R$ ${(h.pl + dv.total_liquido).toFixed(2)}`
+                                  return (
+                                    <div title={dica} style={{ cursor:"help" }}>
+                                      <div style={{ color:"#fbbf24", fontWeight:"600" }}>💰 R$ {dv.total_liquido.toFixed(2)}</div>
+                                      {dv.a_receber > 0 && <div style={{ color:"#94a3b8", fontSize:"10px", marginTop:"2px" }}>a receber R$ {dv.a_receber.toFixed(2)}</div>}
+                                    </div>
+                                  )
+                                })()}
                               </td>
                               <td style={{ padding:"12px 10px", fontSize:"11px" }}>
                                 <div style={{ color:"#4ade80" }}>
