@@ -114,6 +114,20 @@ export default function Portfolio() {
     }
   }
 
+  // ── Próximas datas-com de dividendos/JCP das posições B3 (22/10/2026) ──
+  const [dividendosPos, setDividendosPos] = useState({})
+  const carregarDividendos = async (lista) => {
+    try {
+      const tickers = [...new Set(lista.map(p => (p.ticker || "").toUpperCase().trim()).filter(t => t.endsWith(".SA")))]
+      if (!tickers.length) return
+      const res = await api.post(`${API}/dividendos/proximos`, { tickers, dias: 30 })
+      if (res.data.sucesso) setDividendosPos(res.data.dados || {})
+    } catch {
+      console.error("Erro ao carregar datas-com")
+    }
+  }
+  const fmtDia = (iso) => iso ? iso.slice(0, 10).split("-").reverse().slice(0, 2).join("/") : ""
+
   const carregarPortfolio = async () => {
     try {
       const res = await api.get(`${API}/portfolio`)
@@ -139,6 +153,7 @@ export default function Portfolio() {
         }))
         setPosicoes(mapeado)
         carregarAtr(mapeado)
+        carregarDividendos(mapeado)
       }
     } catch {
       console.error("Erro ao carregar portfólio")
@@ -910,6 +925,18 @@ export default function Portfolio() {
                         onMouseLeave={e => { if (!estaEditando) e.currentTarget.style.background = idxRow % 2 === 0 ? "#0d1829" : "#0a1520" }}>
                         <td style={{ padding:"12px 10px" }}>
                           <div style={{ fontWeight:"700", color:"#38bdf8" }}>{p.ticker}</div>
+                          {(() => {
+                            const dv = dividendosPos[(p.ticker || "").toUpperCase().trim()]
+                            if (!dv) return null
+                            const totalLiq = dv.valor_liquido * (p.quantidade || 0)
+                            const quando = dv.dias_ate === 0 ? "hoje" : dv.dias_ate === 1 ? "amanhã" : fmtDia(dv.data_com)
+                            return (
+                              <div title={`Data-com ${fmtDia(dv.data_com)} (último dia para ter direito) · data ex ${fmtDia(dv.data_ex)}\n${dv.tipos.join(" + ")} de R$ ${dv.valor_bruto.toFixed(4)}/ação (líquido R$ ${dv.valor_liquido.toFixed(4)})\nVocê recebe ~R$ ${totalLiq.toFixed(2)} com ${p.quantidade} ações${dv.pagamento ? ` · pagamento ${dv.pagamento.split("-").reverse().join("/")}` : ""}\nNo dia ${fmtDia(dv.data_ex)} o preço abre ~R$ ${dv.valor_bruto.toFixed(2)} mais baixo: é o provento saindo, não queda nem motivo de stop.`}
+                                style={{ marginTop:"3px", display:"inline-block", padding:"1px 6px", borderRadius:"8px", fontSize:"10px", fontWeight:"600", background:"rgba(245,158,11,0.12)", color:"#f59e0b", cursor:"help" }}>
+                                💰 data-com {quando} · R$ {dv.valor_bruto.toFixed(2)}
+                              </div>
+                            )
+                          })()}
                           <div style={{ marginTop:"3px" }}>
                             <span style={{ padding:"1px 6px", borderRadius:"8px", fontSize:"10px", fontWeight:"600", background: p.origem === "RAPIDO" ? "rgba(245,158,11,0.15)" : "rgba(56,189,248,0.15)", color: p.origem === "RAPIDO" ? "#f59e0b" : "#38bdf8" }}>
                               {p.origem === "RAPIDO" ? "⚡ Swing" : "📈 Longo"}
