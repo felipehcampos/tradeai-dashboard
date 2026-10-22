@@ -16,6 +16,7 @@ export default function Mercado() {
   const [sinaisAntesDoScan, setSinaisAntesDoScan] = useState(0)
   const [ordenacao, setOrdenacao] = useState({ campo: null, direcao: "desc" })
   const [favoritados, setFavoritados] = useState({})  // { ticker: "ok" | "erro" } feedback do botão ⭐
+  const [dividendosSinais, setDividendosSinais] = useState({})  // { "VIVT3.SA": {data_com, valor_bruto, ...} } — próximas datas-com (22/10/2026)
   const [atrAgora, setAtrAgora] = useState({})  // { "GOGL34.SA": {atr_cor, atr_margem_pct, ...} } — ATR com o preço do momento (BDRs)
   const pollingRef = useRef(null)
   // ── BDRs (06/10/2026) ──
@@ -78,6 +79,13 @@ export default function Mercado() {
           return 0
         })
                 setSinais(filtrados)
+        // Próximas datas-com dos sinais COMPRAR da B3 (22/10/2026) — carrega depois, não atrasa a tabela
+        const compraB3 = [...new Set(filtrados.filter(x => x.sinal === "COMPRAR" && String(x.ticker || "").toUpperCase().endsWith(".SA")).map(x => x.ticker.toUpperCase()))].slice(0, 60)
+        if (compraB3.length) {
+          api.post(`${API}/dividendos/proximos`, { tickers: compraB3, dias: 30 })
+            .then(p => { if (p.data.sucesso) setDividendosSinais(p.data.dados || {}) })
+            .catch(() => {})
+        }
         const bdrTickers = filtrados.filter(x => x._bdr).map(x => x.ticker)
         if (bdrTickers.length) {
           api.post(`${API}/precos`, { tickers: bdrTickers })
@@ -579,6 +587,18 @@ export default function Mercado() {
                   >
                     <td style={{ padding: "14px 10px", fontWeight: "700", color: "#38bdf8", fontSize: "13px", whiteSpace: "normal", lineHeight: "1.35" }}>
                                             {s.ticker}
+                      {s.sinal === "COMPRAR" && dividendosSinais[String(s.ticker || "").toUpperCase()] && (() => {
+                        const dv = dividendosSinais[String(s.ticker).toUpperCase()]
+                        const dia = (iso) => iso ? iso.slice(0, 10).split("-").reverse().slice(0, 2).join("/") : ""
+                        const quando = dv.dias_ate === 0 ? "hoje" : dv.dias_ate === 1 ? "amanhã" : dia(dv.data_com)
+                        const pct = parseFloat(s.preco_atual) > 0 ? (dv.valor_bruto / parseFloat(s.preco_atual) * 100) : null
+                        return (
+                          <div title={`Data-com ${dia(dv.data_com)} (comprando até esse dia, você recebe) · data ex ${dia(dv.data_ex)}\n${dv.tipos.join(" + ")} de R$ ${dv.valor_bruto.toFixed(4)}/ação (líquido R$ ${dv.valor_liquido.toFixed(4)})${pct != null ? ` · ~${pct.toFixed(1)}% do preço` : ""}${dv.pagamento ? `\nPagamento ${dv.pagamento.split("-").reverse().join("/")}` : ""}\nNo dia ${dia(dv.data_ex)} o preço abre ~R$ ${dv.valor_bruto.toFixed(2)} mais baixo: é o provento saindo, não queda nem motivo de stop.`}
+                            style={{ marginTop: "3px", display: "inline-block", padding: "1px 6px", borderRadius: "8px", fontSize: "10px", fontWeight: "600", background: "rgba(245,158,11,0.12)", color: "#f59e0b", cursor: "help" }}>
+                            💰 data-com {quando} · R$ {dv.valor_bruto.toFixed(2)}
+                          </div>
+                        )
+                      })()}
                       {s._bdr && (
                         <div style={{ fontSize: "10px", fontWeight: "400", color: "#94a3b8", marginTop: "3px" }}>
                           BDR de {s._original} · liquidez {String(s.bdr_liquidez || "").toLowerCase()}
