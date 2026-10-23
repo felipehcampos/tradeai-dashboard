@@ -33,6 +33,7 @@ export default function Favoritos() {
   const [histPeriodo, setHistPeriodo] = useState("30d")
 
   // Mini-form "+ Portfólio"
+  const [saude, setSaude] = useState({})  // { "DIRR3": {selo, tooltip, ...} } — selo de saúde financeira (23/10/2026)
   const [formPortfolio, setFormPortfolio] = useState(null)  // {ticker, nome, mercado, preco, alvo, stop, quantidade}
 
   // ── Carrega a lista de favoritos (sem indicadores ainda) ──
@@ -41,6 +42,13 @@ export default function Favoritos() {
       const res = await api.get(`${API}/favoritos`)
       if (res.data.sucesso) {
         setFavoritos(res.data.dados || [])
+        // Selo de saúde financeira (23/10/2026) — só B3; carrega depois, não atrasa a lista
+        const b3 = (res.data.dados || []).filter(f => f.mercado === "B3").map(f => f.ticker)
+        if (b3.length) {
+          api.post(`${API}/fundamentos/saude`, { tickers: b3 })
+            .then(p => { if (p.data.sucesso) setSaude(p.data.dados || {}) })
+            .catch(() => {})
+        }
       }
     } catch {
       console.error("Erro ao carregar favoritos")
@@ -339,7 +347,7 @@ export default function Favoritos() {
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px", minWidth: "1000px" }}>
             <thead>
               <tr style={{ borderBottom: "1px solid #1e293b" }}>
-                {["Ticker", "Preço", "RSI", "Esticado", "MMA200", "Desconto 6m", "Selo", "ATR", "Nota", "Ações"].map(h => (
+                {["Ticker", "Preço", "RSI", "Esticado", "MMA200", "Desconto 6m", "Selo", "Saúde", "ATR", "Nota", "Ações"].map(h => (
                   <th key={h} style={{ padding: "12px 10px", textAlign: "left", color: "#64748b", fontSize: "11px", fontWeight: "600", textTransform: "uppercase", whiteSpace: "nowrap" }}>{h}</th>
                 ))}
               </tr>
@@ -381,6 +389,21 @@ export default function Favoritos() {
                       )}
                     </td>
                                         <td style={{ padding: "12px 10px", whiteSpace: "nowrap" }}>
+                      {(() => {
+                        const sd = saude[String(f.ticker || "").toUpperCase()]
+                        if (!sd) return <span style={{ color: "#475569", fontSize: "12px" }}>—</span>
+                        const cor = sd.selo === "🟢" ? "#4ade80" : sd.selo === "🟡" ? "#fbbf24" : sd.selo === "🔴" ? "#f87171" : "#64748b"
+                        const rotulo = sd.selo === "🟢" ? "OK" : sd.selo === "🟡" ? "Atenção" : sd.selo === "🔴" ? "Alerta" : "s/ dados"
+                        const tri = sd.ultimo_trimestre ? `\nÚltimo balanço: ${sd.ultimo_trimestre.split("-").reverse().join("/")}` : ""
+                        const fin = sd.financeira ? "\n(banco/seguradora: avaliado por lucro e ROE)" : ""
+                        return (
+                          <span title={`${sd.tooltip}${tri}${fin}`} style={{ cursor: "help", fontSize: "11px", fontWeight: "700", color: cor }}>
+                            {sd.selo} {rotulo}
+                          </span>
+                        )
+                      })()}
+                    </td>
+                    <td style={{ padding: "12px 10px", whiteSpace: "nowrap" }}>
                       {temInd && f.atr_cor ? (() => {
                         const verde = f.atr_cor === "VERDE"
                         const dist = verde ? f.atr_margem_pct : f.atr_falta_pct
@@ -423,7 +446,7 @@ export default function Favoritos() {
       )}
 
       <div style={{ fontSize: "11px", color: "#475569", marginTop: "14px" }}>
-        Os indicadores são a prévia do candle de hoje — mudam conforme o preço do momento. O selo usa os cortes do checklist essencial (RSI, esticado, MMA200, desconto 6m). Alvo/stop no "+ Portfólio" são sugestões editáveis, não vêm do scanner. ATR = ATR Trailing Stop (21,3), a mesma linha do gráfico da XP: 🟢 tendência de alta, 🔴 de queda. A menos de 2% da linha, a cor pode divergir da XP — confira no gráfico.
+        Os indicadores são a prévia do candle de hoje — mudam conforme o preço do momento. O selo usa os cortes do checklist essencial (RSI, esticado, MMA200, desconto 6m). Alvo/stop no "+ Portfólio" são sugestões editáveis, não vêm do scanner. ATR = ATR Trailing Stop (21,3), a mesma linha do gráfico da XP: 🟢 tendência de alta, 🔴 de queda. A menos de 2% da linha, a cor pode divergir da XP — confira no gráfico. Saúde = fundamentos do último balanço (lucro, dívida/EBITDA, margem, fluxo de caixa, liquidez; bancos e seguradoras: lucro e ROE), renovados a cada 7 dias — passe o mouse para ver o motivo.
       </div>
     </div>
   )
