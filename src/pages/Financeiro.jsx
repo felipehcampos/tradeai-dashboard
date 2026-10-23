@@ -97,7 +97,11 @@ export default function Financeiro() {
   const pctAberto = capitalAberto > 0 ? (lucroAberto / capitalAberto * 100) : 0
 
   // Realizado (dos trades fechados)
-  const lucroRealizado = temCDI ? di.ganho_real : fechados.reduce((a, h) => a + plVal(h), 0)
+  const lucroRealizadoPreco = temCDI ? di.ganho_real : fechados.reduce((a, h) => a + plVal(h), 0)
+  // Dividendos/JCP líquidos dos trades fechados entram no Realizado (23/10/2026)
+  const divFechados = proventos ? (parseFloat(proventos.fechados_liquido) || 0) : 0
+  const lucroRealizado = lucroRealizadoPreco + divFechados
+  const pctRealizado = temCDI && di.capital_movimentado > 0 ? (lucroRealizado / di.capital_movimentado * 100) : null
   const resultadoTotal = lucroRealizado + lucroAberto  // realizado + em aberto
   // Capital total = o que girou nos fechados + o que está investido nas abertas
   const capitalRealizado = temCDI ? di.capital_movimentado : 0
@@ -148,8 +152,12 @@ export default function Financeiro() {
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: "14px", marginBottom: "14px" }}>
         <div style={card({ background: "rgba(74,222,128,0.06)", border: "1px solid rgba(74,222,128,0.2)" })}>
           <div style={label}>✅ Realizado (já vendido)</div>
-          <p style={bigNum(lucroRealizado >= 0 ? "#4ade80" : "#f87171")}>{fmtBRL(lucroRealizado)} {temCDI && <span style={{ fontSize: "15px" }}>({fmtPct(di.pct_real)})</span>}</p>
-          <div style={sub}>lucro/prejuízo dos trades fechados</div>
+          <p style={bigNum(lucroRealizado >= 0 ? "#4ade80" : "#f87171")}>{fmtBRL(lucroRealizado)} {pctRealizado != null && <span style={{ fontSize: "15px" }}>({fmtPct(pctRealizado)})</span>}</p>
+          <div style={sub}>
+            {divFechados > 0
+              ? <>trades fechados · inclui {fmtBRL(divFechados)} de dividendos<br />só preço: {fmtBRL(lucroRealizadoPreco)}</>
+              : "lucro/prejuízo dos trades fechados"}
+          </div>
         </div>
         <div style={card({ background: lucroAberto >= 0 ? "rgba(74,222,128,0.06)" : "rgba(248,113,113,0.06)", border: `1px solid ${lucroAberto >= 0 ? "rgba(74,222,128,0.2)" : "rgba(248,113,113,0.2)"}` })}>
           <div style={label}>📊 Em aberto (posições atuais)</div>
@@ -167,7 +175,7 @@ export default function Financeiro() {
           <p style={bigNum("#fbbf24")}>{proventos ? fmtBRL(proventos.total_liquido) : "—"}</p>
           <div style={sub}>
             {proventos
-              ? <>recebido {fmtBRL(proventos.recebido)} · a receber {fmtBRL(proventos.a_receber)}<br />realizado com proventos: <span style={{ color: (lucroRealizado + proventos.fechados_liquido) >= 0 ? "#4ade80" : "#f87171", fontWeight: "600" }}>{fmtBRL(lucroRealizado + proventos.fechados_liquido)}</span></>
+              ? <>recebido {fmtBRL(proventos.recebido)} · a receber {fmtBRL(proventos.a_receber)}<br />{fmtBRL(proventos.fechados_liquido)} dos trades fechados já somados no Realizado</>
               : "proventos indisponíveis agora"}
           </div>
         </div>
