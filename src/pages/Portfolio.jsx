@@ -1131,6 +1131,17 @@ export default function Portfolio() {
                                 <span style={{ color: h.pl >= 0 ? "#4ade80" : "#f87171", fontWeight:"700", fontSize:"13px" }}>
                                   {h.pl >= 0 ? "▲" : "▼"} {moeda(h.mercado)} {fmt(Math.abs(h.pl))}
                                 </span>
+                                {(() => {
+                                  // Resultado somando os proventos líquidos do período (23/10/2026)
+                                  const dv = dividendosHist[String(h.id)]
+                                  if (!dv || !(dv.total_liquido > 0)) return null
+                                  const comDiv = h.pl + dv.total_liquido
+                                  return (
+                                    <div title="P&L + dividendos/JCP líquidos a que o trade teve direito" style={{ fontSize:"10px", marginTop:"3px", color: comDiv >= 0 ? "#4ade80" : "#f87171", opacity:0.8 }}>
+                                      c/ div: {comDiv < 0 ? "−" : ""}{moeda(h.mercado)} {fmt(Math.abs(comDiv))}
+                                    </div>
+                                  )
+                                })()}
                               </td>
                               <td style={{ padding:"12px 10px" }}>
                                 <span style={{ padding:"2px 8px", borderRadius:"8px", fontSize:"12px", fontWeight:"600", background: h.pl >= 0 ? "rgba(74,222,128,0.1)" : "rgba(248,113,113,0.1)", color: h.pl >= 0 ? "#4ade80" : "#f87171" }}>
