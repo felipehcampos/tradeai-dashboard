@@ -17,6 +17,7 @@ export default function Mercado() {
   const [ordenacao, setOrdenacao] = useState({ campo: null, direcao: "desc" })
   const [favoritados, setFavoritados] = useState({})  // { ticker: "ok" | "erro" } feedback do botão ⭐
   const [dividendosSinais, setDividendosSinais] = useState({})  // { "VIVT3.SA": {data_com, valor_bruto, ...} } — próximas datas-com (22/10/2026)
+  const [saude, setSaude] = useState({})  // { "DIRR3.SA": {selo, tooltip, ...} } — selo de saúde financeira (23/10/2026)
   const [atrAgora, setAtrAgora] = useState({})  // { "GOGL34.SA": {atr_cor, atr_margem_pct, ...} } — ATR com o preço do momento (BDRs)
   const pollingRef = useRef(null)
   // ── BDRs (06/10/2026) ──
@@ -84,6 +85,13 @@ export default function Mercado() {
         if (compraB3.length) {
           api.post(`${API}/dividendos/proximos`, { tickers: compraB3, dias: 30 })
             .then(p => { if (p.data.sucesso) setDividendosSinais(p.data.dados || {}) })
+            .catch(() => {})
+        }
+        // Selo de saúde financeira (23/10/2026) — todos os sinais B3; carrega depois, não atrasa a tabela
+        const todosB3 = [...new Set(filtrados.filter(x => String(x.ticker || "").toUpperCase().endsWith(".SA")).map(x => x.ticker.toUpperCase()))].slice(0, 150)
+        if (todosB3.length) {
+          api.post(`${API}/fundamentos/saude`, { tickers: todosB3 })
+            .then(p => { if (p.data.sucesso) setSaude(p.data.dados || {}) })
             .catch(() => {})
         }
         const bdrTickers = filtrados.filter(x => x._bdr).map(x => x.ticker)
@@ -266,6 +274,10 @@ export default function Mercado() {
       case "ticker":    return s.ticker || ""
       case "nome":      return s.nome || ""
       case "sinal":     return s.sinal === "COMPRAR" ? 1 : 0
+      case "saude": {
+        const sl = saude[String(s.ticker || "").toUpperCase()]?.selo
+        return sl === "🟢" ? 3 : sl === "🟡" ? 2 : sl === "🔴" ? 1 : null
+      }
       case "atr":       return s.atr_cor === "VERDE" ? 1 : s.atr_cor === "VERMELHO" ? 0 : null
       case "desconto":  return s.dist_media_6m != null ? parseFloat(s.dist_media_6m) : null
       case "esticado":  return (s.mme_20 != null && parseFloat(s.mme_20) > 0)
@@ -501,21 +513,22 @@ export default function Mercado() {
         </div>
       ) : (
         <div style={{ overflowX: "auto", borderRadius: "12px", border: "1px solid #1e293b", width: "100%" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed", minWidth: "1100px" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed", minWidth: "1170px" }}>
               <colgroup>
-              <col style={{ width: "11%" }} />
-              <col style={{ width: "8%" }} />
+              <col style={{ width: "10%" }} />
+              <col style={{ width: "7%" }} />
               <col style={{ width: "5%" }} />
               <col style={{ width: "8%" }} />
+              <col style={{ width: "6%" }} />
               <col style={{ width: "7%" }} />
               <col style={{ width: "7%" }} />
               <col style={{ width: "6%" }} />
               <col style={{ width: "5%" }} />
+              <col style={{ width: "7%" }} />
               <col style={{ width: "8%" }} />
-              <col style={{ width: "9%" }} />
-              <col style={{ width: "9%" }} />
+              <col style={{ width: "8%" }} />
               <col style={{ width: "5%" }} />
-              <col style={{ width: "6%" }} />
+              <col style={{ width: "5%" }} />
               <col style={{ width: "6%" }} />
             </colgroup>
             <thead>
@@ -525,6 +538,7 @@ export default function Mercado() {
                   { label: "Nome", campo: "nome" },
                   { label: "Mercado", campo: null },
                   { label: "Sinal", campo: "sinal" },
+                  { label: "Saúde", campo: "saude" },
                   { label: "ATR", campo: "atr" },
                   { label: "Desconto", campo: "desconto" },
                   { label: "Esticado", campo: "esticado" },
@@ -651,6 +665,21 @@ export default function Mercado() {
                       </span>
                     </td>
                                         <td style={{ padding: "14px 10px", whiteSpace: "nowrap" }}>
+                      {(() => {
+                        const sd = saude[String(s.ticker || "").toUpperCase()]
+                        if (!sd) return <span style={{ color: "#475569", fontSize: "12px" }}>—</span>
+                        const cor = sd.selo === "🟢" ? "#4ade80" : sd.selo === "🟡" ? "#fbbf24" : sd.selo === "🔴" ? "#f87171" : "#64748b"
+                        const rotulo = sd.selo === "🟢" ? "OK" : sd.selo === "🟡" ? "Atenção" : sd.selo === "🔴" ? "Alerta" : "s/ dados"
+                        const tri = sd.ultimo_trimestre ? `\nÚltimo balanço: ${sd.ultimo_trimestre.split("-").reverse().join("/")}` : ""
+                        const fin = sd.financeira ? "\n(banco/seguradora: avaliado por lucro e ROE)" : ""
+                        return (
+                          <span title={`${sd.tooltip}${tri}${fin}`} style={{ cursor: "help", fontSize: "11px", fontWeight: "700", color: cor }}>
+                            {sd.selo} {rotulo}
+                          </span>
+                        )
+                      })()}
+                    </td>
+                    <td style={{ padding: "14px 10px", whiteSpace: "nowrap" }}>
                       {s.atr_cor ? (() => {
                         const verde = s.atr_cor === "VERDE"
                         const dist = verde ? s.atr_margem_pct : s.atr_falta_pct
