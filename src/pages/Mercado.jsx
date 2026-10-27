@@ -17,6 +17,7 @@ export default function Mercado() {
   const [ordenacao, setOrdenacao] = useState({ campo: null, direcao: "desc" })
   const [favoritados, setFavoritados] = useState({})  // { ticker: "ok" | "erro" } feedback do botão ⭐
   const [dividendosSinais, setDividendosSinais] = useState({})  // { "VIVT3.SA": {data_com, valor_bruto, ...} } — próximas datas-com (22/10/2026)
+  const [insiders, setInsiders] = useState({})  // { "PETR4.SA": {sinal, tooltip, ...} } — insiders 👔 (27/10/2026)
   const [saude, setSaude] = useState({})  // { "DIRR3.SA": {selo, tooltip, ...} } — selo de saúde financeira (23/10/2026)
   const [atrAgora, setAtrAgora] = useState({})  // { "GOGL34.SA": {atr_cor, atr_margem_pct, ...} } — ATR com o preço do momento (BDRs)
   const pollingRef = useRef(null)
@@ -92,6 +93,9 @@ export default function Mercado() {
         if (todosB3.length) {
           api.post(`${API}/fundamentos/saude`, { tickers: todosB3 })
             .then(p => { if (p.data.sucesso) setSaude(p.data.dados || {}) })
+            .catch(() => {})
+          api.post(`${API}/insiders`, { tickers: todosB3 })
+            .then(p => { if (p.data.sucesso) setInsiders(p.data.dados || {}) })
             .catch(() => {})
         }
         const bdrTickers = filtrados.filter(x => x._bdr).map(x => x.ticker)
@@ -667,15 +671,25 @@ export default function Mercado() {
                                         <td style={{ padding: "14px 10px", whiteSpace: "nowrap" }}>
                       {(() => {
                         const sd = saude[String(s.ticker || "").toUpperCase()]
-                        if (!sd) return <span style={{ color: "#475569", fontSize: "12px" }}>—</span>
+                        const ins = insiders[String(s.ticker || "").toUpperCase()]
+                        const corIns = ins?.sinal === "compra" ? "#4ade80" : ins?.sinal === "venda" ? "#f87171" : "#fbbf24"
+                        const icoIns = ins?.sinal ? (
+                          <span title={ins.tooltip} style={{ display: "block", marginTop: "3px", fontSize: "10px", fontWeight: "700", color: corIns, cursor: "help" }}>
+                            👔 {ins.sinal === "compra" ? "compra" : ins.sinal === "venda" ? "venda" : "misto"}
+                          </span>
+                        ) : null
+                        if (!sd) return <>{<span style={{ color: "#475569", fontSize: "12px" }}>—</span>}{icoIns}</>
                         const cor = sd.selo === "🟢" ? "#4ade80" : sd.selo === "🟡" ? "#fbbf24" : sd.selo === "🔴" ? "#f87171" : "#64748b"
                         const rotulo = sd.selo === "🟢" ? "OK" : sd.selo === "🟡" ? "Atenção" : sd.selo === "🔴" ? "Alerta" : "s/ dados"
                         const tri = sd.ultimo_trimestre ? `\nÚltimo balanço: ${sd.ultimo_trimestre.split("-").reverse().join("/")}` : ""
                         const fin = sd.financeira ? "\n(banco/seguradora: avaliado por lucro e ROE)" : ""
                         return (
-                          <span title={`${sd.tooltip}${tri}${fin}`} style={{ cursor: "help", fontSize: "11px", fontWeight: "700", color: cor }}>
-                            {sd.selo} {rotulo}
-                          </span>
+                          <>
+                            <span title={`${sd.tooltip}${tri}${fin}`} style={{ cursor: "help", fontSize: "11px", fontWeight: "700", color: cor }}>
+                              {sd.selo} {rotulo}
+                            </span>
+                            {icoIns}
+                          </>
                         )
                       })()}
                     </td>
