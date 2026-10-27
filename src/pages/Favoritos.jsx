@@ -33,6 +33,7 @@ export default function Favoritos() {
   const [histPeriodo, setHistPeriodo] = useState("30d")
 
   // Mini-form "+ Portfólio"
+  const [insiders, setInsiders] = useState({})  // { "PETR4": {sinal, tooltip, ...} } — insiders 👔 (27/10/2026)
   const [saude, setSaude] = useState({})  // { "DIRR3": {selo, tooltip, ...} } — selo de saúde financeira (23/10/2026)
   const [formPortfolio, setFormPortfolio] = useState(null)  // {ticker, nome, mercado, preco, alvo, stop, quantidade}
 
@@ -47,6 +48,9 @@ export default function Favoritos() {
         if (b3.length) {
           api.post(`${API}/fundamentos/saude`, { tickers: b3 })
             .then(p => { if (p.data.sucesso) setSaude(p.data.dados || {}) })
+            .catch(() => {})
+          api.post(`${API}/insiders`, { tickers: b3 })
+            .then(p => { if (p.data.sucesso) setInsiders(p.data.dados || {}) })
             .catch(() => {})
         }
       }
@@ -391,15 +395,25 @@ export default function Favoritos() {
                                         <td style={{ padding: "12px 10px", whiteSpace: "nowrap" }}>
                       {(() => {
                         const sd = saude[String(f.ticker || "").toUpperCase()]
-                        if (!sd) return <span style={{ color: "#475569", fontSize: "12px" }}>—</span>
+                        const ins = insiders[String(f.ticker || "").toUpperCase()]
+                        const corIns = ins?.sinal === "compra" ? "#4ade80" : ins?.sinal === "venda" ? "#f87171" : "#fbbf24"
+                        const icoIns = ins?.sinal ? (
+                          <span title={ins.tooltip} style={{ display: "block", marginTop: "3px", fontSize: "10px", fontWeight: "700", color: corIns, cursor: "help" }}>
+                            👔 {ins.sinal === "compra" ? "compra" : ins.sinal === "venda" ? "venda" : "misto"}
+                          </span>
+                        ) : null
+                        if (!sd) return <>{<span style={{ color: "#475569", fontSize: "12px" }}>—</span>}{icoIns}</>
                         const cor = sd.selo === "🟢" ? "#4ade80" : sd.selo === "🟡" ? "#fbbf24" : sd.selo === "🔴" ? "#f87171" : "#64748b"
                         const rotulo = sd.selo === "🟢" ? "OK" : sd.selo === "🟡" ? "Atenção" : sd.selo === "🔴" ? "Alerta" : "s/ dados"
                         const tri = sd.ultimo_trimestre ? `\nÚltimo balanço: ${sd.ultimo_trimestre.split("-").reverse().join("/")}` : ""
                         const fin = sd.financeira ? "\n(banco/seguradora: avaliado por lucro e ROE)" : ""
                         return (
-                          <span title={`${sd.tooltip}${tri}${fin}`} style={{ cursor: "help", fontSize: "11px", fontWeight: "700", color: cor }}>
-                            {sd.selo} {rotulo}
-                          </span>
+                          <>
+                            <span title={`${sd.tooltip}${tri}${fin}`} style={{ cursor: "help", fontSize: "11px", fontWeight: "700", color: cor }}>
+                              {sd.selo} {rotulo}
+                            </span>
+                            {icoIns}
+                          </>
                         )
                       })()}
                     </td>
@@ -446,7 +460,7 @@ export default function Favoritos() {
       )}
 
       <div style={{ fontSize: "11px", color: "#475569", marginTop: "14px" }}>
-        Os indicadores são a prévia do candle de hoje — mudam conforme o preço do momento. O selo usa os cortes do checklist essencial (RSI, esticado, MMA200, desconto 6m). Alvo/stop no "+ Portfólio" são sugestões editáveis, não vêm do scanner. ATR = ATR Trailing Stop (21,3), a mesma linha do gráfico da XP: 🟢 tendência de alta, 🔴 de queda. A menos de 2% da linha, a cor pode divergir da XP — confira no gráfico. Saúde = fundamentos do último balanço (lucro, dívida/EBITDA, margem, fluxo de caixa, liquidez; bancos e seguradoras: lucro e ROE), renovados a cada 7 dias — passe o mouse para ver o motivo.
+        Os indicadores são a prévia do candle de hoje — mudam conforme o preço do momento. O selo usa os cortes do checklist essencial (RSI, esticado, MMA200, desconto 6m). Alvo/stop no "+ Portfólio" são sugestões editáveis, não vêm do scanner. ATR = ATR Trailing Stop (21,3), a mesma linha do gráfico da XP: 🟢 tendência de alta, 🔴 de queda. A menos de 2% da linha, a cor pode divergir da XP — confira no gráfico. Saúde = fundamentos do último balanço (lucro, dívida/EBITDA, margem, fluxo de caixa, liquidez; bancos e seguradoras: lucro e ROE), renovados a cada 7 dias — passe o mouse para ver o motivo. 👔 = compras/vendas em bolsa de controlador, conselho e diretoria nos últimos 3 meses (relatório mensal da CVM).
       </div>
     </div>
   )
