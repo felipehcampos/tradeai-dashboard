@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react"
 import api from "../services/api"
+import Top5Card from "./Top5Card"
 
 const API = import.meta.env.VITE_API_URL
 
@@ -431,6 +432,9 @@ export default function Mercado() {
           </button>
         </div>
       </div>
+
+      {/* Top 5 do dia (28/10/2026) — análise automática do backend */}
+      <Top5Card />
 
       {/* Cards resumo */}
       <div style={{ display: "flex", gap: "12px", marginBottom: "20px", flexWrap: "wrap" }}>
