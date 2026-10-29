@@ -17,6 +17,7 @@ const horaSP = (s) => {
 function corVeredito(v = "") {
   if (v.includes("🟢")) return { cor: "#4ade80", bg: "rgba(74,222,128,0.12)", borda: "rgba(74,222,128,0.35)" }
   if (v.includes("🟡")) return { cor: "#fbbf24", bg: "rgba(251,191,36,0.12)", borda: "rgba(251,191,36,0.35)" }
+  if (v.includes("👀")) return { cor: "#38bdf8", bg: "rgba(56,189,248,0.08)", borda: "rgba(56,189,248,0.30)" }
   return { cor: "#f87171", bg: "rgba(248,113,113,0.10)", borda: "rgba(248,113,113,0.30)" }
 }
 
@@ -167,7 +168,7 @@ export default function Top5Card() {
                   color: "#cbd5e1", fontSize: "12px", lineHeight: 1.5 }}>ℹ️ {t5.aviso}</div>
               )}
               <div style={{ marginTop: "10px", color: "#475569", fontSize: "11px" }}>
-                Gerado {dados.gerado_em ? `em ${horaSP(dados.gerado_em)}` : ""} a partir de {t5.total_compra_b3 ?? "—"} COMPRAR da B3.
+                Gerado {dados.gerado_em ? `em ${horaSP(dados.gerado_em)}` : ""} a partir de {t5.total_compra_b3 ?? "—"} COMPRAR da B3{t5.total_candidatos > t5.total_compra_b3 ? ` (+ BDRs e MANTER para completar o ranking)` : ""}.
                 Decisão é sua: ordem limitada até o teto e conferir o gráfico antes.
               </div>
             </>
