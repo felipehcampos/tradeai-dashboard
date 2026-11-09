@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import api from "../services/api"
 
 const API = import.meta.env.VITE_API_URL
@@ -36,6 +36,9 @@ export default function Top5Card() {
   })
   const [verFora, setVerFora] = useState(false)
   const [gerando, setGerando] = useState(false)
+  const [avisoGerar, setAvisoGerar] = useState(null)   // mensagem depois do "Gerar agora"
+  const pollRef = useRef(null)
+  useEffect(() => () => clearInterval(pollRef.current), [])
 
   const carregar = (data) => {
     setCarregando(true)
@@ -52,11 +55,39 @@ export default function Top5Card() {
     try { localStorage.setItem("top5_aberto", novo ? "1" : "0") } catch { /* sem storage */ }
   }
 
-  const gerarAgora = () => {
+  // 09/11/2026 (revisão do Gemini): em vez de recarregar fixo aos 75 s (e mostrar o top 5 ANTIGO se a
+  // análise demorasse mais), consulta a cada 10 s e só para quando o gerado_em MUDAR — até 4 minutos.
+  const gerarAgora = async () => {
+    const antes = dados?.gerado_em || null
     setGerando(true)
-    api.post(`${API}/top5/gerar`).catch(() => {})
-    // a análise leva ~1 min: recarrega depois
-    setTimeout(() => { carregar(); setGerando(false) }, 75000)
+    setAvisoGerar(null)
+    try {
+      await api.post(`${API}/top5/gerar`)
+    } catch (e) {
+      setGerando(false)
+      setAvisoGerar(`⚠️ Não consegui pedir a análise (${e?.message || "sem resposta"}).`)
+      return
+    }
+    const inicio = Date.now()
+    clearInterval(pollRef.current)
+    pollRef.current = setInterval(async () => {
+      try {
+        const r = await api.get(`${API}/top5`)
+        const novo = r.data?.sucesso ? r.data : null
+        if (novo && novo.gerado_em && novo.gerado_em !== antes) {
+          clearInterval(pollRef.current)
+          setDados(novo)
+          setGerando(false)
+          setAvisoGerar("✅ Top 5 atualizado agora.")
+          return
+        }
+      } catch { /* tenta de novo no próximo ciclo */ }
+      if (Date.now() - inicio > 240000) {
+        clearInterval(pollRef.current)
+        setGerando(false)
+        setAvisoGerar("⏱️ A análise está demorando mais de 4 min. Recarregue a página daqui a pouco — o que aparece agora ainda é o top 5 anterior.")
+      }
+    }, 10000)
   }
 
   const t5 = dados?.top5
@@ -90,11 +121,15 @@ export default function Top5Card() {
           <button onClick={gerarAgora} disabled={gerando} title="Gera a análise de novo com os sinais da última rodada (~1 min)"
             style={{ padding: "6px 12px", borderRadius: "6px", border: "none", cursor: gerando ? "default" : "pointer",
               background: gerando ? "#334155" : "#1e293b", color: "#38bdf8", fontSize: "12px", fontWeight: "600" }}>
-            {gerando ? "⏳ gerando (~1 min)…" : "🔄 Gerar agora"}
+            {gerando ? "⏳ gerando… (aguarde)" : "🔄 Gerar agora"}
           </button>
         </div>
       </div>
 
+      {avisoGerar && (
+        <div style={{ padding: "8px 18px", fontSize: "12px", color: avisoGerar.startsWith("✅") ? "#4ade80" : "#fbbf24",
+          background: "rgba(56,189,248,0.04)" }}>{avisoGerar}</div>
+      )}
       {aberto && (
         <div style={{ padding: "14px 18px" }}>
           {carregando ? (
