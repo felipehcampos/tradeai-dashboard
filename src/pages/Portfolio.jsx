@@ -88,6 +88,7 @@ export default function Portfolio() {
   const [dadosHistorico, setDadosHistorico] = useState([])
   const [carregandoHist, setCarregandoHist] = useState(false)
   const [cotacaoDolar, setCotacaoDolar] = useState(null)
+  const [resultadoGeral, setResultadoGeral] = useState(null)  // 09/11/2026: mesma conta do Financeiro (backend)
   const [filtroOrigem, setFiltroOrigem] = useState("todos")
   const [ordemData, setOrdemData] = useState("asc")
   const [editHist, setEditHist] = useState(null)      // id do trade do histórico em edição
@@ -222,6 +223,8 @@ export default function Portfolio() {
     carregarPortfolio()
     carregarHistorico()
     buscarCotacaoDolar()
+    api.get(`${API}/resultado-geral`).then(r => { if (r.data.sucesso) setResultadoGeral(r.data) })
+      .catch(e => console.warn("Resultado geral indisponível:", e?.message))
   }, [])
 
   // Busca o histórico de preços de uma posição para um período dado.
@@ -771,7 +774,14 @@ export default function Portfolio() {
                     { label: "Capital em aberto", valor: `R$ ${fmt(patrimonioInvestidoBRL)}`, sub: `${posicoes.length} posiç${posicoes.length !== 1 ? "ões" : "ão"} aberta${posicoes.length !== 1 ? "s" : ""} · vale R$ ${fmt(patrimonioTotalBRL)} hoje`, cor: "#38bdf8", bg: "rgba(56,189,248,0.06)", border: "rgba(56,189,248,0.2)" },
           { label: "Lucro em aberto", valor: `R$ ${fmt(lucroAbertoBRL)}`, pct: patrimonioInvestidoBRL > 0 ? ` (${lucroAbertoBRL >= 0 ? "+" : ""}${(lucroAbertoBRL / patrimonioInvestidoBRL * 100).toFixed(1)}%)` : "", sub: "ainda não realizado — pode mudar", cor: lucroAbertoBRL >= 0 ? "#4ade80" : "#f87171", bg: lucroAbertoBRL >= 0 ? "rgba(74,222,128,0.06)" : "rgba(248,113,113,0.06)", border: lucroAbertoBRL >= 0 ? "rgba(74,222,128,0.2)" : "rgba(248,113,113,0.2)" },
           { label: "Lucro realizado", valor: `R$ ${fmt(lucroRealizadoBRL)}`, pct: mediaRetorno ? ` (${parseFloat(mediaRetorno) >= 0 ? "+" : ""}${mediaRetorno}% por trade)` : "", sub: `${historico.length} trades encerrados · dinheiro no bolso`, cor: lucroRealizadoBRL >= 0 ? "#4ade80" : "#f87171", bg: lucroRealizadoBRL >= 0 ? "rgba(74,222,128,0.06)" : "rgba(248,113,113,0.06)", border: lucroRealizadoBRL >= 0 ? "rgba(74,222,128,0.2)" : "rgba(248,113,113,0.2)" },
-          { label: "Resultado acumulado", valor: `R$ ${fmt(resultadoTotalBRL)}`, sub: "realizado + em aberto", cor: resultadoTotalBRL >= 0 ? "#a78bfa" : "#f87171", bg: "rgba(167,139,250,0.06)", border: "rgba(167,139,250,0.2)" },
+          (() => {
+            // 09/11/2026: mesmo número do Financeiro (backend /resultado-geral: dividendos dos fechados + dólar do dia)
+            const tot = resultadoGeral ? resultadoGeral.total : resultadoTotalBRL
+            const sub = resultadoGeral
+              ? `realizado + em aberto + dividendos (${resultadoGeral.dividendos_fechados >= 0 ? "+" : ""}R$ ${fmt(resultadoGeral.dividendos_fechados)})`
+              : "realizado + em aberto"
+            return { label: "Resultado acumulado", valor: `R$ ${fmt(tot)}`, sub, cor: tot >= 0 ? "#a78bfa" : "#f87171", bg: "rgba(167,139,250,0.06)", border: "rgba(167,139,250,0.2)" }
+          })(),
         ].map((card, i) => (
           <div key={i} style={{ padding:"16px", borderRadius:"12px", background: card.bg, border:`1px solid ${card.border}` }}>
             <div style={{ fontSize:"12px", color:"#94a3b8", marginBottom:"6px" }}>{card.label}</div>

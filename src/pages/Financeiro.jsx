@@ -14,6 +14,7 @@ export default function Financeiro() {
   const [carregando, setCarregando] = useState(true)
   const [erro, setErro] = useState(null)
   const [proventos, setProventos] = useState(null)   // totais de /dividendos/recebidos
+  const [resultadoGeral, setResultadoGeral] = useState(null)  // 09/11/2026: mesma conta do Portfolio (backend)
 
   useEffect(() => {
     Promise.all([
@@ -21,7 +22,9 @@ export default function Financeiro() {
       api.get(`${API}/historico`).then(r => r.data).catch(() => ({ sucesso: false })),
       api.get(`${API}/portfolio`).then(r => r.data).catch(() => ({ sucesso: false })),
       api.get(`${API}/dividendos/recebidos`).then(r => r.data).catch(() => ({ sucesso: false })),
-    ]).then(([cdiRes, histRes, portRes, divRes]) => {
+      api.get(`${API}/resultado-geral`).then(r => r.data).catch(() => ({ sucesso: false })),
+    ]).then(([cdiRes, histRes, portRes, divRes, rgRes]) => {
+      if (rgRes.sucesso) setResultadoGeral(rgRes)
       if (divRes.sucesso) setProventos(divRes.totais)
       if (cdiRes.sucesso) setCdi(cdiRes.dados)
       if (histRes.sucesso) setHistorico(histRes.dados || [])
@@ -100,9 +103,10 @@ export default function Financeiro() {
   const lucroRealizadoPreco = temCDI ? di.ganho_real : fechados.reduce((a, h) => a + plVal(h), 0)
   // Dividendos/JCP líquidos dos trades fechados entram no Realizado (23/10/2026)
   const divFechados = proventos ? (parseFloat(proventos.fechados_liquido) || 0) : 0
-  const lucroRealizado = lucroRealizadoPreco + divFechados
+  // 09/11/2026: Realizado e Resultado total vêm do backend (/resultado-geral), iguais aos do Portfolio
+  const lucroRealizado = resultadoGeral ? resultadoGeral.realizado : lucroRealizadoPreco + divFechados
   const pctRealizado = temCDI && di.capital_movimentado > 0 ? (lucroRealizado / di.capital_movimentado * 100) : null
-  const resultadoTotal = lucroRealizado + lucroAberto  // realizado + em aberto
+  const resultadoTotal = resultadoGeral ? resultadoGeral.total : lucroRealizado + lucroAberto  // realizado + em aberto
   // Capital total = o que girou nos fechados + o que está investido nas abertas
   const capitalRealizado = temCDI ? di.capital_movimentado : 0
   const capitalTotal = capitalRealizado + capitalAberto
