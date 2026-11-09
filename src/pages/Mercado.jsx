@@ -107,7 +107,7 @@ export default function Mercado() {
               ;(p.data.sinais || []).forEach(x => { m[String(x.ticker || "").toUpperCase()] = x })
               setScannerB(m)
             })
-            .catch(() => {})
+            .catch(e => console.warn("Scanner B indisponível:", e?.message))
         }
         const bdrTickers = filtrados.filter(x => x._bdr).map(x => x.ticker)
         if (bdrTickers.length) {

@@ -41,15 +41,20 @@ export default function ScannerB() {
   const [placar, setPlacar] = useState(null)
   const [carregando, setCarregando] = useState(true)
   const [filtro, setFiltro] = useState("COMPRAR")
+  const [erro, setErro] = useState(null)  // revisão do ChatGPT: falha ≠ "sem dados"
 
   const carregar = (data) => {
     setCarregando(true)
+    setErro(null)
+    const falha = (onde) => (e) => ({ data: { sucesso: false, erro: `${onde}: ${e?.response?.status || ""} ${e?.message || "sem resposta"}` } })
     Promise.all([
-      api.get(`${API}/scanner-b`, { params: data ? { data } : {} }).catch(() => null),
-      api.get(`${API}/scanner-b/placar`).catch(() => null),
+      api.get(`${API}/scanner-b`, { params: data ? { data } : {} }).catch(falha("sinais")),
+      api.get(`${API}/scanner-b/placar`).catch(falha("placar")),
     ]).then(([d, p]) => {
       setDados(d?.data?.sucesso ? d.data : null)
       setPlacar(p?.data?.sucesso ? p.data : null)
+      const erros = [d, p].filter(x => !x?.data?.sucesso).map(x => x?.data?.erro || "erro desconhecido")
+      if (erros.length) setErro(erros.join(" · "))
     }).finally(() => setCarregando(false))
   }
   useEffect(() => { carregar() }, [])
@@ -77,11 +82,18 @@ export default function ScannerB() {
         )}
       </div>
 
+      {erro && (
+        <div style={{ ...card, borderColor: "rgba(248,113,113,0.5)", color: "#f87171", fontSize: "13px" }}>
+          ⚠️ Não consegui carregar o Scanner B ({erro}). Isso é FALHA de conexão, não ausência de sinais.
+          <button onClick={() => carregar(dados?.data_ref)} style={{ marginLeft: "10px", padding: "4px 10px", borderRadius: "6px", border: "none", cursor: "pointer", background: "#1e293b", color: "#38bdf8", fontSize: "12px" }}>Tentar de novo</button>
+        </div>
+      )}
+
       {/* PLACAR */}
       <div style={card}>
         <div style={{ color: "#e2e8f0", fontWeight: "800", fontSize: "15px", marginBottom: "4px" }}>🏁 Placar: oficial × Scanner B</div>
         <div style={{ color: "#64748b", fontSize: "11px", marginBottom: "10px" }}>
-          COMPRAR da B3 desde {dia(placar?.desde)} · 1 trade por ativo de cada vez · entra na abertura do dia do sinal, alvo pela máxima, stop pelo fechamento, prazo de 105 pregões.
+          COMPRAR da B3 desde {dia(placar?.desde)} · entra na abertura do dia do sinal, alvo pela máxima, stop pelo fechamento, prazo de 105 pregões.
           {placar?.b_nao_opera ? ` · O B deixou de operar ${placar.b_nao_opera} sinais (sem espaço até o preço normal).` : ""}
         </div>
         {carregando && !placar ? <div style={{ color: "#64748b", fontSize: "13px" }}>Carregando…</div> : !placar ? (
@@ -94,12 +106,21 @@ export default function ScannerB() {
               </tr></thead>
               <tbody>
                 <LinhaPlacar nome="Oficial" b={placar.oficial} />
+                <LinhaPlacar nome="Oficial (só onde o B opera)" b={placar.oficial_pareado} />
                 <LinhaPlacar nome="Scanner B (alvo B)" b={placar.b} destaque />
-                <LinhaPlacar nome="   só desconto ✅ real" b={placar.desconto_real} />
-                <LinhaPlacar nome="   só desconto ⚠️ falso" b={placar.desconto_falso} />
+                <LinhaPlacar nome="Oficial nos ✅ desconto real" b={placar.desconto_real} />
+                <LinhaPlacar nome="Oficial nos ⚠️ desconto falso" b={placar.desconto_falso} />
               </tbody>
             </table>
+            {placar.b_completo?.trades > 0 && (
+              <div style={{ marginTop: "10px", padding: "10px 12px", borderRadius: "8px", background: "rgba(56,189,248,0.06)", color: "#cbd5e1", fontSize: "12px", lineHeight: 1.6 }}>
+                <b style={{ color: "#38bdf8" }}>B completo</b> (alvo B + meia posição no desconto falso + não opera), nos {placar.b_completo.trades} trades já fechados:
+                {" "}oficial <b>{pct(placar.b_completo.por_posicao_oficial, 2)}</b> por posição ({placar.b_completo.soma_oficial} pontos em {placar.b_completo.capital_oficial} posições)
+                {" "}× B <b>{pct(placar.b_completo.por_posicao_b, 2)}</b> por posição ({placar.b_completo.soma_b} pontos usando {placar.b_completo.capital_b} posições).
+              </div>
+            )}
             <div style={{ color: "#475569", fontSize: "11px", marginTop: "8px" }}>
+              Os dois são medidos nos mesmos trades (1 por ativo de cada vez; 5 pregões sem reentrada depois de stop; se abrir já acima do alvo, o trade não acontece).
               "Todos" inclui os trades ainda abertos pelo preço de hoje. Período curto: números vão oscilar até janeiro. Referência de 10 anos: +1,4% por trade.
             </div>
           </div>
@@ -154,7 +175,7 @@ export default function ScannerB() {
               </tbody>
             </table>
             <div style={{ color: "#475569", fontSize: "11px", marginTop: "8px" }}>
-              🔺 pico = a máxima dos 6 meses ficou 40% ou mais acima do preço normal (mediana). Estudo de 10 anos: desconto falso rendeu ~1/3 do real; alvo B subiu o acerto de 37% para 48% nas ações com pico.
+              🔺 pico = o maior fechamento dos 6 meses ficou 40% ou mais acima do preço normal (mediana). Estudo de 10 anos: desconto falso rendeu ~1/3 do real; alvo B subiu o acerto de 37% para 48% nas ações com pico.
             </div>
           </div>
         )}
