@@ -11,10 +11,10 @@ import ScannerB from "./pages/ScannerB"
 
 const ABAS = [
   { id: "mercado",   label: "Mercado",    icon: "🌎" },
+  { id: "scannerb",  label: "Scanner B",  icon: "🧪" },
   { id: "portfolio", label: "Portfólio",  icon: "💼" },
   { id: "financeiro", label: "Financeiro", icon: "💰" },
   { id: "favoritos", label: "Favoritos",  icon: "⭐" },
-  { id: "scannerb",  label: "Scanner B",  icon: "🧪" },
   { id: "alertas",   label: "Alertas",    icon: "🔔" },
   { id: "noticias",  label: "Notícias",   icon: "📰" },
   { id: "ia",        label: "IA Análise", icon: "🤖" },
