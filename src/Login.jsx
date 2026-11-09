@@ -1,15 +1,37 @@
 import { useState } from "react"
+import axios from "axios"
+import { salvarToken } from "./services/api"
 
+const API = import.meta.env.VITE_API_URL
+
+// 09/11/2026: a senha é conferida no SERVIDOR (antes ficava escrita aqui, visível no site).
 export default function Login({ onLogin }) {
   const [senha, setSenha] = useState("")
   const [erro, setErro] = useState(false)
+  const [msg, setMsg] = useState("")
+  const [enviando, setEnviando] = useState(false)
 
-  const tentar = () => {
-    if (senha === "TradeAI@2026") {
-      onLogin()
-    } else {
+  const tentar = async () => {
+    if (!senha || enviando) return
+    setEnviando(true)
+    try {
+      const r = await axios.post(`${API}/login`, { senha })
+      if (r.data?.token) {
+        salvarToken(r.data.token)
+        onLogin()
+        return
+      }
+      setErro(true); setMsg("Senha incorreta. Tente novamente.")
+    } catch (e) {
+      const st = e?.response?.status
       setErro(true)
+      setMsg(st === 401 ? "Senha incorreta. Tente novamente."
+        : st === 429 ? "Muitas tentativas. Espere 15 minutos."
+        : st === 503 ? "Senha ainda não configurada no servidor."
+        : "Servidor indisponível. Tente de novo em instantes.")
+    } finally {
       setSenha("")
+      setEnviando(false)
     }
   }
 
@@ -37,7 +59,7 @@ export default function Login({ onLogin }) {
           value={senha}
           onChange={e => { setSenha(e.target.value); setErro(false) }}
           onKeyDown={e => e.key === "Enter" && tentar()}
-          placeholder="Digite a senha padrão"
+          placeholder="Digite a senha"
           style={{
             width: "100%", padding: "12px", borderRadius: "8px",
             border: erro ? "1px solid #ef4444" : "1px solid #334155",
@@ -47,7 +69,7 @@ export default function Login({ onLogin }) {
         />
         {erro && (
           <p style={{color: "#ef4444", fontSize: "13px", marginBottom: "12px", fontWeight: "600"}}>
-            ⚠️ Senha incorreta. Tente novamente.
+            ⚠️ {msg || "Senha incorreta. Tente novamente."}
           </p>
         )}
         <button onClick={tentar} style={{
@@ -56,7 +78,7 @@ export default function Login({ onLogin }) {
           fontWeight: "bold", fontSize: "16px", cursor: "pointer",
           boxShadow: "0 2px 8px rgba(56,189,248,0.3)"
         }}>
-          Entrar no Terminal
+          {enviando ? "Conferindo…" : "Entrar no Terminal"}
         </button>
       </div>
     </div>

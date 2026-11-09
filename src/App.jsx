@@ -6,6 +6,7 @@ import IAAnalise from "./pages/IAAnalise"
 import Favoritos from "./pages/Favoritos"
 import Noticias from "./pages/Noticias"
 import Login from "./Login"
+import { tokenAindaValido } from "./services/api"
 import Financeiro from "./pages/Financeiro"
 import ScannerB from "./pages/ScannerB"
 
@@ -21,7 +22,7 @@ const ABAS = [
 ]
 
 export default function App() {
-  const [logado, setLogado] = useState(false)
+  const [logado, setLogado] = useState(() => tokenAindaValido())   // 09/11/2026: passe de 30 dias
   const [aba, setAba] = useState("mercado")
 
   if (!logado) return <Login onLogin={() => setLogado(true)} />
