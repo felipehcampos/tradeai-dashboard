@@ -7,12 +7,14 @@ import Favoritos from "./pages/Favoritos"
 import Noticias from "./pages/Noticias"
 import Login from "./Login"
 import Financeiro from "./pages/Financeiro"
+import ScannerB from "./pages/ScannerB"
 
 const ABAS = [
   { id: "mercado",   label: "Mercado",    icon: "🌎" },
   { id: "portfolio", label: "Portfólio",  icon: "💼" },
   { id: "financeiro", label: "Financeiro", icon: "💰" },
   { id: "favoritos", label: "Favoritos",  icon: "⭐" },
+  { id: "scannerb",  label: "Scanner B",  icon: "🧪" },
   { id: "alertas",   label: "Alertas",    icon: "🔔" },
   { id: "noticias",  label: "Notícias",   icon: "📰" },
   { id: "ia",        label: "IA Análise", icon: "🤖" },
@@ -118,6 +120,7 @@ export default function App() {
         {aba === "portfolio" && <Portfolio />}
         {aba === "financeiro" && <Financeiro />}
         {aba === "favoritos" && <Favoritos />}
+        {aba === "scannerb"  && <ScannerB />}
         {aba === "alertas"   && <Alertas />}
         {aba === "noticias"  && <Noticias />}
         {aba === "ia"        && <IAAnalise />}

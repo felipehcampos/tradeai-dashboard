@@ -20,6 +20,7 @@ export default function Mercado() {
   const [dividendosSinais, setDividendosSinais] = useState({})  // { "VIVT3.SA": {data_com, valor_bruto, ...} } — próximas datas-com (22/10/2026)
   const [insiders, setInsiders] = useState({})  // { "PETR4.SA": {sinal, tooltip, ...} } — insiders 👔 (27/10/2026)
   const [saude, setSaude] = useState({})  // { "DIRR3.SA": {selo, tooltip, ...} } — selo de saúde financeira (23/10/2026)
+  const [scannerB, setScannerB] = useState({})  // { "ASAI3.SA": {desconto, dist_mediana, pico_pct, alvo_b, tamanho_b} } — Scanner B (09/11/2026)
   const [atrAgora, setAtrAgora] = useState({})  // { "GOGL34.SA": {atr_cor, atr_margem_pct, ...} } — ATR com o preço do momento (BDRs)
   const pollingRef = useRef(null)
   // ── BDRs (06/10/2026) ──
@@ -97,6 +98,15 @@ export default function Mercado() {
             .catch(() => {})
           api.post(`${API}/insiders`, { tickers: todosB3 })
             .then(p => { if (p.data.sucesso) setInsiders(p.data.dados || {}) })
+            .catch(() => {})
+          // Scanner B (sombra, 09/11/2026): desconto pela mediana, pico e alvo B — só informa
+          api.get(`${API}/scanner-b`)
+            .then(p => {
+              if (!p.data.sucesso) return
+              const m = {}
+              ;(p.data.sinais || []).forEach(x => { m[String(x.ticker || "").toUpperCase()] = x })
+              setScannerB(m)
+            })
             .catch(() => {})
         }
         const bdrTickers = filtrados.filter(x => x._bdr).map(x => x.ticker)
@@ -735,6 +745,21 @@ export default function Mercado() {
                         : "#f87171"
                     }}>
                       {descontoMedia != null ? `${descontoMedia.toFixed(1)}%` : "—"}
+                      {(() => {
+                        const b = scannerB[String(s.ticker || "").toUpperCase()]
+                        if (!b || !b.desconto || b.desconto === "SEM") return null
+                        const falso = b.desconto === "FALSO"
+                        const dica = `Scanner B (teste)\nMédia 6m: ${b.dist_media?.toFixed(1)}% · Mediana 6m: ${b.dist_mediana?.toFixed(1)}%\nPico nos 6 meses: +${b.pico_pct?.toFixed(0)}% acima da mediana`
+                          + (falso ? "\n⚠️ Só parece barato porque um pico de alta inflou a média. Pelo preço normal (mediana) NÃO está descontado."
+                                   : "\n✅ Barato pela média e pela mediana.")
+                          + `\nSugestão do B: ${b.tamanho_b === "NAO" ? "não operar" : b.tamanho_b === "MEIA" ? "meia posição" : "posição cheia"}`
+                        return (
+                          <span title={dica} style={{ display: "block", marginTop: "3px", fontSize: "10px", fontWeight: "700", cursor: "help",
+                            color: falso ? "#fbbf24" : "#4ade80" }}>
+                            {falso ? "⚠️ falso" : "✅ real"}
+                          </span>
+                        )
+                      })()}
                     </td>
                     <td style={{
                       padding: "14px 10px", fontSize: "12px", fontWeight: "600", whiteSpace: "nowrap",
@@ -772,6 +797,15 @@ export default function Mercado() {
                         {moeda(s)} {formatarPreco(s.alvo_lucro)}
                       </span>
                       <span style={{ color: "#22c55e", fontSize: "10px", display: "block" }}>+{percentualAlvo}%</span>
+                      {(() => {
+                        const b = scannerB[String(s.ticker || "").toUpperCase()]
+                        if (!b) return null
+                        const ab = b.alvo_b, ao = parseFloat(s.alvo_lucro)
+                        if (b.tamanho_b === "NAO")
+                          return <span title="Scanner B (teste): com pico forte, o preço normal (mediana) já está abaixo do preço — sem espaço de lucro até ele." style={{ display: "block", marginTop: "3px", fontSize: "10px", fontWeight: "700", color: "#fbbf24", cursor: "help" }}>B: não opera</span>
+                        if (ab == null || !ao || Math.abs(ab - ao) < 0.01) return null
+                        return <span title={`Scanner B (teste): pico de +${b.pico_pct?.toFixed(0)}% inflou a média. Alvo B = preço normal (mediana). Só observação — use o alvo oficial.`} style={{ display: "block", marginTop: "3px", fontSize: "10px", fontWeight: "700", color: "#38bdf8", cursor: "help" }}>B: {moeda(s)} {formatarPreco(ab)}</span>
+                      })()}
                     </td>
                     <td style={{ padding: "14px 10px", whiteSpace: "nowrap" }}>
                       <span style={{ color: "#f87171", fontSize: "12px", fontWeight: "600" }}>
