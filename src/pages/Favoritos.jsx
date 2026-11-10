@@ -9,9 +9,9 @@ const moeda = (mercado) => (mercado === "B3" ? "R$" : "US$")
 
 // Cor e rótulo do selo do checklist essencial
 const SELO_INFO = {
-  VERDE:    { cor: "#4ade80", bg: "rgba(74,222,128,0.15)",  label: "🟢 No ponto" },
-  AMARELO:  { cor: "#f59e0b", bg: "rgba(245,158,11,0.15)",  label: "🟡 Aguardando" },
-  VERMELHO: { cor: "#f87171", bg: "rgba(248,113,113,0.15)", label: "🔴 Desarmado" },
+  VERDE:    { cor: "#22D3A0", bg: "rgba(34,211,160,0.10)",  borda: "rgba(34,211,160,0.35)", label: "No ponto" },
+  AMARELO:  { cor: "#FBBF24", bg: "rgba(251,191,36,0.10)",  borda: "rgba(251,191,36,0.35)", label: "Aguardando" },
+  VERMELHO: { cor: "#FB6474", bg: "rgba(251,100,116,0.10)", borda: "rgba(251,100,116,0.35)", label: "Desarmado" },
 }
 
 export default function Favoritos() {
@@ -201,7 +201,9 @@ export default function Favoritos() {
     }
   }
 
-  const inputStyle = { padding: "10px", borderRadius: "6px", border: "1px solid #334155", background: "#0f172a", color: "#f1f5f9", fontSize: "13px" }
+  const inputStyle = { padding: "10px", borderRadius: "10px", border: "1px solid #1E3352", background: "#0A1424", color: "#E6EDF7", fontSize: "13px" }
+  const fiBotao = { height: "34px", padding: "0 16px", borderRadius: "999px", border: "1px solid var(--fi-borda-forte)", background: "rgba(56,189,248,0.08)", color: "var(--fi-texto)", fontSize: "12px", cursor: "pointer" }
+  const icoBtn = (cor) => ({ width: "32px", height: "32px", borderRadius: "999px", border: "1px solid var(--fi-borda-forte)", background: "transparent", color: cor, cursor: "pointer", fontSize: "12px" })
 
   return (
     <div style={{ width: "100%" }}>
@@ -209,7 +211,7 @@ export default function Favoritos() {
       {/* ── MODAL DE HISTÓRICO ── */}
       {modalHist && (
         <div onClick={() => setModalHist(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", zIndex: 1100, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}>
-          <div onClick={e => e.stopPropagation()} style={{ background: "#0d1829", border: "1px solid #1e293b", borderRadius: "16px", padding: "24px", maxWidth: "1000px", width: "95%", maxHeight: "90vh", display: "flex", flexDirection: "column" }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: "#0B1426", border: "1px solid #1E3352", borderRadius: "18px", boxShadow: "0 30px 80px rgba(0,0,0,0.6)", padding: "24px", maxWidth: "1000px", width: "95%", maxHeight: "90vh", display: "flex", flexDirection: "column" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
               <div style={{ fontSize: "17px", fontWeight: "bold", color: "#f1f5f9" }}>📈 Histórico — {modalHist.ticker}</div>
               <button onClick={() => setModalHist(null)} style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", fontSize: "16px" }}>✕</button>
@@ -279,7 +281,7 @@ export default function Favoritos() {
       {/* ── MINI-FORM "+ PORTFÓLIO" ── */}
       {formPortfolio && (
         <div onClick={() => setFormPortfolio(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}>
-          <div onClick={e => e.stopPropagation()} style={{ background: "#0d1829", border: "1px solid #1e293b", borderRadius: "16px", padding: "28px", maxWidth: "440px", width: "100%" }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: "#0B1426", border: "1px solid #1E3352", borderRadius: "18px", boxShadow: "0 30px 80px rgba(0,0,0,0.6)", padding: "28px", maxWidth: "440px", width: "100%" }}>
             <div style={{ fontSize: "18px", fontWeight: "bold", color: "#f1f5f9", marginBottom: "6px" }}>➕ Adicionar {formPortfolio.ticker} ao Portfólio</div>
             <div style={{ fontSize: "12px", color: "#f59e0b", marginBottom: "18px" }}>Alvo e stop são sugestões (média 6m / MMA200). Confira e ajuste.</div>
 
@@ -310,145 +312,126 @@ export default function Favoritos() {
         </div>
       )}
 
-      {/* ── HEADER ── */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", flexWrap: "wrap", gap: "12px" }}>
+      {/* ── CABEÇALHO (Future Intelligence, 10/11/2026) ── */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: "18px", flexWrap: "wrap", gap: "12px" }}>
         <div>
-          <div style={{ fontSize: "22px", fontWeight: "bold", color: "#f1f5f9" }}>⭐ Favoritos / Observação</div>
-          <div style={{ fontSize: "12px", color: "#64748b", marginTop: "4px" }}>
-            Indicadores recalculados ao vivo (prévia do dia). {ultimaAtualizacao && `Atualizado às ${ultimaAtualizacao}`}
+          <h1 className="fi-titulo" style={{ margin: 0, fontSize: "24px", fontWeight: 700 }}>Favoritos</h1>
+          <div style={{ fontSize: "12px", color: "var(--fi-texto-4)", marginTop: "2px" }}>
+            Ativos em observação · indicadores ao vivo (prévia do dia){ultimaAtualizacao && ` · atualizado às ${ultimaAtualizacao}`}
           </div>
         </div>
         {favoritos.length > 0 && (
-          <button onClick={atualizarTodos} disabled={atualizando} style={{ padding: "10px 18px", borderRadius: "8px", cursor: atualizando ? "default" : "pointer", background: "#1e293b", color: "#38bdf8", fontWeight: "bold", fontSize: "13px", border: "1px solid #334155" }}>
-            {atualizando ? "Atualizando..." : "🔄 Atualizar Todos"}
+          <button type="button" onClick={atualizarTodos} disabled={atualizando} style={{ ...fiBotao, cursor: atualizando ? "default" : "pointer" }}>
+            {atualizando ? "Atualizando…" : "Atualizar todos"}
           </button>
         )}
       </div>
 
       {/* ── ADICIONAR ── */}
-      <div style={{ display: "flex", gap: "8px", marginBottom: "20px", flexWrap: "wrap", padding: "16px", background: "#0d1829", borderRadius: "12px", border: "1px solid #1e293b" }}>
-        <input placeholder="Ticker (ex: VALE3.SA)" value={novoTicker} onChange={e => setNovoTicker(e.target.value)} onKeyDown={e => e.key === "Enter" && adicionar()} style={{ ...inputStyle, flex: 1, minWidth: "160px" }} />
-        <select value={novoMercado} onChange={e => setNovoMercado(e.target.value)} style={inputStyle}>
+      <div className="fi-painel" style={{ display: "flex", gap: "8px", marginBottom: "18px", flexWrap: "wrap", padding: "14px 16px" }}>
+        <input aria-label="Ticker" placeholder="Ticker (ex: VALE3.SA)" value={novoTicker} onChange={e => setNovoTicker(e.target.value)} onKeyDown={e => e.key === "Enter" && adicionar()} style={{ ...inputStyle, flex: 1, minWidth: "160px" }} />
+        <select aria-label="Mercado" value={novoMercado} onChange={e => setNovoMercado(e.target.value)} style={inputStyle}>
           <option value="B3">B3</option>
           <option value="NASDAQ">NASDAQ</option>
           <option value="NYSE">NYSE</option>
         </select>
-        <input placeholder="Nota (opcional)" value={novaNota} onChange={e => setNovaNota(e.target.value)} onKeyDown={e => e.key === "Enter" && adicionar()} style={{ ...inputStyle, flex: 1, minWidth: "160px" }} />
-        <button onClick={adicionar} style={{ padding: "10px 20px", borderRadius: "6px", border: "none", cursor: "pointer", background: "#16a34a", color: "white", fontWeight: "bold", fontSize: "13px" }}>+ Adicionar</button>
+        <input aria-label="Nota" placeholder="Nota (opcional)" value={novaNota} onChange={e => setNovaNota(e.target.value)} onKeyDown={e => e.key === "Enter" && adicionar()} style={{ ...inputStyle, flex: 1, minWidth: "160px" }} />
+        <button type="button" onClick={adicionar} style={{ ...fiBotao, height: "40px", background: "rgba(34,211,160,0.12)", borderColor: "rgba(34,211,160,0.45)", color: "#22D3A0", fontWeight: 600 }}>+ Adicionar</button>
       </div>
 
-      {/* ── TABELA ── */}
+      {/* ── LISTA ── */}
       {carregando ? (
-        <div style={{ textAlign: "center", padding: "40px", color: "#64748b" }}>Carregando favoritos...</div>
+        <div style={{ textAlign: "center", padding: "40px", color: "var(--fi-texto-4)" }}>Carregando favoritos…</div>
       ) : favoritos.length === 0 ? (
-        <div style={{ textAlign: "center", padding: "60px 20px", color: "#64748b" }}>
-          <div style={{ fontSize: "40px", marginBottom: "12px" }}>⭐</div>
+        <div style={{ textAlign: "center", padding: "50px 20px", color: "var(--fi-texto-4)" }}>
           <div>Nenhum favorito ainda. Adicione um ticker acima.</div>
-          <div style={{ fontSize: "12px", marginTop: "6px" }}>Depois clique em "Atualizar Todos" para ver os indicadores ao vivo.</div>
+          <div style={{ fontSize: "12px", marginTop: "6px" }}>Depois clique em "Atualizar todos" para ver os indicadores ao vivo.</div>
         </div>
       ) : (
-        <div style={{ overflowX: "auto", background: "#0d1829", borderRadius: "12px", border: "1px solid #1e293b" }}>
+        <div className="fi-painel" style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px", minWidth: "1000px" }}>
             <thead>
-              <tr style={{ borderBottom: "1px solid #1e293b" }}>
-                {["Ticker", "Preço", "RSI", "Esticado", "MMA200", "Desconto 6m", "Selo", "Saúde", "ATR", "Nota", "Ações"].map(h => (
-                  <th key={h} style={{ padding: "12px 10px", textAlign: "left", color: "#64748b", fontSize: "11px", fontWeight: "600", textTransform: "uppercase", whiteSpace: "nowrap" }}>{h}</th>
+              <tr>
+                {["Ativo", "Preço", "RSI", "Esticado", "MMA200", "Desconto 6m", "Selo", "Saúde", "ATR (21,3)", "Nota", ""].map(h => (
+                  <th key={h || "acoes"} style={{ padding: "12px 10px", textAlign: "left", color: "#5F7391", fontSize: "10.5px", fontWeight: 500, textTransform: "uppercase", letterSpacing: "1.1px", whiteSpace: "nowrap" }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {favoritos.map((f, i) => {
+              {favoritos.map((f) => {
                 const selo = SELO_INFO[f.selo] || null
                 const temInd = f.ok === true
+                const tdS = { padding: "12px 10px", borderTop: "1px solid #101D31" }
                 return (
-                  <tr key={f.ticker} style={{ borderBottom: "1px solid #1e293b", background: i % 2 === 0 ? "#0d1829" : "#0a1520" }}>
-                    <td style={{ padding: "12px 10px" }}>
-                      <div style={{ fontWeight: "700", color: "#38bdf8" }}>{f.ticker}</div>
-                      <div style={{ fontSize: "10px", color: "#64748b" }}>{f.mercado}</div>
+                  <tr key={f.ticker}>
+                    <td style={tdS}>
+                      <div style={{ fontWeight: 600, fontSize: "14px" }}>{String(f.ticker).replace(".SA", "")}</div>
+                      <div style={{ fontSize: "10.5px", color: "var(--fi-texto-4)" }}>{f.mercado}</div>
                     </td>
-                    <td style={{ padding: "12px 10px", color: "#f1f5f9", fontWeight: "600" }}>
-                      {temInd && f.preco_atual != null ? `${moeda(f.mercado)} ${fmt(f.preco_atual)}` : "—"}
-                    </td>
-                    <td style={{ padding: "12px 10px", color: temInd && f.rsi != null && f.rsi < 46 ? "#4ade80" : "#cbd5e1" }}>
-                      {temInd && f.rsi != null ? f.rsi.toFixed(1) : "—"}
-                    </td>
-                    <td style={{ padding: "12px 10px", color: temInd && f.dist_mme20_pct != null && f.dist_mme20_pct <= 0 ? "#4ade80" : "#f59e0b" }}>
+                    <td style={{ ...tdS, fontWeight: 600 }}>{temInd && f.preco_atual != null ? `${moeda(f.mercado)} ${fmt(f.preco_atual)}` : "—"}</td>
+                    <td style={{ ...tdS, color: temInd && f.rsi != null && f.rsi < 46 ? "#22D3A0" : "var(--fi-texto-2)" }}>{temInd && f.rsi != null ? f.rsi.toFixed(1) : "—"}</td>
+                    <td style={{ ...tdS, color: temInd && f.dist_mme20_pct != null && f.dist_mme20_pct <= 0 ? "#22D3A0" : "#FBBF24" }}>
                       {temInd && f.dist_mme20_pct != null ? `${f.dist_mme20_pct > 0 ? "+" : ""}${f.dist_mme20_pct.toFixed(2)}%` : "—"}
                     </td>
-                    <td style={{ padding: "12px 10px" }}>
+                    <td style={tdS}>
                       {temInd && f.acima_mma200 != null ? (
-                        <span style={{ padding: "2px 8px", borderRadius: "6px", fontSize: "11px", background: f.acima_mma200 ? "rgba(248,113,113,0.12)" : "rgba(74,222,128,0.12)", color: f.acima_mma200 ? "#f87171" : "#4ade80" }}>
+                        <span style={{ padding: "3px 9px", borderRadius: "999px", fontSize: "11px", fontWeight: 600, border: `1px solid ${f.acima_mma200 ? "rgba(251,100,116,0.35)" : "rgba(34,211,160,0.35)"}`,
+                          background: f.acima_mma200 ? "rgba(251,100,116,0.10)" : "rgba(34,211,160,0.10)", color: f.acima_mma200 ? "#FB6474" : "#22D3A0" }}>
                           {f.acima_mma200 ? "Acima" : "Abaixo"}
                         </span>
                       ) : "—"}
                     </td>
-                    <td style={{ padding: "12px 10px", color: temInd && f.desconto_6m_pct != null && f.desconto_6m_pct <= -9 ? "#4ade80" : "#cbd5e1" }}>
+                    <td style={{ ...tdS, fontWeight: 600, color: temInd && f.desconto_6m_pct != null && f.desconto_6m_pct <= -9 ? "#22D3A0" : "var(--fi-texto-2)" }}>
                       {temInd && f.desconto_6m_pct != null ? `${f.desconto_6m_pct > 0 ? "+" : ""}${f.desconto_6m_pct.toFixed(1)}%` : "—"}
                     </td>
-                    <td style={{ padding: "12px 10px" }}>
+                    <td style={tdS}>
                       {selo ? (
-                        <span style={{ padding: "3px 10px", borderRadius: "10px", fontSize: "11px", fontWeight: "600", background: selo.bg, color: selo.cor, whiteSpace: "nowrap" }}>{selo.label}</span>
-                      ) : (
-                        <span style={{ fontSize: "11px", color: "#64748b" }}>sem dados</span>
-                      )}
+                        <span style={{ padding: "3px 10px", borderRadius: "999px", fontSize: "11px", fontWeight: 600, background: selo.bg, color: selo.cor, border: `1px solid ${selo.borda}`, whiteSpace: "nowrap",
+                          boxShadow: f.selo === "VERDE" ? "0 0 12px rgba(34,211,160,0.3)" : "none" }}>{selo.label}</span>
+                      ) : <span style={{ fontSize: "11px", color: "#5F7391" }}>sem dados</span>}
                     </td>
-                                        <td style={{ padding: "12px 10px", whiteSpace: "nowrap" }}>
+                    <td style={{ ...tdS, whiteSpace: "nowrap" }}>
                       {(() => {
                         const sd = saude[String(f.ticker || "").toUpperCase()]
                         const ins = insiders[String(f.ticker || "").toUpperCase()]
-                        const corIns = ins?.sinal === "compra" ? "#4ade80" : ins?.sinal === "venda" ? "#f87171" : "#fbbf24"
+                        const corIns = ins?.sinal === "compra" ? "#22D3A0" : ins?.sinal === "venda" ? "#FB6474" : "#FBBF24"
                         const icoIns = ins?.sinal ? (
-                          <span title={ins.tooltip} style={{ display: "block", marginTop: "3px", fontSize: "10px", fontWeight: "700", color: corIns, cursor: "help" }}>
+                          <span title={ins.tooltip} style={{ display: "block", marginTop: "3px", fontSize: "10px", fontWeight: 600, color: corIns, cursor: "help" }}>
                             👔 {ins.sinal === "compra" ? "compra" : ins.sinal === "venda" ? "venda" : "misto"}
                           </span>
                         ) : null
-                        if (!sd) return <>{<span style={{ color: "#475569", fontSize: "12px" }}>—</span>}{icoIns}</>
-                        const cor = sd.selo === "🟢" ? "#4ade80" : sd.selo === "🟡" ? "#fbbf24" : sd.selo === "🔴" ? "#f87171" : "#64748b"
-                        const rotulo = sd.selo === "🟢" ? "OK" : sd.selo === "🟡" ? "Atenção" : sd.selo === "🔴" ? "Alerta" : "s/ dados"
+                        if (!sd) return <><span style={{ color: "#5F7391", fontSize: "12px" }}>—</span>{icoIns}</>
+                        const cor = sd.selo === "🟢" ? "#22D3A0" : sd.selo === "🟡" ? "#FBBF24" : sd.selo === "🔴" ? "#FB6474" : "#5F7391"
+                        const rot = sd.selo === "🟢" ? "OK" : sd.selo === "🟡" ? "Atenção" : sd.selo === "🔴" ? "Alerta" : "s/ dados"
                         const tri = sd.ultimo_trimestre ? `\nÚltimo balanço: ${sd.ultimo_trimestre.split("-").reverse().join("/")}` : ""
                         const fin = sd.financeira ? "\n(banco/seguradora: avaliado por lucro e ROE)" : ""
-                        return (
-                          <>
-                            <span title={`${sd.tooltip}${tri}${fin}`} style={{ cursor: "help", fontSize: "11px", fontWeight: "700", color: cor }}>
-                              {sd.selo} {rotulo}
-                            </span>
-                            {icoIns}
-                          </>
-                        )
+                        return (<><span title={`${sd.tooltip}${tri}${fin}`} style={{ cursor: "help", fontSize: "11px", fontWeight: 600, color: cor }}>{rot}</span>{icoIns}</>)
                       })()}
                     </td>
-                    <td style={{ padding: "12px 10px", whiteSpace: "nowrap" }}>
+                    <td style={{ ...tdS, whiteSpace: "nowrap" }}>
                       {temInd && f.atr_cor ? (() => {
                         const verde = f.atr_cor === "VERDE"
                         const dist = verde ? f.atr_margem_pct : f.atr_falta_pct
                         const perto = dist != null && dist < 2
                         const desde = f.atr_desde ? f.atr_desde.split("-").reverse().slice(0, 2).join("/") : null
                         return (
-                          <div>
-                            <span style={{ padding: "2px 8px", borderRadius: "6px", fontSize: "11px", fontWeight: "600", background: verde ? "rgba(74,222,128,0.12)" : "rgba(248,113,113,0.12)", color: verde ? "#4ade80" : "#f87171" }}>
-                              {verde ? "🟢 Alta" : "🔴 Queda"}
+                          <div title={`linha ${moeda(f.mercado)} ${fmt(f.atr_linha)}${desde ? ` · nessa cor desde ${desde}` : ""}`}>
+                            <span style={{ padding: "3px 9px", borderRadius: "999px", fontSize: "11px", fontWeight: 600, border: `1px solid ${verde ? "rgba(34,211,160,0.35)" : "rgba(251,100,116,0.35)"}`,
+                              background: verde ? "rgba(34,211,160,0.10)" : "rgba(251,100,116,0.10)", color: verde ? "#22D3A0" : "#FB6474" }}>
+                              {verde ? "alta" : "queda"}{dist != null ? ` · ${verde ? "" : "falta "}${dist.toFixed(1).replace(".", ",")}%` : ""}
                             </span>
-                            <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "4px" }}>
-                              linha {moeda(f.mercado)} {fmt(f.atr_linha)}{desde ? ` · desde ${desde}` : ""}
-                            </div>
-                            {dist != null && (
-                              <div style={{ fontSize: "11px", color: perto ? "#f59e0b" : "#64748b" }}>
-                                {verde ? `margem ${dist.toFixed(1)}%` : `falta +${dist.toFixed(1)}%`}{perto ? " · confira na XP" : ""}
-                              </div>
-                            )}
+                            {perto && <div style={{ fontSize: "10.5px", color: "#FBBF24", marginTop: "4px" }}>confira na XP</div>}
                           </div>
                         )
                       })() : "—"}
                     </td>
-                    <td style={{ padding: "12px 10px", color: "#94a3b8", fontSize: "11px", maxWidth: "140px" }}>{f.nota_pessoal || ""}</td>
-                    <td style={{ padding: "12px 10px" }}>
-                      <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
-                        <button onClick={() => atualizarUm(f.ticker)} disabled={atualizandoUm === f.ticker} title="Atualizar este ativo" style={{ padding: "4px 8px", borderRadius: "4px", border: "none", cursor: "pointer", background: "#1e293b", color: "#38bdf8", fontSize: "11px", fontWeight: "600" }}>
-                          {atualizandoUm === f.ticker ? "..." : "🔄"}
-                        </button>
-                        <button onClick={() => abrirHistorico(f)} title="Ver histórico" style={{ padding: "4px 8px", borderRadius: "4px", border: "none", cursor: "pointer", background: "#0ea5e9", color: "white", fontSize: "11px", fontWeight: "600" }}>📈</button>
-                        <button onClick={() => abrirFormPortfolio(f)} disabled={!temInd} title="Adicionar ao portfólio" style={{ padding: "4px 8px", borderRadius: "4px", border: "none", cursor: temInd ? "pointer" : "not-allowed", background: temInd ? "#16a34a" : "#334155", color: "white", fontSize: "11px", fontWeight: "600" }}>➕</button>
-                        <button onClick={() => remover(f.ticker)} title="Remover" style={{ padding: "4px 8px", borderRadius: "4px", border: "none", cursor: "pointer", background: "#dc2626", color: "white", fontSize: "11px" }}>🗑️</button>
+                    <td style={{ ...tdS, color: "var(--fi-texto-3)", fontSize: "11.5px", maxWidth: "160px" }}>{f.nota_pessoal || ""}</td>
+                    <td style={tdS}>
+                      <div style={{ display: "flex", gap: "6px" }}>
+                        <button type="button" onClick={() => atualizarUm(f.ticker)} disabled={atualizandoUm === f.ticker} title="Atualizar este ativo" aria-label={`Atualizar ${f.ticker}`} style={icoBtn("#38BDF8")}>{atualizandoUm === f.ticker ? "…" : "↻"}</button>
+                        <button type="button" onClick={() => abrirHistorico(f)} title="Ver histórico" aria-label={`Histórico de ${f.ticker}`} style={icoBtn("#38BDF8")}>📈</button>
+                        <button type="button" onClick={() => abrirFormPortfolio(f)} disabled={!temInd} title="Adicionar ao portfólio" aria-label={`Adicionar ${f.ticker} ao portfólio`} style={{ ...icoBtn(temInd ? "#22D3A0" : "#5F7391"), cursor: temInd ? "pointer" : "not-allowed" }}>+</button>
+                        <button type="button" onClick={() => remover(f.ticker)} title="Remover" aria-label={`Remover ${f.ticker}`} style={icoBtn("#FB6474")}>✕</button>
                       </div>
                     </td>
                   </tr>
@@ -459,8 +442,8 @@ export default function Favoritos() {
         </div>
       )}
 
-      <div style={{ fontSize: "11px", color: "#475569", marginTop: "14px" }}>
-        Os indicadores são a prévia do candle de hoje — mudam conforme o preço do momento. O selo usa os cortes do checklist essencial (RSI, esticado, MMA200, desconto 6m). Alvo/stop no "+ Portfólio" são sugestões editáveis, não vêm do scanner. ATR = ATR Trailing Stop (21,3), a mesma linha do gráfico da XP: 🟢 tendência de alta, 🔴 de queda. A menos de 2% da linha, a cor pode divergir da XP — confira no gráfico. Saúde = fundamentos do último balanço (lucro, dívida/EBITDA, margem, fluxo de caixa, liquidez; bancos e seguradoras: lucro e ROE), renovados a cada 7 dias — passe o mouse para ver o motivo. 👔 = compras/vendas em bolsa de controlador, conselho e diretoria nos últimos 3 meses (relatório mensal da CVM).
+      <div style={{ fontSize: "11px", color: "#5F7391", marginTop: "14px", lineHeight: 1.6 }}>
+        Os indicadores são a prévia do candle de hoje — mudam conforme o preço do momento. Selo: No ponto = abaixo da MMA200, desconto ≤ −9%, RSI abaixo de 46 e esticado ≤ 0; Aguardando = tese existe, timing ainda não; Desarmado = acima da MMA200 ou sem desconto. Alvo/stop no "+ Portfólio" são sugestões editáveis. ATR = ATR Trailing Stop (21,3), a mesma linha da XP; a menos de 2% da linha, confira no gráfico. Saúde = fundamentos do último balanço (passe o mouse). 👔 = compras/vendas de controlador, conselho e diretoria nos últimos 3 meses.
       </div>
     </div>
   )
