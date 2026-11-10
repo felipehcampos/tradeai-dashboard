@@ -632,6 +632,9 @@ export default function Mercado() {
         </div>
       )}
 
+      {/* Top 5 do dia (28/10/2026) — análise automática do backend — primeiro bloco da aba (10/11/2026) */}
+      <Top5Card />
+
       {/* Radar + gráfico */}
       <div style={{ display: "flex", flexWrap: "wrap", gap: "18px", alignItems: "stretch" }}>
         <section aria-label="Radar do dia" className="fi-painel" style={{ flex: "1 1 300px", padding: "18px" }}>
@@ -668,9 +671,6 @@ export default function Mercado() {
           <Grafico />
         </section>
       </div>
-
-      {/* Top 5 do dia (28/10/2026) — análise automática do backend */}
-      <Top5Card />
 
       {/* Lista de sinais + análise */}
       <div style={{ display: "flex", flexWrap: "wrap", gap: "18px", alignItems: "flex-start" }}>
