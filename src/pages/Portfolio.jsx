@@ -102,6 +102,8 @@ export default function Portfolio() {
   const [atrPos, setAtrPos] = useState({})
   const [atrCarregado, setAtrCarregado] = useState(false)
   const [atrAberto, setAtrAberto] = useState(null)   // 09/11: posição com a lista de dias do ATR aberta
+  const [selPos, setSelPos] = useState(null)          // 10/11: posição escolhida (painel da direita)
+  const [grafPos, setGrafPos] = useState({ ticker: null, velas: [], carregando: false, erro: null })
 
   const carregarAtr = async (lista) => {
     try {
@@ -310,7 +312,7 @@ export default function Portfolio() {
 
   const iniciarEdicao = (p) => {
     setEditando(p.id)
-    setEditForm({ quantidade: p.quantidade, preco_entrada: p.preco_entrada })
+    setEditForm({ quantidade: p.quantidade, preco_entrada: p.preco_entrada, alvo_lucro: p.alvo_lucro ?? "", stop_loss: p.stop_loss ?? "" })
   }
 
     const salvarEdicao = async (p) => {
@@ -320,6 +322,8 @@ export default function Portfolio() {
         quantidade: parseFloat(editForm.quantidade),
         preco_medio: parseFloat(editForm.preco_entrada),
         preco_entrada: parseFloat(editForm.preco_entrada),
+        alvo_lucro: editForm.alvo_lucro !== "" && editForm.alvo_lucro != null ? parseFloat(editForm.alvo_lucro) : null,
+        stop_loss: editForm.stop_loss !== "" && editForm.stop_loss != null ? parseFloat(editForm.stop_loss) : null,
       })
       if (res.data?.sucesso === false) {
         alert(res.data.erro || "Erro ao salvar edição.")
@@ -609,15 +613,301 @@ export default function Portfolio() {
   }, {})
   const dadosMensais = Object.values(historicoMensal).sort((a, b) => a.chave.localeCompare(b.chave))
 
-  const inputStyle = { padding:"10px", borderRadius:"6px", border:"1px solid #334155", background:"#0f172a", color:"#f1f5f9", fontSize:"13px" }
+  const inputStyle = { padding:"10px", borderRadius:"10px", border:"1px solid #1E3352", background:"#0A1424", color:"#E6EDF7", fontSize:"13px" }
+
+  // ══════════ Future Intelligence (10/11/2026): lista resumida + painel da posição ══════════
+  const fiBotao = (ativo = true) => ({
+    height:"34px", padding:"0 16px", borderRadius:"999px", border:"1px solid var(--fi-borda-forte)",
+    background: ativo ? "rgba(56,189,248,0.08)" : "#132238", color: ativo ? "var(--fi-texto)" : "var(--fi-texto-4)",
+    fontSize:"12px", cursor: ativo ? "pointer" : "default", display:"inline-flex", alignItems:"center", gap:"6px",
+  })
+  const fiFiltro = (on, grande = false) => ({
+    height: grande ? "34px" : "30px", padding:"0 14px", borderRadius:"999px", cursor:"pointer", fontSize: grande ? "13px" : "11.5px",
+    fontWeight: on ? 600 : 400, border:`1px solid ${on ? "rgba(56,189,248,0.6)" : "var(--fi-borda-forte)"}`,
+    background: on ? "rgba(56,189,248,0.14)" : "transparent", color: on ? "var(--fi-texto)" : "var(--fi-texto-3)",
+    boxShadow: on ? "0 0 14px rgba(56,189,248,0.25)" : "none",
+  })
+  const fiPill = (cor, fundo, borda) => ({
+    display:"inline-flex", alignItems:"center", gap:"4px", padding:"3px 9px", borderRadius:"999px",
+    fontSize:"11px", fontWeight:600, whiteSpace:"nowrap", color:cor, background:fundo, border:`1px solid ${borda}`,
+  })
+  const P_OK = fiPill("#22D3A0", "rgba(34,211,160,0.10)", "rgba(34,211,160,0.35)")
+  const P_WARN = fiPill("#FBBF24", "rgba(251,191,36,0.10)", "rgba(251,191,36,0.35)")
+  const P_BAD = fiPill("#FB6474", "rgba(251,100,116,0.10)", "rgba(251,100,116,0.35)")
+  const P_NEU = fiPill("#9DB0CB", "#132238", "#1E3352")
+  const GRADE_POS = "150px 120px 100px minmax(180px, 1fr) 150px 130px"
+
+  const posSelecionada = posicoesFiltradas.find(p => p.id === selPos) || posicoesFiltradas[0] || null
+
+  // Gráfico de velas da posição escolhida (mesma rota do Mercado)
+  useEffect(() => {
+    const t = posSelecionada ? posSelecionada.ticker.toUpperCase().trim() : null
+    if (!t) return
+    let vivo = true
+    setGrafPos({ ticker: t, velas: [], carregando: true, erro: null })
+    api.get(`${API}/mercado/grafico/${t}`, { params: { pregoes: 90 } })
+      .then(r => { if (vivo) setGrafPos({ ticker: t, velas: r.data.sucesso ? (r.data.velas || []) : [], carregando: false, erro: r.data.sucesso ? null : (r.data.erro || "erro") }) })
+      .catch(e => { if (vivo) setGrafPos({ ticker: t, velas: [], carregando: false, erro: e?.message || "sem resposta" }) })
+    return () => { vivo = false }
+  }, [posSelecionada ? posSelecionada.ticker : null])
+
+  const infoPosicao = (p) => {
+    const pl = (p.preco_atual - p.preco_entrada) * p.quantidade
+    const plPct = (p.preco_atual - p.preco_entrada) / p.preco_entrada * 100
+    const alvo = p.alvo_lucro, stop = p.stop_loss
+    const caminho = alvo && alvo !== p.preco_entrada ? (p.preco_atual - p.preco_entrada) / (alvo - p.preco_entrada) * 100 : null
+    const paraStop = stop ? (stop / p.preco_atual - 1) * 100 : null
+    const paraAlvo = alvo ? (alvo / p.preco_atual - 1) * 100 : null
+    const pertoStop = stop && p.preco_entrada > stop ? (p.preco_entrada - p.preco_atual) / (p.preco_entrada - stop) * 100 > 80 : false
+    let situacao
+    if (stop && p.preco_atual <= stop) situacao = { txt: "Abaixo do stop", estilo: P_BAD }
+    else if (alvo && p.preco_atual >= alvo) situacao = { txt: "Alvo atingido", estilo: P_OK }
+    else if (pertoStop) situacao = { txt: "Perto do stop", estilo: P_WARN }
+    else if (caminho != null && caminho > 80) situacao = { txt: "Perto do alvo", estilo: P_OK }
+    else situacao = { txt: "Em andamento", estilo: P_NEU }
+    return { pl, plPct, emLucro: pl >= 0, alvo, stop, caminho, paraStop, paraAlvo, situacao,
+      dias: p.dias != null ? p.dias : diasNaOperacao(p.data), dv: dividendosPos[(p.ticker || "").toUpperCase().trim()] }
+  }
+
+  // Barra stop → alvo com marcas da entrada e do preço de agora
+  const BarraCaminho = ({ p, info }) => {
+    if (!info.alvo || !info.stop || info.alvo <= info.stop) return <span style={{ fontSize:"11px", color:"#5F7391" }}>sem alvo/stop</span>
+    const pos = (v) => Math.max(0, Math.min(100, (v - info.stop) / (info.alvo - info.stop) * 100))
+    const corAgora = info.emLucro ? "#22D3A0" : "#FB6474"
+    return (
+      <div style={{ display:"flex", flexDirection:"column", gap:"5px", paddingRight:"8px" }}>
+        <div style={{ position:"relative", height:"8px", borderRadius:"999px",
+          background:"linear-gradient(90deg, rgba(251,100,116,0.55) 0%, #132238 35%, #132238 65%, rgba(34,211,160,0.55) 100%)" }}>
+          <span title={`entrada ${fmt(p.preco_entrada)}`} style={{ position:"absolute", left:`${pos(p.preco_entrada)}%`, top:"-3px", width:"2px", height:"14px", background:"#FBBF24", transform:"translateX(-50%)" }} />
+          <span title={`agora ${fmt(p.preco_atual)}`} style={{ position:"absolute", left:`${pos(p.preco_atual)}%`, top:"-3px", width:"14px", height:"14px", borderRadius:"50%",
+            background:corAgora, border:"2px solid #04070D", transform:"translateX(-50%)", boxShadow:`0 0 8px ${corAgora}` }} />
+        </div>
+        <div style={{ display:"flex", justifyContent:"space-between", fontSize:"10.5px" }}>
+          <span style={{ color:"#FB6474" }}>stop {info.paraStop != null ? `${info.paraStop.toFixed(1).replace(".", ",")}%` : "—"}</span>
+          <span style={{ color:"#22D3A0" }}>alvo {info.paraAlvo != null ? `${info.paraAlvo >= 0 ? "+" : ""}${info.paraAlvo.toFixed(1).replace(".", ",")}%` : "—"}</span>
+        </div>
+      </div>
+    )
+  }
+
+  const direcaoAtr = (a) => {
+    const h = Array.isArray(a?.atr_hist) ? a.atr_hist : []
+    if (h.length < 2) return null
+    const verde = a.atr_cor === "VERDE", delta = h[h.length - 1].dist - h[0].dist, virou = h[0].cor !== h[h.length - 1].cor
+    if (virou) return { txt: h[h.length - 1].cor === "VERDE" ? "▲ virou alta" : "▼ virou queda", cor: h[h.length - 1].cor === "VERDE" ? "#22D3A0" : "#FB6474" }
+    if (Math.abs(delta) < 0.5) return { txt: "■ estável", cor: "#9DB0CB" }
+    if (delta > 0) return { txt: verde ? "▲ ganhando força" : "▲ melhorando", cor: "#22D3A0" }
+    return { txt: verde ? "▼ perdendo força" : "▼ piorando", cor: "#FB6474" }
+  }
+
+  const BarrinhasAtr = ({ h, alto = 16, larg = 6 }) => {
+    const max = Math.max(...h.map(y => Math.abs(y.dist)), 1)
+    return (
+      <div style={{ display:"flex", alignItems:"flex-end", gap:"2px", height:`${alto}px` }}>
+        {h.map((x, i) => (
+          <div key={i} style={{ width:`${larg}px`, height:`${Math.max(3, Math.abs(x.dist) / max * alto)}px`, borderRadius:"1px",
+            background: x.cor === "VERDE" ? "#22D3A0" : "#FB6474", opacity: i === h.length - 1 ? 1 : 0.55,
+            boxShadow: i === h.length - 1 ? `0 0 6px ${x.cor === "VERDE" ? "#22D3A0" : "#FB6474"}` : "none" }} />
+        ))}
+      </div>
+    )
+  }
+
+  const MiniAtr = ({ a, carregado }) => {
+    if (!a || !a.atr_cor) return <span style={{ color:"#5F7391", fontSize:"12px" }}>{carregado ? "—" : "…"}</span>
+    const verde = a.atr_cor === "VERDE", dist = verde ? a.atr_margem_pct : a.atr_falta_pct
+    const d = direcaoAtr(a), h = Array.isArray(a.atr_hist) ? a.atr_hist : []
+    return (
+      <div style={{ display:"flex", flexDirection:"column", gap:"4px" }}>
+        <span style={verde ? P_OK : P_BAD}>{verde ? "alta" : "queda"}{dist != null ? ` · ${verde ? "" : "falta "}${Number(dist).toFixed(1).replace(".", ",")}%` : ""}</span>
+        {h.length >= 2 && (
+          <div style={{ display:"flex", alignItems:"center", gap:"8px" }}>
+            <BarrinhasAtr h={h} alto={12} larg={5} />
+            {d && <span style={{ fontSize:"10px", fontWeight:600, color:d.cor }}>{d.txt}</span>}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  const GraficoVelas = ({ p }) => {
+    const t = p.ticker.toUpperCase().trim()
+    const caixa = (txt) => <div style={{ height:"240px", display:"flex", alignItems:"center", justifyContent:"center", color:"var(--fi-texto-4)", fontSize:"12px" }}>{txt}</div>
+    if (grafPos.carregando || grafPos.ticker !== t) return caixa("Carregando gráfico…")
+    if (grafPos.erro || !grafPos.velas.length) return caixa(`Gráfico indisponível agora (${grafPos.erro || "sem dados"}).`)
+    const v = grafPos.velas, H = 240
+    const refs = [p.preco_entrada, p.alvo_lucro, p.stop_loss].filter(x => x)
+    const vals = v.flatMap(x => [x.h, x.l]).concat(refs)
+    const lo = Math.min(...vals) * 0.995, hi = Math.max(...vals) * 1.005
+    const y = (q) => (1 - (q - lo) / (hi - lo)) * H, cw = 100 / v.length
+    const linha = (q, cor, rot, abaixo) => !q ? null : (
+      <div style={{ position:"absolute", left:0, right:0, top:`${y(q)}px`, borderTop:`1px dashed ${cor}`, boxShadow:`0 0 8px ${cor}` }}>
+        <span style={{ position:"absolute", right:"6px", top: abaixo ? "4px" : "-18px", fontSize:"10px", fontWeight:600, color:cor, background:"rgba(4,7,13,0.7)", padding:"0 4px", borderRadius:"4px" }}>{rot} {fmt(q)}</span>
+      </div>
+    )
+    return (
+      <div role="img" aria-label={`Gráfico de velas de ${p.ticker} com entrada, alvo, stop e ATR`}
+        style={{ position:"relative", height:`${H}px`, borderRadius:"10px", overflow:"hidden",
+          backgroundImage:"linear-gradient(rgba(56,189,248,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(56,189,248,0.04) 1px, transparent 1px)",
+          backgroundSize:"100% 48px, 60px 100%" }}>
+        {v.map((x, i) => {
+          const up = x.c >= x.o, cor = up ? "#22D3A0" : "#FB6474", left = (i + 0.5) * cw
+          const bt = y(Math.max(x.o, x.c)), bb = y(Math.min(x.o, x.c))
+          return (
+            <div key={i} title={`${x.data.split("-").reverse().join("/")} · fech ${fmt(x.c)} · máx ${fmt(x.h)} · mín ${fmt(x.l)}${x.atr ? ` · ATR ${fmt(x.atr)}` : ""}`}>
+              <div style={{ position:"absolute", left:`calc(${left}% - 0.5px)`, top:`${y(x.h)}px`, height:`${Math.max(1, y(x.l) - y(x.h))}px`, width:"1px", background:cor, opacity:0.8 }} />
+              <div style={{ position:"absolute", left:`calc(${left}% - ${Math.max(1.5, Math.min(3.5, cw * 3))}px)`, top:`${bt}px`, height:`${Math.max(1.5, bb - bt)}px`,
+                width:`${Math.max(3, Math.min(7, cw * 6))}px`, borderRadius:"1.5px", background:cor }} />
+              {x.atr != null && x.atr > lo && x.atr < hi && (
+                <div style={{ position:"absolute", left:`calc(${left}% - 2px)`, top:`${y(x.atr) - 2}px`, width:"4px", height:"4px", borderRadius:"50%",
+                  background: x.atr_cor === "VERDE" ? "#A3E635" : "#FB6474", opacity:0.85 }} />
+              )}
+            </div>
+          )
+        })}
+        {linha(p.alvo_lucro, "#22D3A0", "alvo")}
+        {linha(p.preco_entrada, "#FBBF24", "entrada")}
+        {linha(p.stop_loss, "#FB6474", "stop", true)}
+      </div>
+    )
+  }
+
+  const PainelPosicao = ({ p }) => {
+    const info = infoPosicao(p), a = atrPos[String(p.id)], estaEditando = editando === p.id
+    const h = Array.isArray(a?.atr_hist) ? a.atr_hist : [], d = direcaoAtr(a)
+    const verdeAtr = a?.atr_cor === "VERDE", distAtr = a ? (verdeAtr ? a.atr_margem_pct : a.atr_falta_pct) : null
+    const frac = info.caminho != null ? Math.max(0, Math.min(1, info.caminho / 100)) : 0
+    const C = 2 * Math.PI * 50, corAnel = info.emLucro ? "#22D3A0" : "#FB6474"
+    const dm = (x) => x ? x.split("-").reverse().slice(0, 2).join("/") : ""
+    const titulo = { margin:0, fontSize:"13px", fontWeight:600, color:"var(--fi-texto-2)" }
+    const celula = (rot, val, cor) => (
+      <div style={{ padding:"10px 12px", borderRadius:"12px", background:"#0A1424", border:"1px solid var(--fi-borda)" }}>
+        <div style={{ fontSize:"10.5px", color:"var(--fi-texto-4)" }}>{rot}</div>
+        <div style={{ fontSize:"14px", fontWeight:600, color: cor || "var(--fi-texto)", marginTop:"2px" }}>{val}</div>
+      </div>
+    )
+    return (
+      <aside aria-label={`Posição ${p.ticker}`} style={{ display:"flex", flexDirection:"column", gap:"18px" }}>
+        <section className="fi-painel" style={{ padding:"18px", borderColor:"var(--fi-borda-forte)", boxShadow:"inset 0 0 40px rgba(56,189,248,0.05)" }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:"10px" }}>
+            <div>
+              <div className="fi-titulo" style={{ fontSize:"24px", fontWeight:700 }}>{p.ticker.replace(".SA","")}</div>
+              <div style={{ fontSize:"12px", color:"var(--fi-texto-3)" }}>{p.nome} · {p.setor} · {info.dias} dias</div>
+            </div>
+            <span style={info.situacao.estilo}>{info.situacao.txt}</span>
+          </div>
+          <div style={{ display:"flex", alignItems:"center", gap:"18px", marginTop:"14px" }}>
+            <svg width="120" height="120" viewBox="0 0 120 120" aria-hidden="true" style={{ flex:"none" }}>
+              <circle cx="60" cy="60" r="50" fill="none" stroke="#132238" strokeWidth="9" />
+              <circle cx="60" cy="60" r="50" fill="none" stroke={corAnel} strokeWidth="9" strokeLinecap="round"
+                strokeDasharray={`${(C * Math.max(0.02, frac)).toFixed(1)} ${C.toFixed(1)}`} transform="rotate(-90 60 60)"
+                style={{ filter:`drop-shadow(0 0 6px ${corAnel})` }} />
+              <text x="60" y="60" textAnchor="middle" fill="#E6EDF7" fontFamily="Space Grotesk, Inter, sans-serif" fontSize="22" fontWeight="700">
+                {info.caminho != null ? `${info.caminho.toFixed(0)}%` : "—"}
+              </text>
+              <text x="60" y="78" textAnchor="middle" fill="#7E93B2" fontFamily="Inter, sans-serif" fontSize="10">do caminho</text>
+            </svg>
+            <div style={{ display:"flex", flexDirection:"column", gap:"2px" }}>
+              <span style={{ fontSize:"10px", color:"var(--fi-texto-4)", textTransform:"uppercase", letterSpacing:"1.2px" }}>Resultado</span>
+              <span className="fi-titulo" style={{ fontSize:"30px", fontWeight:600, color:corAnel, textShadow:`0 0 20px ${info.emLucro ? "rgba(34,211,160,0.45)" : "rgba(251,100,116,0.45)"}` }}>
+                {info.emLucro ? "+" : "−"}{moeda(p.mercado)} {fmt(Math.abs(info.pl))}
+              </span>
+              <span style={{ fontSize:"13px", color:corAnel, fontWeight:600 }}>{info.plPct >= 0 ? "+" : ""}{info.plPct.toFixed(2)}%</span>
+            </div>
+          </div>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(3, minmax(0, 1fr))", gap:"8px", marginTop:"14px" }}>
+            {celula("Entrada", `${moeda(p.mercado)} ${fmt(p.preco_entrada)}`)}
+            {celula("Agora", `${moeda(p.mercado)} ${fmt(p.preco_atual)}`)}
+            {celula("Quantidade", `${p.quantidade} · ${moeda(p.mercado)} ${fmt(p.quantidade * p.preco_entrada)}`)}
+            {celula("Alvo", info.alvo ? `${fmt(info.alvo)} (${info.paraAlvo >= 0 ? "+" : ""}${info.paraAlvo.toFixed(1)}%)` : "—", "#22D3A0")}
+            {celula("Stop", info.stop ? `${fmt(info.stop)} (${info.paraStop.toFixed(1)}%)` : "—", "#FB6474")}
+            {celula("MFE / MAE", `${p.mfe_pct != null ? `+${p.mfe_pct.toFixed(1)}` : "—"} / ${p.mae_pct != null ? p.mae_pct.toFixed(1) : "—"}%`)}
+          </div>
+          {estaEditando && (
+            <div style={{ marginTop:"14px", padding:"14px", borderRadius:"12px", background:"rgba(56,189,248,0.06)", border:"1px solid rgba(56,189,248,0.3)" }}>
+              <div style={{ fontSize:"12px", fontWeight:600, color:"var(--fi-texto-2)", marginBottom:"10px" }}>Editar posição</div>
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(2, minmax(0, 1fr))", gap:"10px" }}>
+                {[["quantidade","Quantidade"],["preco_entrada","Preço de entrada"],["alvo_lucro","Alvo"],["stop_loss","Stop"]].map(([campo, rot]) => (
+                  <label key={campo} style={{ display:"flex", flexDirection:"column", gap:"4px", fontSize:"11px", color:"var(--fi-texto-4)" }}>{rot}
+                    <input type="number" step="any" value={editForm[campo] ?? ""} onChange={e => setEditForm(f => ({ ...f, [campo]: e.target.value }))}
+                      style={{ ...inputStyle, padding:"8px", width:"100%", boxSizing:"border-box" }} />
+                  </label>
+                ))}
+              </div>
+              <div style={{ display:"flex", gap:"8px", marginTop:"12px" }}>
+                <button type="button" onClick={() => salvarEdicao(p)} style={{ ...fiBotao(), color:"#22D3A0", borderColor:"rgba(34,211,160,0.45)", background:"rgba(34,211,160,0.10)", fontWeight:600 }}>Salvar</button>
+                <button type="button" onClick={() => setEditando(null)} style={fiBotao()}>Cancelar</button>
+              </div>
+            </div>
+          )}
+          {info.dv && (
+            <div style={{ marginTop:"10px", ...P_WARN, whiteSpace:"normal", borderRadius:"10px", padding:"6px 10px" }}>
+              Data-com {fmtDia(info.dv.data_com)} · R$ {info.dv.valor_bruto.toFixed(2)}/ação (≈ R$ {(info.dv.valor_liquido * p.quantidade).toFixed(2)} líquido). No dia ex o preço abre mais baixo: é o provento, não stop.
+            </div>
+          )}
+          <div style={{ display:"flex", gap:"8px", marginTop:"14px", flexWrap:"wrap" }}>
+            <button type="button" onClick={() => abrirHistoricoAtivo(p)} style={fiBotao()}>Histórico de preços</button>
+            {!estaEditando && <button type="button" onClick={() => iniciarEdicao(p)} style={fiBotao()}>Editar</button>}
+            <button type="button" onClick={() => setModalEncerrar(p)} style={{ ...fiBotao(), color:"#22D3A0", borderColor:"rgba(34,211,160,0.45)", background:"rgba(34,211,160,0.10)", fontWeight:600 }}>Encerrar</button>
+            <button type="button" onClick={() => { if (window.confirm(`Remover ${p.ticker}?`)) remover(p) }} style={{ ...fiBotao(), color:"#FB6474", borderColor:"rgba(251,100,116,0.4)", background:"transparent" }}>Remover</button>
+          </div>
+        </section>
+
+        <section className="fi-painel" style={{ padding:"18px" }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:"10px", gap:"8px", flexWrap:"wrap" }}>
+            <h2 style={titulo}>Gráfico · últimos 90 pregões</h2>
+            <div style={{ display:"flex", gap:"12px", fontSize:"10.5px", color:"var(--fi-texto-3)" }}>
+              <span style={{ display:"inline-flex", alignItems:"center", gap:"5px" }}><span style={{ width:12, height:2, background:"#22D3A0" }} />alvo</span>
+              <span style={{ display:"inline-flex", alignItems:"center", gap:"5px" }}><span style={{ width:12, height:2, background:"#FBBF24" }} />entrada</span>
+              <span style={{ display:"inline-flex", alignItems:"center", gap:"5px" }}><span style={{ width:12, height:2, background:"#FB6474" }} />stop</span>
+              <span style={{ display:"inline-flex", alignItems:"center", gap:"5px" }}><span style={{ width:5, height:5, borderRadius:"50%", background:"#A3E635" }} />ATR</span>
+            </div>
+          </div>
+          <GraficoVelas p={p} />
+        </section>
+
+        <section className="fi-painel" style={{ padding:"18px" }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:"8px" }}>
+            <h2 style={titulo}>ATR (21,3)</h2>
+            {a?.atr_cor && <span style={verdeAtr ? P_OK : P_BAD}>{verdeAtr ? "alta" : "queda"}{distAtr != null ? ` · ${verdeAtr ? "margem" : "falta"} ${Number(distAtr).toFixed(1).replace(".", ",")}%` : ""}</span>}
+          </div>
+          {!a?.atr_cor ? (
+            <div style={{ fontSize:"12px", color:"var(--fi-texto-4)", marginTop:"8px" }}>{atrCarregado ? "Sem ATR para este ativo." : "Carregando…"}</div>
+          ) : (
+            <>
+              <div style={{ display:"flex", alignItems:"flex-end", gap:"16px", marginTop:"14px" }}>
+                {h.length >= 2 && <BarrinhasAtr h={h} alto={46} larg={14} />}
+                <div style={{ display:"flex", flexDirection:"column", gap:"4px", fontSize:"12px" }}>
+                  {d && <span style={{ fontWeight:700, color:d.cor }}>{d.txt}</span>}
+                  <span style={{ color:"var(--fi-texto-3)" }}>linha em {moeda(p.mercado)} {fmt(a.atr_linha)}{a.atr_desde ? ` · nessa cor desde ${dm(a.atr_desde)}` : ""}</span>
+                  <span style={{ color:"var(--fi-texto-3)" }}>na compra: {a.atr_compra_cor === "VERDE" ? "alta" : a.atr_compra_cor === "VERMELHO" ? "queda" : "—"}</span>
+                </div>
+              </div>
+              {h.length >= 2 && (
+                <div style={{ display:"grid", gridTemplateColumns:`repeat(${h.length}, minmax(0, 1fr))`, gap:"6px", marginTop:"12px" }}>
+                  {h.map((x, i) => (
+                    <div key={i} style={{ textAlign:"center", padding:"6px 4px", borderRadius:"8px", background:"#0A1424", border:"1px solid var(--fi-borda)" }}>
+                      <div style={{ fontSize:"10px", color:"var(--fi-texto-4)" }}>{i === h.length - 1 ? "agora" : dm(x.data)}</div>
+                      <div style={{ fontSize:"12px", fontWeight:700, color: x.cor === "VERDE" ? "#22D3A0" : "#FB6474" }}>{x.dist > 0 ? "+" : ""}{Number(x.dist).toFixed(1).replace(".", ",")}%</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div style={{ fontSize:"10.5px", color:"#5F7391", marginTop:"10px" }}>+ margem acima da linha (alta) · − quanto falta para virar alta · margem abaixo de 2%: confira na XP</div>
+            </>
+          )}
+        </section>
+      </aside>
+    )
+  }
 
   return (
-  <div style={{ padding:"20px", width:"100%", boxSizing:"border-box" }}>
+  <div style={{ width:"100%", boxSizing:"border-box" }}>
 
       {/* Modal Histórico de Preços */}
       {modalHistorico && (
         <div onClick={() => setModalHistorico(null)} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.75)", zIndex:1100, display:"flex", alignItems:"center", justifyContent:"center", padding:"20px" }}>
-          <div onClick={e => e.stopPropagation()} style={{ background:"#0d1829", border:"1px solid #1e293b", borderRadius:"16px", padding:"24px", maxWidth:"1000px", width:"95%", maxHeight:"90vh", display:"flex", flexDirection:"column" }}>
+          <div onClick={e => e.stopPropagation()} style={{ background:"#0B1426", border:"1px solid #1E3352", borderRadius:"18px", boxShadow:"0 30px 80px rgba(0,0,0,0.6)", padding:"24px", maxWidth:"1000px", width:"95%", maxHeight:"90vh", display:"flex", flexDirection:"column" }}>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"12px" }}>
               <div style={{ fontSize:"17px", fontWeight:"bold", color:"#f1f5f9" }}>📈 Histórico — {modalHistorico.ticker}</div>
               <button onClick={() => setModalHistorico(null)} style={{ background:"none", border:"none", color:"#64748b", cursor:"pointer", fontSize:"16px" }}>✕</button>
@@ -719,7 +1009,7 @@ export default function Portfolio() {
       {/* Modal Encerrar Posição (com venda parcial) */}
       {modalEncerrar && (
         <div onClick={() => setModalEncerrar(null)} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center", padding:"20px" }}>
-          <div onClick={e => e.stopPropagation()} style={{ background:"#0d1829", border:"1px solid #1e293b", borderRadius:"16px", padding:"28px", maxWidth:"420px", width:"100%" }}>
+          <div onClick={e => e.stopPropagation()} style={{ background:"#0B1426", border:"1px solid #1E3352", borderRadius:"18px", boxShadow:"0 30px 80px rgba(0,0,0,0.6)", padding:"28px", maxWidth:"420px", width:"100%" }}>
             <div style={{ fontSize:"18px", fontWeight:"bold", color:"#f1f5f9", marginBottom:"8px" }}>🏁 Encerrar Posição</div>
             <div style={{ fontSize:"13px", color:"#94a3b8", marginBottom:"20px" }}>
               {modalEncerrar.ticker} — {modalEncerrar.quantidade} cotas @ {moeda(modalEncerrar.mercado)} {fmt(modalEncerrar.preco_entrada)}
@@ -753,343 +1043,207 @@ export default function Portfolio() {
         </div>
       )}
 
-      {/* ── HEADER ── */}
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"24px", flexWrap:"wrap", gap:"12px" }}>
+      {/* ── CABEÇALHO (Future Intelligence, 10/11/2026) ── */}
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-end", marginBottom:"18px", flexWrap:"wrap", gap:"12px" }}>
         <div>
-          <div style={{ fontSize:"26px", fontWeight:"bold", color:"#f1f5f9" }}>💼 Portfólio</div>
-          <div style={{ display:"flex", gap:"12px", marginTop:"4px", fontSize:"12px", color:"#64748b" }}>
-            {ultimaAtualizacao && <span>Atualizado às {ultimaAtualizacao}</span>}
-            {cotacaoDolar && <span>💵 USD/BRL: R$ {cotacaoDolar.toFixed(2)}</span>}
+          <h1 className="fi-titulo" style={{ margin:0, fontSize:"24px", fontWeight:700 }}>Portfólio</h1>
+          <div style={{ display:"flex", gap:"12px", marginTop:"2px", fontSize:"12px", color:"var(--fi-texto-4)", flexWrap:"wrap" }}>
+            <span>{posicoes.length} posiç{posicoes.length !== 1 ? "ões" : "ão"} aberta{posicoes.length !== 1 ? "s" : ""}</span>
+            {ultimaAtualizacao && <span>atualizado às {ultimaAtualizacao}</span>}
+            {cotacaoDolar && <span>USD/BRL R$ {cotacaoDolar.toFixed(2)}</span>}
           </div>
         </div>
         {posicoes.length > 0 && (
-          <button onClick={atualizarPrecos} disabled={atualizando} style={{ padding:"10px 18px", borderRadius:"8px", cursor:"pointer", background:"#1e293b", color:"#38bdf8", fontWeight:"bold", fontSize:"13px", border:"1px solid #334155" }}>
-            {atualizando ? "Atualizando..." : "🔄 Atualizar Preços"}
+          <button type="button" onClick={atualizarPrecos} disabled={atualizando} style={fiBotao(!atualizando)}>
+            {atualizando ? "Atualizando…" : "Atualizar preços"}
           </button>
         )}
       </div>
 
-      {/* ── LINHA 1: VISÃO CONSOLIDADA ── */}
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(240px, 1fr))", gap:"12px", marginBottom:"12px" }}>
-        {[
-                    { label: "Capital em aberto", valor: `R$ ${fmt(patrimonioInvestidoBRL)}`, sub: `${posicoes.length} posiç${posicoes.length !== 1 ? "ões" : "ão"} aberta${posicoes.length !== 1 ? "s" : ""} · vale R$ ${fmt(patrimonioTotalBRL)} hoje`, cor: "#38bdf8", bg: "rgba(56,189,248,0.06)", border: "rgba(56,189,248,0.2)" },
-          { label: "Lucro em aberto", valor: `R$ ${fmt(lucroAbertoBRL)}`, pct: patrimonioInvestidoBRL > 0 ? ` (${lucroAbertoBRL >= 0 ? "+" : ""}${(lucroAbertoBRL / patrimonioInvestidoBRL * 100).toFixed(1)}%)` : "", sub: "ainda não realizado — pode mudar", cor: lucroAbertoBRL >= 0 ? "#4ade80" : "#f87171", bg: lucroAbertoBRL >= 0 ? "rgba(74,222,128,0.06)" : "rgba(248,113,113,0.06)", border: lucroAbertoBRL >= 0 ? "rgba(74,222,128,0.2)" : "rgba(248,113,113,0.2)" },
-          { label: "Lucro realizado", valor: `R$ ${fmt(lucroRealizadoBRL)}`, pct: mediaRetorno ? ` (${parseFloat(mediaRetorno) >= 0 ? "+" : ""}${mediaRetorno}% por trade)` : "", sub: `${historico.length} trades encerrados · dinheiro no bolso`, cor: lucroRealizadoBRL >= 0 ? "#4ade80" : "#f87171", bg: lucroRealizadoBRL >= 0 ? "rgba(74,222,128,0.06)" : "rgba(248,113,113,0.06)", border: lucroRealizadoBRL >= 0 ? "rgba(74,222,128,0.2)" : "rgba(248,113,113,0.2)" },
-          (() => {
-            // 09/11/2026: mesmo número do Financeiro (backend /resultado-geral: dividendos dos fechados + dólar do dia)
-            const tot = resultadoGeral ? resultadoGeral.total : resultadoTotalBRL
-            const sub = resultadoGeral
-              ? `realizado + em aberto + dividendos (${resultadoGeral.dividendos_fechados >= 0 ? "+" : ""}R$ ${fmt(resultadoGeral.dividendos_fechados)})`
-              : "realizado + em aberto"
-            return { label: "Resultado acumulado", valor: `R$ ${fmt(tot)}`, sub, cor: tot >= 0 ? "#a78bfa" : "#f87171", bg: "rgba(167,139,250,0.06)", border: "rgba(167,139,250,0.2)" }
-          })(),
-        ].map((card, i) => (
-          <div key={i} style={{ padding:"16px", borderRadius:"12px", background: card.bg, border:`1px solid ${card.border}` }}>
-            <div style={{ fontSize:"12px", color:"#94a3b8", marginBottom:"6px" }}>{card.label}</div>
-            <div style={{ fontSize:"20px", fontWeight:"bold", color: card.cor }}>
-              {card.valor}{card.pct && <span style={{ fontSize:"13px" }}>{card.pct}</span>}
+      {/* ── RESUMO ── */}
+      {(() => {
+        const tot = resultadoGeral ? resultadoGeral.total : resultadoTotalBRL
+        const pctAberto = patrimonioInvestidoBRL > 0 ? lucroAbertoBRL / patrimonioInvestidoBRL * 100 : null
+        const cards = [
+          { label: "Resultado acumulado", valor: `R$ ${fmt(tot)}`, cor: tot >= 0 ? "#38BDF8" : "#FB6474", destaque: true,
+            sub: resultadoGeral ? `realizado + em aberto + dividendos (R$ ${fmt(resultadoGeral.dividendos_fechados)})` : "realizado + em aberto" },
+          { label: "Em aberto", valor: `R$ ${fmt(lucroAbertoBRL)}`, extra: pctAberto != null ? `${pctAberto >= 0 ? "+" : ""}${pctAberto.toFixed(1)}%` : "",
+            cor: lucroAbertoBRL >= 0 ? "#22D3A0" : "#FB6474", sub: `R$ ${fmt(patrimonioInvestidoBRL)} investidos · valem R$ ${fmt(patrimonioTotalBRL)}` },
+          { label: "Realizado", valor: `R$ ${fmt(lucroRealizadoBRL)}`, extra: mediaRetorno ? `${parseFloat(mediaRetorno) >= 0 ? "+" : ""}${mediaRetorno}% por trade` : "",
+            cor: lucroRealizadoBRL >= 0 ? "#22D3A0" : "#FB6474", sub: `${historico.length} trades encerrados` },
+          { label: "Acerto", valor: taxaAcerto != null ? `${taxaAcerto}%` : "—", cor: parseFloat(taxaAcerto) >= 60 ? "#22D3A0" : "#FBBF24",
+            sub: historico.length ? `${historico.filter(h => h.pl >= 0).length} lucro / ${historico.filter(h => h.pl < 0).length} prejuízo` : "sem trades fechados" },
+        ]
+        const avisos = [
+          { label: "Perto ou abaixo do stop", valor: posicoesNoStop, cor: posicoesNoStop > 0 ? "#FB6474" : "var(--fi-texto-4)" },
+          { label: "Perto do alvo", valor: posicoesNoAlvo, cor: posicoesNoAlvo > 0 ? "#22D3A0" : "var(--fi-texto-4)" },
+          { label: "Tempo médio por trade", valor: (() => {
+              const t = historico.filter(h => h.dias != null && h.dias > 0)
+              return t.length ? `${(t.reduce((a, h) => a + parseInt(h.dias), 0) / t.length).toFixed(0)} dias` : "—"
+            })(), cor: "var(--fi-texto)" },
+          { label: "Total movimentado", valor: `R$ ${fmt(capitalMovimentadoBRL)}`, cor: "var(--fi-texto)" },
+        ]
+        return (
+          <>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(230px, 1fr))", gap:"14px", marginBottom:"14px" }}>
+              {cards.map((c, i) => (
+                <div key={i} className="fi-painel" style={{ padding:"16px 18px", ...(c.destaque ? { borderColor:"rgba(56,189,248,0.45)", boxShadow:"0 0 26px rgba(56,189,248,0.12)" } : {}) }}>
+                  <div style={{ fontSize:"11px", color:"var(--fi-texto-4)", textTransform:"uppercase", letterSpacing:"1.2px" }}>{c.label}</div>
+                  <div style={{ display:"flex", alignItems:"baseline", gap:"8px", marginTop:"6px", flexWrap:"wrap" }}>
+                    <span className="fi-titulo" style={{ fontSize:"24px", fontWeight:600, color:c.cor, textShadow: c.destaque ? "0 0 18px rgba(56,189,248,0.45)" : "none" }}>{c.valor}</span>
+                    {c.extra && <span style={{ fontSize:"12px", color:c.cor, fontWeight:600 }}>{c.extra}</span>}
+                  </div>
+                  <div style={{ fontSize:"11px", color:"var(--fi-texto-4)", marginTop:"4px" }}>{c.sub}</div>
+                </div>
+              ))}
             </div>
-            <div style={{ fontSize:"11px", color:"#64748b", marginTop:"4px" }}>{card.sub}</div>
-          </div>
-        ))}
-      </div>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(190px, 1fr))", gap:"14px", marginBottom:"18px" }}>
+              {avisos.map((a, i) => (
+                <div key={i} className="fi-painel" style={{ padding:"12px 16px", display:"flex", justifyContent:"space-between", alignItems:"center", gap:"10px" }}>
+                  <span style={{ fontSize:"12px", color:"var(--fi-texto-3)" }}>{a.label}</span>
+                  <span className="fi-titulo" style={{ fontSize:"17px", fontWeight:600, color:a.cor }}>{a.valor}</span>
+                </div>
+              ))}
+            </div>
+          </>
+        )
+      })()}
 
-      {/* ── LINHA 2: PERFORMANCE E RISCO ── */}
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(200px, 1fr))", gap:"12px", marginBottom:"24px" }}>
-        {[
-                    { label: "Total movimentado", valor: `R$ ${fmt(capitalMovimentadoBRL)}`, sub: "soma de tudo já comprado (o mesmo dinheiro conta cada vez que gira)", cor: "#94a3b8", bg: "rgba(148,163,184,0.04)", border: "rgba(148,163,184,0.15)" },
-          ...(historico.length > 0 ? [{
-            label: "🎯 Taxa de Acerto", valor: `${taxaAcerto}%`,
-            sub: `${historico.filter(h=>h.pl>=0).length} lucro / ${historico.filter(h=>h.pl<0).length} prejuízo · ${historico.length} trades`,
-            cor: parseFloat(taxaAcerto) >= 60 ? "#4ade80" : parseFloat(taxaAcerto) >= 40 ? "#f59e0b" : "#f87171",
-            bg: "rgba(74,222,128,0.04)", border: "rgba(74,222,128,0.15)"
-          },
-          {
-            label: "⏱️ Tempo Médio por Trade",
-            valor: (() => {
-              const tradesComDias = historico.filter(h => h.dias != null && h.dias > 0)
-              if (tradesComDias.length === 0) return "—"
-              const media = tradesComDias.reduce((acc, h) => acc + parseInt(h.dias), 0) / tradesComDias.length
-              return `${media.toFixed(0)} dias`
-            })(),
-            sub: "média até encerrar posição", cor: "#f59e0b", bg: "rgba(245,158,11,0.04)", border: "rgba(245,158,11,0.15)"
-          }] : []),
-          { label: "⚠️ Posições no Stop", valor: `${posicoesNoStop} ativo${posicoesNoStop !== 1 ? "s" : ""}`, sub: "80%+ do caminho ate o stop", cor: posicoesNoStop > 0 ? "#f87171" : "#64748b", bg: posicoesNoStop > 0 ? "rgba(248,113,113,0.06)" : "rgba(100,116,139,0.04)", border: posicoesNoStop > 0 ? "rgba(248,113,113,0.2)" : "rgba(100,116,139,0.15)" },
-          { label: "✅ Posições no Alvo", valor: `${posicoesNoAlvo} ativo${posicoesNoAlvo !== 1 ? "s" : ""}`, sub: "80%+ do caminho ate o alvo", cor: posicoesNoAlvo > 0 ? "#4ade80" : "#64748b", bg: posicoesNoAlvo > 0 ? "rgba(74,222,128,0.06)" : "rgba(100,116,139,0.04)", border: posicoesNoAlvo > 0 ? "rgba(74,222,128,0.2)" : "rgba(100,116,139,0.15)" },
-        ].map((card, i) => (
-          <div key={i} style={{ padding:"14px", borderRadius:"12px", background: card.bg, border:`1px solid ${card.border}` }}>
-            <div style={{ fontSize:"11px", color:"#94a3b8", marginBottom:"6px" }}>{card.label}</div>
-            <div style={{ fontSize:"18px", fontWeight:"bold", color: card.cor }}>{card.valor}</div>
-            <div style={{ fontSize:"10px", color:"#64748b", marginTop:"4px" }}>{card.sub}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* ── GRÁFICO + FILTROS ── */}
+      {/* ── DISTRIBUIÇÃO ── */}
       {posicoes.length > 0 && (
-        <div style={{ background:"#0d1829", border:"1px solid #1e293b", borderRadius:"12px", padding:"20px", marginBottom:"24px" }}>
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"16px", flexWrap:"wrap", gap:"12px" }}>
-            <div style={{ fontSize:"13px", fontWeight:"700", color:"#94a3b8", letterSpacing:"0.5px" }}>📊 DISTRIBUIÇÃO NOMINAL DO PORTFÓLIO</div>
-            <div style={{ display:"flex", gap:"8px", flexWrap:"wrap", alignItems:"center" }}>
+        <section className="fi-painel" style={{ padding:"18px", marginBottom:"18px" }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"14px", flexWrap:"wrap", gap:"10px" }}>
+            <h2 style={{ margin:0, fontSize:"13px", fontWeight:600, color:"var(--fi-texto-2)" }}>Distribuição do capital investido</h2>
+            <div style={{ display:"flex", gap:"6px" }}>
               {["ativo","setor"].map(modo => (
-                <button key={modo} onClick={() => setModoGrafico(modo)} style={{ padding:"5px 14px", borderRadius:"20px", border:"none", cursor:"pointer", fontSize:"12px", fontWeight: modoGrafico === modo ? "700" : "400", background: modoGrafico === modo ? "#38bdf8" : "#1e293b", color: modoGrafico === modo ? "#0f172a" : "#64748b", transition:"all 0.2s" }}>
-                  {modo === "ativo" ? "Por Ativo" : "Por Setor"}
-                </button>
-              ))}
-              <div style={{ width:"1px", height:"20px", background:"#334155", margin:"0 4px" }} />
-              {[{id:"todos",label:"Todos"},{id:"swing",label:"⚡ Swing"},{id:"longo",label:"📈 Longo"}].map(f => (
-                <button key={f.id} onClick={() => setFiltroOrigem(f.id)} style={{ padding:"5px 14px", borderRadius:"20px", border:"none", cursor:"pointer", fontSize:"12px", fontWeight: filtroOrigem === f.id ? "700" : "400", background: filtroOrigem === f.id ? (f.id==="swing" ? "#f59e0b" : f.id==="longo" ? "#38bdf8" : "#64748b") : "#1e293b", color: filtroOrigem === f.id ? "#0f172a" : "#64748b", transition:"all 0.2s" }}>
-                  {f.label}
+                <button key={modo} type="button" onClick={() => setModoGrafico(modo)} style={fiFiltro(modoGrafico === modo)}>
+                  {modo === "ativo" ? "Por ativo" : "Por setor"}
                 </button>
               ))}
             </div>
           </div>
-          <div style={{ display:"flex", flexDirection:"column", gap:"8px" }}>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(320px, 1fr))", columnGap:"28px", rowGap:"8px" }}>
             {dadosGrafico.slice().sort((a,b) => b.value - a.value).map((item, i) => {
               const maxVal = Math.max(...dadosGrafico.map(d => d.value))
-              const pct = totalFicticioGrafico > 0 ? ((item.value / totalFicticioGrafico) * 100).toFixed(1) : 0
+              const pct = totalFicticioGrafico > 0 ? (item.value / totalFicticioGrafico) * 100 : 0
               const largura = maxVal > 0 ? (item.value / maxVal) * 100 : 0
+              const acimaLimite = modoGrafico === "setor" && pct > 25
               return (
                 <div key={i} style={{ display:"flex", alignItems:"center", gap:"12px" }}>
-                  <div style={{ width:"90px", fontSize:"12px", color:"#94a3b8", textAlign:"right", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{item.name}</div>
-                  <div style={{ flex:1, background:"#1e293b", borderRadius:"4px", height:"22px", position:"relative", overflow:"hidden" }}>
-                    <div style={{ background: CORES[i % CORES.length], height:"100%", width:`${largura}%`, borderRadius: largura > 0 ? "4px" : "0", transition:"width 0.3s" }} />
+                  <div style={{ width:"110px", fontSize:"12px", color:"var(--fi-texto-3)", textAlign:"right", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{item.name.replace(".SA","")}</div>
+                  <div style={{ flex:1, background:"#132238", borderRadius:"999px", height:"8px", overflow:"hidden" }}>
+                    <div style={{ height:"8px", width:`${largura}%`, borderRadius:"999px",
+                      background: acimaLimite ? "linear-gradient(90deg,#FBBF24,#FB6474)" : "linear-gradient(90deg,#2563EB,#38BDF8)",
+                      boxShadow: `0 0 10px ${acimaLimite ? "rgba(251,100,116,0.5)" : "rgba(56,189,248,0.45)"}` }} />
                   </div>
-                  <div style={{ width:"48px", fontSize:"12px", color:"#f1f5f9", fontWeight:"600" }}>{pct}%</div>
+                  <div style={{ width:"52px", fontSize:"12px", fontWeight:600, color: acimaLimite ? "#FB6474" : "var(--fi-texto)" }}>{pct.toFixed(1)}%</div>
                 </div>
               )
             })}
           </div>
-        </div>
+          {modoGrafico === "setor" && <div style={{ fontSize:"10.5px", color:"#5F7391", marginTop:"10px" }}>Limite do método: 25% por setor (em vermelho quando passa).</div>}
+        </section>
       )}
 
       {/* ── SUB-ABAS ── */}
-      <div style={{ display:"flex", gap:"8px", marginBottom:"20px", flexWrap:"wrap" }}>
+      <div role="tablist" style={{ display:"flex", gap:"8px", marginBottom:"16px", flexWrap:"wrap", alignItems:"center" }}>
         {[
-          { id:"abertas", label:"💼 Posições Abertas", count: posicoesFiltradas.length },
-          { id:"historico", label:"📜 Histórico de Trades", count: historico.length }
+          { id:"abertas", label:"Posições abertas", count: posicoesFiltradas.length },
+          { id:"historico", label:"Histórico de trades", count: historico.length }
         ].map(a => (
-          <button key={a.id} onClick={() => setAbaAtiva(a.id)} style={{ padding:"8px 20px", borderRadius:"8px", border:"none", cursor:"pointer", fontSize:"13px", fontWeight: abaAtiva === a.id ? "700" : "400", background: abaAtiva === a.id ? "rgba(56,189,248,0.15)" : "#1e293b", color: abaAtiva === a.id ? "#38bdf8" : "#64748b", borderBottom: abaAtiva === a.id ? "2px solid #38bdf8" : "2px solid transparent" }}>
-            {a.label} {a.count}
+          <button key={a.id} type="button" role="tab" aria-selected={abaAtiva === a.id} onClick={() => setAbaAtiva(a.id)} style={fiFiltro(abaAtiva === a.id, true)}>
+            {a.label} <span style={{ opacity:0.7, marginLeft:"4px" }}>{a.count}</span>
           </button>
         ))}
+        {abaAtiva === "abertas" && (
+          <>
+            <span style={{ flex:1 }} />
+            <button type="button" onClick={() => setOrdemData(o => o === "asc" ? "desc" : "asc")} style={fiBotao()}>
+              {ordemData === "asc" ? "Mais antigas primeiro" : "Mais recentes primeiro"}
+            </button>
+            <button type="button" onClick={() => setMostrarForm(!mostrarForm)} style={{ ...fiBotao(), ...(mostrarForm ? {} : { background:"rgba(34,211,160,0.12)", borderColor:"rgba(34,211,160,0.4)", color:"#22D3A0", fontWeight:600 }) }}>
+              {mostrarForm ? "Cancelar" : "+ Adicionar posição"}
+            </button>
+          </>
+        )}
       </div>
 
       {/* ── ABA: POSIÇÕES ABERTAS ── */}
       {abaAtiva === "abertas" && (
         <>
-          <div style={{ display:"flex", gap:"10px", marginBottom:"16px", flexWrap:"wrap" }}>
-            <button onClick={() => setMostrarForm(!mostrarForm)} style={{ padding:"9px 20px", borderRadius:"8px", cursor:"pointer", background: mostrarForm ? "#334155" : "#1e293b", color: mostrarForm ? "#94a3b8" : "#38bdf8", fontWeight:"bold", fontSize:"13px", border:"1px solid #334155" }}>
-              {mostrarForm ? "✕ Cancelar" : "+ Adicionar Posição"}
-            </button>
-            <button onClick={() => setOrdemData(o => o === "asc" ? "desc" : "asc")} style={{ padding:"9px 16px", borderRadius:"8px", cursor:"pointer", background:"#1e293b", color:"#94a3b8", fontSize:"12px", fontWeight:"600", border:"1px solid #334155", display:"flex", alignItems:"center", gap:"6px" }}>
-              {ordemData === "asc" ? "📅 Mais antigo primeiro" : "📅 Mais recente primeiro"}
-            </button>
-          </div>
-
           {mostrarForm && (
-            <div style={{ display:"flex", gap:"8px", marginBottom:"16px", flexWrap:"wrap", padding:"16px", background:"#0d1829", borderRadius:"12px", border:"1px solid #1e293b" }}>
-              <input placeholder="Ticker (ex: VALE3.SA)" value={form.ticker} onChange={e => setForm({...form, ticker: e.target.value})} style={{ ...inputStyle, flex:1, minWidth:"150px" }} />
-              <input placeholder="Nome (ex: Vale)" value={form.nome} onChange={e => setForm({...form, nome: e.target.value})} style={{ ...inputStyle, flex:1, minWidth:"150px" }} />
-              <input type="number" placeholder="Quantidade" value={form.quantidade} onChange={e => setForm({...form, quantidade: e.target.value})} style={{ ...inputStyle, flex:1, minWidth:"110px" }} />
-              <input type="number" placeholder="Preço de Entrada" value={form.preco_entrada} onChange={e => setForm({...form, preco_entrada: e.target.value})} style={{ ...inputStyle, flex:1, minWidth:"130px" }} />
-              <input type="number" placeholder="Alvo (opcional)" value={form.alvo_lucro} onChange={e => setForm({...form, alvo_lucro: e.target.value})} style={{ ...inputStyle, flex:1, minWidth:"120px" }} />
-              <input type="number" placeholder="Stop (opcional)" value={form.stop_loss} onChange={e => setForm({...form, stop_loss: e.target.value})} style={{ ...inputStyle, flex:1, minWidth:"120px" }} />
-              <input type="date" placeholder="Data de entrada" value={form.data_entrada} onChange={e => setForm({...form, data_entrada: e.target.value})} style={{ ...inputStyle, flex:1, minWidth:"140px" }} />
-              <select value={form.mercado} onChange={e => setForm({...form, mercado: e.target.value})} style={inputStyle}>
+            <div className="fi-painel" style={{ display:"flex", gap:"8px", marginBottom:"16px", flexWrap:"wrap", padding:"16px" }}>
+              <input aria-label="Ticker" placeholder="Ticker (ex: VALE3.SA)" value={form.ticker} onChange={e => setForm({...form, ticker: e.target.value})} style={{ ...inputStyle, flex:1, minWidth:"150px" }} />
+              <input aria-label="Nome" placeholder="Nome (ex: Vale)" value={form.nome} onChange={e => setForm({...form, nome: e.target.value})} style={{ ...inputStyle, flex:1, minWidth:"150px" }} />
+              <input aria-label="Quantidade" type="number" placeholder="Quantidade" value={form.quantidade} onChange={e => setForm({...form, quantidade: e.target.value})} style={{ ...inputStyle, flex:1, minWidth:"110px" }} />
+              <input aria-label="Preço de entrada" type="number" placeholder="Preço de entrada" value={form.preco_entrada} onChange={e => setForm({...form, preco_entrada: e.target.value})} style={{ ...inputStyle, flex:1, minWidth:"130px" }} />
+              <input aria-label="Alvo" type="number" placeholder="Alvo (opcional)" value={form.alvo_lucro} onChange={e => setForm({...form, alvo_lucro: e.target.value})} style={{ ...inputStyle, flex:1, minWidth:"120px" }} />
+              <input aria-label="Stop" type="number" placeholder="Stop (opcional)" value={form.stop_loss} onChange={e => setForm({...form, stop_loss: e.target.value})} style={{ ...inputStyle, flex:1, minWidth:"120px" }} />
+              <input aria-label="Data de entrada" type="date" value={form.data_entrada} onChange={e => setForm({...form, data_entrada: e.target.value})} style={{ ...inputStyle, flex:1, minWidth:"140px" }} />
+              <select aria-label="Mercado" value={form.mercado} onChange={e => setForm({...form, mercado: e.target.value})} style={inputStyle}>
                 <option value="B3">B3</option>
                 <option value="NASDAQ">NASDAQ</option>
                 <option value="NYSE">NYSE</option>
                 <option value="CRYPTO">CRYPTO</option>
                 <option value="COMMODITY">COMMODITY</option>
               </select>
-              <select value={form.origem} onChange={e => setForm({...form, origem: e.target.value})} style={inputStyle}>
-                <option value="LONGO">📈 Longo</option>
-                <option value="RAPIDO">⚡ Swing</option>
-              </select>
-              <button onClick={adicionar} style={{ padding:"10px 20px", borderRadius:"6px", border:"none", cursor:"pointer", background:"#16a34a", color:"white", fontWeight:"bold", fontSize:"13px" }}>Adicionar</button>
+              <button type="button" onClick={adicionar} style={{ ...fiBotao(), background:"rgba(34,211,160,0.15)", borderColor:"rgba(34,211,160,0.45)", color:"#22D3A0", fontWeight:600, height:"40px" }}>Adicionar</button>
             </div>
           )}
 
           {carregando ? (
-            <div style={{ textAlign:"center", padding:"40px", color:"#64748b" }}>Carregando portfólio...</div>
+            <div style={{ textAlign:"center", padding:"40px", color:"var(--fi-texto-4)" }}>Carregando portfólio…</div>
           ) : posicoesFiltradas.length === 0 ? (
-            <div style={{ textAlign:"center", padding:"60px 20px", color:"#64748b" }}>
-              <div style={{ fontSize:"40px", marginBottom:"12px" }}>📭</div>
-              <div>Nenhuma posição {filtroOrigem !== "todos" ? `do tipo ${filtroOrigem}` : "aberta"}</div>
-            </div>
+            <div style={{ textAlign:"center", padding:"50px 20px", color:"var(--fi-texto-4)" }}>Nenhuma posição aberta.</div>
           ) : (
-            <div style={{ overflowX:"auto", background:"#0d1829", borderRadius:"12px", border:"1px solid #1e293b" }}>
-              <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"13px", minWidth:"1200px" }}>
-                <thead>
-                  <tr style={{ borderBottom:"1px solid #1e293b" }}>
-                                        {["Ticker","Nome","Mercado","Setor","Qtd","Entrada","Valor Invest.","Preço Atual","P&L","MFE / MAE","Alvo/Stop","ATR","Dias","Ações"].map(h=> (
-                      <th key={h} style={{ padding:"12px 10px", textAlign:"left", color:"#64748b", fontSize:"11px", fontWeight:"600", textTransform:"uppercase", whiteSpace:"nowrap" }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {posicoesFiltradas.map((p, idxRow) => {
-                    const pl = (p.preco_atual - p.preco_entrada) * p.quantidade
-                    const plPct = ((p.preco_atual - p.preco_entrada) / p.preco_entrada * 100).toFixed(2)
-                    const valorInvestido = p.quantidade * p.preco_entrada
-                    const alvo = p.alvo_lucro || (p.preco_entrada * 1.05)
-                    const stop = p.stop_loss || (p.preco_entrada * 0.98)
-                    const pctAlvo = p.pct_alvo || ((alvo - p.preco_entrada) / p.preco_entrada * 100)
-                    const pctStop = p.pct_stop || ((p.preco_entrada - stop) / p.preco_entrada * 100)
-                    const progressoReal = ((p.preco_atual - p.preco_entrada) / (alvo - p.preco_entrada)) * 100
-                    const progressoAlvo = Math.min(Math.max(progressoReal, 0), 100)
-                    const dias = p.dias != null ? p.dias : diasNaOperacao(p.data)
-                    const estaEditando = editando === p.id
-                    const emLucro = pl >= 0
-                    return (
-                      <tr key={p.id} style={{ borderBottom:"1px solid #1e293b", background: idxRow % 2 === 0 ? "#0d1829" : "#0a1520" }}
-                        onMouseEnter={e => { if (!estaEditando) e.currentTarget.style.background = "#1e293b" }}
-                        onMouseLeave={e => { if (!estaEditando) e.currentTarget.style.background = idxRow % 2 === 0 ? "#0d1829" : "#0a1520" }}>
-                        <td style={{ padding:"12px 10px" }}>
-                          <div style={{ fontWeight:"700", color:"#38bdf8" }}>{p.ticker}</div>
-                          {(() => {
-                            const dv = dividendosPos[(p.ticker || "").toUpperCase().trim()]
-                            if (!dv) return null
-                            const totalLiq = dv.valor_liquido * (p.quantidade || 0)
-                            const quando = dv.dias_ate === 0 ? "hoje" : dv.dias_ate === 1 ? "amanhã" : fmtDia(dv.data_com)
-                            return (
-                              <div title={`Data-com ${fmtDia(dv.data_com)} (último dia para ter direito) · data ex ${fmtDia(dv.data_ex)}\n${dv.tipos.join(" + ")} de R$ ${dv.valor_bruto.toFixed(4)}/ação (líquido R$ ${dv.valor_liquido.toFixed(4)})\nVocê recebe ~R$ ${totalLiq.toFixed(2)} com ${p.quantidade} ações${dv.pagamento ? ` · pagamento ${dv.pagamento.split("-").reverse().join("/")}` : ""}\nNo dia ${fmtDia(dv.data_ex)} o preço abre ~R$ ${dv.valor_bruto.toFixed(2)} mais baixo: é o provento saindo, não queda nem motivo de stop.`}
-                                style={{ marginTop:"3px", display:"inline-block", padding:"1px 6px", borderRadius:"8px", fontSize:"10px", fontWeight:"600", background:"rgba(245,158,11,0.12)", color:"#f59e0b", cursor:"help" }}>
-                                💰 data-com {quando} · R$ {dv.valor_bruto.toFixed(2)}
-                              </div>
-                            )
-                          })()}
-                          <div style={{ marginTop:"3px" }}>
-                            <span style={{ padding:"1px 6px", borderRadius:"8px", fontSize:"10px", fontWeight:"600", background: p.origem === "RAPIDO" ? "rgba(245,158,11,0.15)" : "rgba(56,189,248,0.15)", color: p.origem === "RAPIDO" ? "#f59e0b" : "#38bdf8" }}>
-                              {p.origem === "RAPIDO" ? "⚡ Swing" : "📈 Longo"}
-                            </span>
+            <div style={{ display:"flex", flexWrap:"wrap", gap:"18px", alignItems:"flex-start" }}>
+              {/* Lista resumida */}
+              <section aria-label="Posições abertas" className="fi-painel" style={{ flex:"999 1 620px", minWidth:0, overflow:"hidden" }}>
+                <div style={{ overflowX:"auto" }}>
+                  <div style={{ minWidth:"880px" }}>
+                    <div style={{ display:"grid", gridTemplateColumns:GRADE_POS, gap:"10px", padding:"12px 18px", fontSize:"10.5px", color:"#5F7391", textTransform:"uppercase", letterSpacing:"1.1px" }}>
+                      <span>Ativo</span><span>Resultado</span><span>Preço</span><span>Caminho stop → alvo</span><span>ATR (21,3)</span><span>Situação</span>
+                    </div>
+                    {posicoesFiltradas.map(p => {
+                      const info = infoPosicao(p)
+                      const escolhida = posSelecionada && posSelecionada.id === p.id
+                      return (
+                        <div key={p.id} role="button" tabIndex={0} aria-pressed={!!escolhida}
+                          onClick={() => setSelPos(p.id)} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelPos(p.id) } }}
+                          style={{ display:"grid", gridTemplateColumns:GRADE_POS, gap:"10px", alignItems:"center", padding:"12px 18px", cursor:"pointer",
+                            borderTop:"1px solid #101D31", fontSize:"12.5px",
+                            background: escolhida ? "linear-gradient(90deg, rgba(56,189,248,0.14), rgba(56,189,248,0))" : "transparent",
+                            boxShadow: escolhida ? "inset 3px 0 0 #38BDF8" : "none" }}>
+                          <div style={{ display:"flex", flexDirection:"column", minWidth:0 }}>
+                            <span style={{ fontWeight:600, fontSize:"14px" }}>{p.ticker.replace(".SA","")}</span>
+                            <span style={{ fontSize:"11px", color:"var(--fi-texto-4)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{p.setor} · {info.dias}d</span>
+                            {info.dv && <span style={{ fontSize:"10px", color:"#FBBF24" }}>data-com {info.dv.dias_ate === 0 ? "hoje" : info.dv.dias_ate === 1 ? "amanhã" : fmtDia(info.dv.data_com)}</span>}
                           </div>
-                        </td>
-                        <td style={{ padding:"12px 10px", color:"#cbd5e1" }}>{p.nome}</td>
-                        <td style={{ padding:"12px 10px" }}><span style={{ padding:"2px 8px", borderRadius:"6px", fontSize:"11px", background:"#1e293b", color:"#94a3b8" }}>{p.mercado}</span></td>
-                        <td style={{ padding:"12px 10px" }}><span style={{ padding:"2px 8px", borderRadius:"6px", fontSize:"11px", background:"rgba(167,139,250,0.1)", color:"#a78bfa" }}>{p.setor}</span></td>
-                        <td style={{ padding:"12px 10px", color:"#cbd5e1" }}>
-                          {estaEditando ? (
-                            <input type="number" value={editForm.quantidade} onChange={e => setEditForm({...editForm, quantidade: e.target.value})} style={{ width:"60px", padding:"4px", borderRadius:"4px", border:"1px solid #38bdf8", background:"#0f172a", color:"#f1f5f9", fontSize:"12px" }} />
-                          ) : p.quantidade}
-                        </td>
-                        <td style={{ padding:"12px 10px", color:"#cbd5e1" }}>
-                          {estaEditando ? (
-                            <input type="number" value={editForm.preco_entrada} onChange={e => setEditForm({...editForm, preco_entrada: e.target.value})} style={{ width:"80px", padding:"4px", borderRadius:"4px", border:"1px solid #38bdf8", background:"#0f172a", color:"#f1f5f9", fontSize:"12px" }} />
-                          ) : `${moeda(p.mercado)} ${fmt(p.preco_entrada)}`}
-                        </td>
-                        <td style={{ padding:"12px 10px", color:"#94a3b8" }}>{moeda(p.mercado)} {fmt(valorInvestido)}</td>
-                        <td style={{ padding:"12px 10px", color:"#f1f5f9", fontWeight:"600" }}>{moeda(p.mercado)} {fmt(p.preco_atual)}</td>
-                        <td style={{ padding:"12px 10px" }}>
-                          <div style={{ color: emLucro ? "#4ade80" : "#f87171", fontWeight:"700" }}>
-                            {emLucro ? "▲" : "▼"} {moeda(p.mercado)} {fmt(Math.abs(pl))}
+                          <div style={{ display:"flex", flexDirection:"column" }}>
+                            <span style={{ fontWeight:600, color: info.emLucro ? "#22D3A0" : "#FB6474" }}>{info.emLucro ? "+" : "−"}{moeda(p.mercado)} {fmt(Math.abs(info.pl))}</span>
+                            <span style={{ fontSize:"11px", color: info.emLucro ? "#22D3A0" : "#FB6474" }}>{info.plPct >= 0 ? "+" : ""}{info.plPct.toFixed(2)}%</span>
                           </div>
-                          <div style={{ fontSize:"11px", color: emLucro ? "#4ade80" : "#f87171" }}>{emLucro ? "+" : ""}{plPct}%</div>
-                        </td>
-                                                <td style={{ padding:"12px 10px", fontSize:"11px" }}>
-                          <div style={{ color:"#4ade80" }}>
-                            {p.mfe_pct != null ? `+${parseFloat(p.mfe_pct).toFixed(2)}%` : "—"}
+                          <div style={{ display:"flex", flexDirection:"column" }}>
+                            <span>{fmt(p.preco_atual)}</span>
+                            <span style={{ fontSize:"11px", color:"var(--fi-texto-4)" }}>entrada {fmt(p.preco_entrada)}</span>
                           </div>
-                          <div style={{ color:"#f87171", marginTop:"2px" }}>
-                            {p.mae_pct != null ? `${parseFloat(p.mae_pct).toFixed(2)}%` : "—"}
-                          </div>
-                        </td>
-                        <td style={{ padding:"12px 10px", minWidth:"180px" }}>
-                          <div style={{ display:"flex", justifyContent:"space-between", fontSize:"10px", marginBottom:"3px" }}>
-                            <span style={{ color:"#f87171" }}>Stop {fmt(stop)} ({pctStop >= 0 ? "-" : "+"}{Math.abs(pctStop).toFixed(1)}%)</span>
-                            <span style={{ color:"#4ade80" }}>Alvo {fmt(alvo)} (+{pctAlvo.toFixed(1)}%)</span>
-                          </div>
-                          <div style={{ background:"#1e293b", borderRadius:"4px", height:"6px", overflow:"hidden" }}>
-                            <div style={{ background: progressoAlvo > 50 ? "#4ade80" : progressoAlvo > 20 ? "#f59e0b" : "#f87171", borderRadius:"4px", height:"6px", width:`${progressoAlvo}%`, transition:"width 0.3s" }} />
-                          </div>
-                          <div style={{ fontSize:"10px", color: progressoReal < 0 ? "#f87171" : "#64748b", textAlign:"center", marginTop:"2px" }}>{progressoReal.toFixed(0)}% do caminho</div>
-                        </td>
-                                                <td style={{ padding:"12px 10px", whiteSpace:"nowrap" }}>
-                          {(() => {
-                            const a = atrPos[String(p.id)]
-                            if (!a || !a.atr_cor) return <span style={{ color:"#475569", fontSize:"12px" }}>{atrCarregado ? "—" : "…"}</span>
-                            const verde = a.atr_cor === "VERDE"
-                            const dist = verde ? a.atr_margem_pct : a.atr_falta_pct
-                            const perto = dist != null && dist < 2
-                            const corCompra = a.atr_compra_cor === "VERDE" ? "🟢" : a.atr_compra_cor === "VERMELHO" ? "🔴" : "—"
-                            const desde = a.atr_desde ? a.atr_desde.split("-").reverse().slice(0, 2).join("/") : null
-                            return (
-                              <div title={`ATR Trailing Stop (21,3) · linha ${fmt(a.atr_linha)}${desde ? ` · nessa cor desde ${desde}` : ""}`}>
-                                <span style={{ padding:"2px 8px", borderRadius:"6px", fontSize:"11px", fontWeight:"700", background: verde ? "rgba(74,222,128,0.12)" : "rgba(248,113,113,0.12)", color: verde ? "#4ade80" : "#f87171" }}>
-                                  {verde ? "🟢 Alta" : "🔴 Queda"}
-                                </span>
-                                {dist != null && (
-                                  <div style={{ fontSize:"10px", marginTop:"3px", color: perto ? "#f59e0b" : "#64748b" }}>
-                                    {verde ? `margem ${Number(dist).toFixed(1)}%` : `falta +${Number(dist).toFixed(1)}%`}{perto ? " · confira na XP" : ""}
-                                  </div>
-                                )}
-                                <div style={{ fontSize:"10px", marginTop:"2px", color:"#64748b" }}>na compra: {corCompra}</div>
-                                {(() => {
-                                  // 09/11/2026: últimos 5 pregões (o último é agora). dist: + margem verde, − falta p/ virar verde
-                                  const h = Array.isArray(a.atr_hist) ? a.atr_hist : []
-                                  if (h.length < 2) return null
-                                  const delta = h[h.length - 1].dist - h[0].dist
-                                  const virou = h[0].cor !== h[h.length - 1].cor
-                                  let txt, cor
-                                  if (virou) { txt = h[h.length - 1].cor === "VERDE" ? "▲ virou alta" : "▼ virou queda"; cor = h[h.length - 1].cor === "VERDE" ? "#4ade80" : "#f87171" }
-                                  else if (Math.abs(delta) < 0.5) { txt = "■ estável"; cor = "#94a3b8" }
-                                  else if (delta > 0) { txt = verde ? "▲ ganhando força" : "▲ melhorando"; cor = "#4ade80" }
-                                  else { txt = verde ? "▼ perdendo força" : "▼ piorando"; cor = "#f87171" }
-                                  const dm = d => d ? d.split("-").reverse().slice(0, 2).join("/") : ""
-                                  const aberto = atrAberto === p.id
-                                  return (
-                                    <div onClick={() => setAtrAberto(aberto ? null : p.id)} style={{ marginTop:"4px", cursor:"pointer" }}>
-                                      <div style={{ display:"flex", alignItems:"flex-end", gap:"2px", height:"16px" }}>
-                                        {h.map((x, i) => {
-                                          const max = Math.max(...h.map(y => Math.abs(y.dist)), 1)
-                                          return <div key={i} style={{ width:"6px", height:`${Math.max(3, Math.abs(x.dist) / max * 16)}px`, borderRadius:"1px", background: x.cor === "VERDE" ? "#4ade80" : "#f87171", opacity: i === h.length - 1 ? 1 : 0.55 }} />
-                                        })}
-                                      </div>
-                                      <div style={{ fontSize:"10px", marginTop:"2px", color: cor, fontWeight:"700" }}>{txt} <span style={{ color:"#64748b", fontWeight:"400" }}>{aberto ? "▴" : "▾ dias"}</span></div>
-                                      {aberto && (
-                                        <div style={{ marginTop:"4px", padding:"4px 6px", borderRadius:"6px", background:"rgba(56,189,248,0.06)", border:"1px solid rgba(56,189,248,0.2)", fontSize:"10px", lineHeight:"1.5" }}>
-                                          {h.map((x, i) => (
-                                            <div key={i} style={{ display:"flex", justifyContent:"space-between", gap:"8px" }}>
-                                              <span style={{ color:"#94a3b8" }}>{i === h.length - 1 ? "agora" : dm(x.data)}</span>
-                                              <span style={{ color: x.cor === "VERDE" ? "#4ade80" : "#f87171", fontWeight:"700" }}>{x.dist > 0 ? "+" : ""}{Number(x.dist).toFixed(1)}%</span>
-                                            </div>
-                                          ))}
-                                          <div style={{ color:"#64748b", marginTop:"2px", whiteSpace:"normal", maxWidth:"130px" }}>+ margem acima da linha · − falta p/ virar alta</div>
-                                        </div>
-                                      )}
-                                    </div>
-                                  )
-                                })()}
-                              </div>
-                            )
-                          })()}
-                        </td>
-                        <td style={{ padding:"12px 10px" }}>
-                          <span style={{ color: dias > 3 ? "#f87171" : dias > 1 ? "#f59e0b" : "#4ade80", fontSize:"12px", fontWeight:"700" }}>{dias}d</span>
-                        </td>
-                        <td style={{ padding:"12px 10px" }}>
-                          <div style={{ display:"flex", gap:"4px", flexWrap:"wrap" }}>
-                            {estaEditando ? (
-                              <>
-                                <button onClick={() => salvarEdicao(p)} style={{ padding:"4px 8px", borderRadius:"4px", border:"none", cursor:"pointer", background:"#16a34a", color:"white", fontSize:"11px", fontWeight:"600" }}>✓</button>
-                                <button onClick={() => setEditando(null)} style={{ padding:"4px 8px", borderRadius:"4px", border:"none", cursor:"pointer", background:"#334155", color:"white", fontSize:"11px" }}>✕</button>
-                              </>
-                            ) : (
-                              <>
-                                <button onClick={() => abrirHistoricoAtivo(p)} style={{ padding:"4px 8px", borderRadius:"4px", border:"none", cursor:"pointer", background:"#0ea5e9", color:"white", fontSize:"11px", fontWeight:"600" }} title="Ver Diário">📈</button>
-                                <button onClick={() => setModalEncerrar(p)} style={{ padding:"4px 8px", borderRadius:"4px", border:"none", cursor:"pointer", background:"#16a34a", color:"white", fontSize:"11px", fontWeight:"600", whiteSpace:"nowrap" }}>🏁</button>
-                                <button onClick={() => iniciarEdicao(p)} style={{ padding:"4px 8px", borderRadius:"4px", border:"none", cursor:"pointer", background:"#d97706", color:"white", fontSize:"11px" }}>✏️</button>
-                                <button onClick={() => { if (window.confirm(`Remover ${p.ticker}?`)) remover(p) }} style={{ padding:"4px 8px", borderRadius:"4px", border:"none", cursor:"pointer", background:"#dc2626", color:"white", fontSize:"11px" }}>🗑️</button>
-                              </>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
+                          <BarraCaminho p={p} info={info} />
+                          <MiniAtr a={atrPos[String(p.id)]} carregado={atrCarregado} />
+                          <span><span style={info.situacao.estilo}>{info.situacao.txt}</span></span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+                <div style={{ padding:"10px 18px", fontSize:"10.5px", color:"#5F7391", borderTop:"1px solid var(--fi-borda)" }}>
+                  Clique numa posição para ver o gráfico, o ATR e as ações (editar, encerrar).
+                </div>
+              </section>
+
+              {/* Painel da posição */}
+              <div style={{ flex:"1 1 400px", minWidth:0 }}>
+                {posSelecionada && PainelPosicao({ p: posSelecionada })}
+              </div>
             </div>
           )}
         </>
@@ -1112,17 +1266,17 @@ export default function Portfolio() {
                   { label:"Trades com Prejuízo", valor: historico.filter(h => h.pl < 0).length, cor:"#f87171" },
                   { label:"P&L Total Realizado (BR / US)", valor:`R$ ${fmt(lucroRealizadoBR)} | US$ ${fmt(lucroRealizadoUS)}`, cor: (lucroRealizadoBR + lucroRealizadoUS) >= 0 ? "#4ade80" : "#f87171" },
                 ].map((card, i) => (
-                  <div key={i} style={{ padding:"14px", borderRadius:"12px", background:"#0d1829", border:"1px solid #1e293b" }}>
+                  <div key={i} style={{ padding:"14px", borderRadius:"12px", background:"rgba(13,24,41,0.7)", border:"1px solid #16253D" }}>
                     <div style={{ fontSize:"11px", color:"#94a3b8", marginBottom:"6px" }}>{card.label}</div>
                     <div style={{ fontSize:"18px", fontWeight:"bold", color: card.cor }}>{card.valor}</div>
                   </div>
                 ))}
               </div>
 
-              <div style={{ overflowX:"auto", background:"#0d1829", borderRadius:"12px", border:"1px solid #1e293b" }}>
+              <div style={{ overflowX:"auto", background:"rgba(13,24,41,0.7)", borderRadius:"16px", border:"1px solid #16253D" }}>
                 <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"13px", minWidth:"1000px" }}>
                   <thead>
-                    <tr style={{ borderBottom:"1px solid #1e293b" }}>
+                    <tr style={{ borderBottom:"1px solid #101D31" }}>
                       {["Ticker","Nome","Tipo","Qtd","Entrada","Saída","P&L","Retorno","Dividendos","MFE / MAE","Dias","Data Saída","Ações"].map(h => (
                         <th key={h} style={{ padding:"12px 10px", textAlign:"left", color:"#64748b", fontSize:"11px", fontWeight:"600", textTransform:"uppercase", whiteSpace:"nowrap" }}>{h}</th>
                       ))}
@@ -1132,7 +1286,7 @@ export default function Portfolio() {
                     {historico.map((h, i) => {
                       const emEdicao = editHist === h.id
                       return (
-                        <tr key={h.id} style={{ borderBottom:"1px solid #1e293b", background: i % 2 === 0 ? "#0d1829" : "#0a1520" }}>
+                        <tr key={h.id} style={{ borderBottom:"1px solid #101D31", background: "transparent" }}>
                           {emEdicao ? (
                             <>
                               <td style={{ padding:"8px" }}><input value={editHistForm.ticker} onChange={e=>setEditHistForm({...editHistForm, ticker:e.target.value})} style={{ width:"90px", ...inputStyle, padding:"4px" }} /></td>
@@ -1242,7 +1396,7 @@ export default function Portfolio() {
       {abaAtiva === "performance" && (
         <>
         {/* ── O CAMINHO DO DINHEIRO ── */}
-          <div style={{ background:"#0d1829", border:"1px solid #1e293b", borderRadius:"12px", padding:"24px", marginBottom:"20px" }}>
+          <div style={{ background:"rgba(13,24,41,0.7)", border:"1px solid #16253D", borderRadius:"12px", padding:"24px", marginBottom:"20px" }}>
             <div style={{ fontSize:"13px", fontWeight:"700", color:"#94a3b8", marginBottom:"20px" }}>O CAMINHO DO DINHEIRO</div>
             <div style={{ display:"flex", alignItems:"center", justifyContent:"space-around", flexWrap:"wrap", gap:"16px" }}>
               <div style={{ textAlign:"center", minWidth:"140px" }}>
@@ -1270,7 +1424,7 @@ export default function Portfolio() {
           </div>
 
           {/* ── COMO VOCE OPERA ── */}
-          <div style={{ background:"#0d1829", border:"1px solid #1e293b", borderRadius:"12px", padding:"20px", marginBottom:"20px" }}>
+          <div style={{ background:"rgba(13,24,41,0.7)", border:"1px solid #16253D", borderRadius:"12px", padding:"20px", marginBottom:"20px" }}>
             <div style={{ fontSize:"13px", fontWeight:"700", color:"#94a3b8", marginBottom:"16px" }}>COMO VOCÊ OPERA</div>
             <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(150px, 1fr))", gap:"16px" }}>
               <div>
@@ -1312,7 +1466,7 @@ export default function Portfolio() {
 
           {/* ── LUCRO ACUMULADO ── */}
           {curvaAcumulada.length > 1 && (
-            <div style={{ background:"#0d1829", border:"1px solid #1e293b", borderRadius:"12px", padding:"20px", marginBottom:"20px" }}>
+            <div style={{ background:"rgba(13,24,41,0.7)", border:"1px solid #16253D", borderRadius:"12px", padding:"20px", marginBottom:"20px" }}>
               <div style={{ fontSize:"13px", fontWeight:"700", color:"#94a3b8", marginBottom:"16px" }}>LUCRO ACUMULADO</div>
               <ResponsiveContainer width="100%" height={240}>
                 <LineChart data={curvaAcumulada}>
@@ -1332,7 +1486,7 @@ export default function Portfolio() {
 
           {/* ── CALIBRAGEM DO STOP ── */}
           {tradesComMAE.length > 0 && (
-            <div style={{ background:"#0d1829", border:"1px solid #1e293b", borderRadius:"12px", padding:"20px", marginBottom:"20px" }}>
+            <div style={{ background:"rgba(13,24,41,0.7)", border:"1px solid #16253D", borderRadius:"12px", padding:"20px", marginBottom:"20px" }}>
               <div style={{ fontSize:"13px", fontWeight:"700", color:"#94a3b8", marginBottom:"8px" }}>CALIBRAGEM DO STOP</div>
               <div style={{ fontSize:"12px", color:"#64748b", marginBottom:"16px" }}>
                 Quanto cada trade chegou a ficar negativo antes de terminar. Vencedores que sofreram muito indicam stop apertado demais.
@@ -1376,7 +1530,7 @@ export default function Portfolio() {
           ) : (
             <>
               {dadosMensais.some(d => d.pl_br !== 0) && (
-                <div style={{ background:"#0d1829", border:"1px solid #1e293b", borderRadius:"12px", padding:"20px", marginBottom:"20px" }}>
+                <div style={{ background:"rgba(13,24,41,0.7)", border:"1px solid #16253D", borderRadius:"12px", padding:"20px", marginBottom:"20px" }}>
                   <div style={{ fontSize:"13px", fontWeight:"700", color:"#94a3b8", marginBottom:"16px" }}>📊 P&L MENSAL — MERCADO BRASILEIRO (R$)</div>
                   <ResponsiveContainer width="100%" height={220}>
                     <BarChart data={dadosMensais}>
@@ -1393,7 +1547,7 @@ export default function Portfolio() {
               )}
 
               {dadosMensais.some(d => d.pl_us !== 0) && (
-                <div style={{ background:"#0d1829", border:"1px solid #1e293b", borderRadius:"12px", padding:"20px", marginBottom:"20px" }}>
+                <div style={{ background:"rgba(13,24,41,0.7)", border:"1px solid #16253D", borderRadius:"12px", padding:"20px", marginBottom:"20px" }}>
                   <div style={{ fontSize:"13px", fontWeight:"700", color:"#94a3b8", marginBottom:"16px" }}>📊 P&L MENSAL — MERCADO INTERNACIONAL (US$)</div>
                   <ResponsiveContainer width="100%" height={220}>
                     <BarChart data={dadosMensais}>
@@ -1409,10 +1563,10 @@ export default function Portfolio() {
                 </div>
               )}
 
-              <div style={{ overflowX:"auto", background:"#0d1829", borderRadius:"12px", border:"1px solid #1e293b" }}>
+              <div style={{ overflowX:"auto", background:"rgba(13,24,41,0.7)", borderRadius:"16px", border:"1px solid #16253D" }}>
                 <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"13px", minWidth:"1000px" }}>
                   <thead>
-                    <tr style={{ borderBottom:"1px solid #1e293b" }}>
+                    <tr style={{ borderBottom:"1px solid #101D31" }}>
                       {["Mês","Trades","Taxa de Acerto","Retorno Médio","Capital Inv. BR","Capital Rec. BR","P&L BR (R$)","Capital Inv. Intl","Capital Rec. Intl","P&L Intl (US$)"].map(h => (
                         <th key={h} style={{ padding:"12px 10px", textAlign:"left", color:"#64748b", fontSize:"11px", fontWeight:"600", textTransform:"uppercase", whiteSpace:"nowrap" }}>{h}</th>
                       ))}
@@ -1431,7 +1585,7 @@ export default function Portfolio() {
                         .reduce((acc, h, _, arr) => acc + parseFloat(h.pl_pct) / arr.length, 0)
                         .toFixed(2)
                       return (
-                        <tr key={i} style={{ borderBottom:"1px solid #1e293b", background: i % 2 === 0 ? "#0d1829" : "#0a1520" }}>
+                        <tr key={i} style={{ borderBottom:"1px solid #101D31", background: "transparent" }}>
                           <td style={{ padding:"12px 10px", color:"#f1f5f9", fontWeight:"600" }}>{d.mes}</td>
                           <td style={{ padding:"12px 10px", color:"#cbd5e1" }}>{d.trades}</td>
                           <td style={{ padding:"12px 10px" }}>
