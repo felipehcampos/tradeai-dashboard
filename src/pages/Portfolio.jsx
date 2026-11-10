@@ -1024,6 +1024,32 @@ export default function Portfolio() {
                                   </div>
                                 )}
                                 <div style={{ fontSize:"10px", marginTop:"2px", color:"#64748b" }}>na compra: {corCompra}</div>
+                                {(() => {
+                                  // 09/11/2026: últimos 5 pregões (o último é agora). dist: + margem verde, − falta p/ virar verde
+                                  const h = Array.isArray(a.atr_hist) ? a.atr_hist : []
+                                  if (h.length < 2) return null
+                                  const delta = h[h.length - 1].dist - h[0].dist
+                                  const virou = h[0].cor !== h[h.length - 1].cor
+                                  let txt, cor
+                                  if (virou) { txt = h[h.length - 1].cor === "VERDE" ? "▲ virou alta" : "▼ virou queda"; cor = h[h.length - 1].cor === "VERDE" ? "#4ade80" : "#f87171" }
+                                  else if (Math.abs(delta) < 0.5) { txt = "■ estável"; cor = "#94a3b8" }
+                                  else if (delta > 0) { txt = verde ? "▲ ganhando força" : "▲ melhorando"; cor = "#4ade80" }
+                                  else { txt = verde ? "▼ perdendo força" : "▼ piorando"; cor = "#f87171" }
+                                  const dm = d => d ? d.split("-").reverse().slice(0, 2).join("/") : ""
+                                  const titulo = "Últimos pregões (+ = margem acima da linha · − = falta para virar alta):\n" +
+                                    h.map((x, i) => `${i === h.length - 1 ? "agora" : dm(x.data)}: ${x.cor === "VERDE" ? "🟢" : "🔴"} ${x.dist > 0 ? "+" : ""}${Number(x.dist).toFixed(1)}%`).join("\n")
+                                  return (
+                                    <div title={titulo} style={{ marginTop:"4px", cursor:"help" }}>
+                                      <div style={{ display:"flex", alignItems:"flex-end", gap:"2px", height:"16px" }}>
+                                        {h.map((x, i) => {
+                                          const max = Math.max(...h.map(y => Math.abs(y.dist)), 1)
+                                          return <div key={i} style={{ width:"6px", height:`${Math.max(3, Math.abs(x.dist) / max * 16)}px`, borderRadius:"1px", background: x.cor === "VERDE" ? "#4ade80" : "#f87171", opacity: i === h.length - 1 ? 1 : 0.55 }} />
+                                        })}
+                                      </div>
+                                      <div style={{ fontSize:"10px", marginTop:"2px", color: cor, fontWeight:"700" }}>{txt}</div>
+                                    </div>
+                                  )
+                                })()}
                               </div>
                             )
                           })()}
