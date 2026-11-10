@@ -1,8 +1,6 @@
 import { useState } from "react"
 import Mercado from "./pages/Mercado"
 import Portfolio from "./pages/Portfolio"
-import Alertas from "./pages/Alertas"
-import IAAnalise from "./pages/IAAnalise"
 import Favoritos from "./pages/Favoritos"
 import Noticias from "./pages/Noticias"
 import Login from "./Login"
@@ -12,15 +10,14 @@ import ScannerB from "./pages/ScannerB"
 
 // 10/11/2026: visual "Future Intelligence" (cabeçalho, abas em pílula, moldura com luz).
 // Só aparência — as abas e o que cada uma faz continuam iguais.
+// 10/11/2026: abas Alertas e IA Análise retiradas a pedido do Felipe (não usava). Os arquivos ficam na pasta pages.
 const ABAS = [
   { id: "mercado",    label: "Mercado" },
   { id: "scannerb",   label: "Scanner B" },
   { id: "portfolio",  label: "Portfólio" },
   { id: "financeiro", label: "Financeiro" },
   { id: "favoritos",  label: "Favoritos" },
-  { id: "alertas",    label: "Alertas" },
   { id: "noticias",   label: "Notícias" },
-  { id: "ia",         label: "IA Análise" },
 ]
 
 // Filetes de luz nas bordas da moldura (posição, cor)
@@ -137,9 +134,7 @@ export default function App() {
             {aba === "financeiro" && <Financeiro />}
             {aba === "favoritos"  && <Favoritos />}
             {aba === "scannerb"   && <ScannerB />}
-            {aba === "alertas"    && <Alertas />}
             {aba === "noticias"   && <Noticias />}
-            {aba === "ia"         && <IAAnalise />}
           </div>
         </div>
       </main>
