@@ -1,12 +1,32 @@
+/* 10/11/2026 — Identidade "Future Intelligence" (aprovada pelo Felipe).
+   Cores em variáveis para todas as abas usarem as mesmas. */
 :root {
+  --fi-fundo: #04070D;
+  --fi-painel: rgba(13, 24, 41, 0.7);
+  --fi-painel-solido: #0D1829;
+  --fi-elevado: #132238;
+  --fi-borda: #16253D;
+  --fi-borda-forte: #1E3352;
+  --fi-texto: #E6EDF7;
+  --fi-texto-2: #C8D4E6;
+  --fi-texto-3: #9DB0CB;
+  --fi-texto-4: #7E93B2;
+  --fi-ciano: #38BDF8;
+  --fi-azul: #2563EB;
+  --fi-verde: #22D3A0;
+  --fi-vermelho: #FB6474;
+  --fi-amarelo: #FBBF24;
+  --fi-titulo: 'Space Grotesk', 'Inter', system-ui, sans-serif;
+
   font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
   font-size: 16px;
   line-height: 1.5;
   font-weight: 400;
+  font-variant-numeric: tabular-nums;
 
   color-scheme: dark;
-  color: #e2e8f0;
-  background-color: #060d1a;
+  color: var(--fi-texto);
+  background-color: var(--fi-fundo);
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -17,9 +37,13 @@
 body {
   margin: 0;
   padding: 0;
-  background-color: #060d1a;
   width: 100%;
   min-height: 100vh;
+  background:
+    radial-gradient(1200px 600px at 15% -10%, rgba(37, 99, 235, 0.18), transparent 60%),
+    radial-gradient(900px 500px at 100% 110%, rgba(34, 211, 160, 0.10), transparent 60%),
+    var(--fi-fundo);
+  background-attachment: fixed;
 }
 
 /* Libera o container do React para ocupar a largura total do monitor */
@@ -36,3 +60,11 @@ a {
   text-decoration: none;
   color: inherit;
 }
+
+/* Painel padrão do Future Intelligence (para as abas usarem aos poucos) */
+.fi-painel {
+  background: var(--fi-painel);
+  border: 1px solid var(--fi-borda);
+  border-radius: 16px;
+}
+.fi-titulo { font-family: var(--fi-titulo); }
