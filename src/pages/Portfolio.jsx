@@ -101,6 +101,7 @@ export default function Portfolio() {
     // ── ATR Trailing Stop (21,3) das posições: na compra e agora (30/09/2026) ──
   const [atrPos, setAtrPos] = useState({})
   const [atrCarregado, setAtrCarregado] = useState(false)
+  const [atrAberto, setAtrAberto] = useState(null)   // 09/11: posição com a lista de dias do ATR aberta
 
   const carregarAtr = async (lista) => {
     try {
@@ -1036,17 +1037,27 @@ export default function Portfolio() {
                                   else if (delta > 0) { txt = verde ? "▲ ganhando força" : "▲ melhorando"; cor = "#4ade80" }
                                   else { txt = verde ? "▼ perdendo força" : "▼ piorando"; cor = "#f87171" }
                                   const dm = d => d ? d.split("-").reverse().slice(0, 2).join("/") : ""
-                                  const titulo = "Últimos pregões (+ = margem acima da linha · − = falta para virar alta):\n" +
-                                    h.map((x, i) => `${i === h.length - 1 ? "agora" : dm(x.data)}: ${x.cor === "VERDE" ? "🟢" : "🔴"} ${x.dist > 0 ? "+" : ""}${Number(x.dist).toFixed(1)}%`).join("\n")
+                                  const aberto = atrAberto === p.id
                                   return (
-                                    <div title={titulo} style={{ marginTop:"4px", cursor:"help" }}>
+                                    <div onClick={() => setAtrAberto(aberto ? null : p.id)} style={{ marginTop:"4px", cursor:"pointer" }}>
                                       <div style={{ display:"flex", alignItems:"flex-end", gap:"2px", height:"16px" }}>
                                         {h.map((x, i) => {
                                           const max = Math.max(...h.map(y => Math.abs(y.dist)), 1)
                                           return <div key={i} style={{ width:"6px", height:`${Math.max(3, Math.abs(x.dist) / max * 16)}px`, borderRadius:"1px", background: x.cor === "VERDE" ? "#4ade80" : "#f87171", opacity: i === h.length - 1 ? 1 : 0.55 }} />
                                         })}
                                       </div>
-                                      <div style={{ fontSize:"10px", marginTop:"2px", color: cor, fontWeight:"700" }}>{txt}</div>
+                                      <div style={{ fontSize:"10px", marginTop:"2px", color: cor, fontWeight:"700" }}>{txt} <span style={{ color:"#64748b", fontWeight:"400" }}>{aberto ? "▴" : "▾ dias"}</span></div>
+                                      {aberto && (
+                                        <div style={{ marginTop:"4px", padding:"4px 6px", borderRadius:"6px", background:"rgba(56,189,248,0.06)", border:"1px solid rgba(56,189,248,0.2)", fontSize:"10px", lineHeight:"1.5" }}>
+                                          {h.map((x, i) => (
+                                            <div key={i} style={{ display:"flex", justifyContent:"space-between", gap:"8px" }}>
+                                              <span style={{ color:"#94a3b8" }}>{i === h.length - 1 ? "agora" : dm(x.data)}</span>
+                                              <span style={{ color: x.cor === "VERDE" ? "#4ade80" : "#f87171", fontWeight:"700" }}>{x.dist > 0 ? "+" : ""}{Number(x.dist).toFixed(1)}%</span>
+                                            </div>
+                                          ))}
+                                          <div style={{ color:"#64748b", marginTop:"2px", whiteSpace:"normal", maxWidth:"130px" }}>+ margem acima da linha · − falta p/ virar alta</div>
+                                        </div>
+                                      )}
                                     </div>
                                   )
                                 })()}
