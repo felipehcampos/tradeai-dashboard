@@ -22,6 +22,8 @@ export default function Mercado() {
   const [saude, setSaude] = useState({})  // { "DIRR3.SA": {selo, tooltip, ...} } — selo de saúde financeira (23/10/2026)
   const [scannerB, setScannerB] = useState({})  // { "ASAI3.SA": {desconto, dist_mediana, pico_pct, alvo_b, tamanho_b} } — Scanner B (09/11/2026)
   const [atrAgora, setAtrAgora] = useState({})  // { "GOGL34.SA": {atr_cor, atr_margem_pct, ...} } — ATR com o preço do momento (BDRs)
+  const [sel, setSel] = useState(null)  // ativo escolhido na lista (painel de análise + gráfico) — 10/11/2026
+  const [grafico, setGrafico] = useState({ ticker: null, velas: [], carregando: false, erro: null })
   const pollingRef = useRef(null)
   // ── BDRs (06/10/2026) ──
   // Cada sinal americano com BDR na lista oficial vira TAMBÉM uma linha própria,
@@ -303,6 +305,14 @@ export default function Mercado() {
       case "stop":      return parseFloat(s.stop_loss) || null
       case "sentim":    return s.score_sentimento != null ? parseFloat(s.score_sentimento) : null
       case "data":      return s.criado_em ? new Date(s.criado_em).getTime() : null
+      case "teto": {
+        const al = parseFloat(s.alvo_lucro), st = parseFloat(s.stop_loss)
+        return (al && st) ? (al + 1.5 * st) / 2.5 : null
+      }
+      case "rr": {
+        const al = parseFloat(s.alvo_lucro), st = parseFloat(s.stop_loss)
+        return (preco && al && st && preco > st) ? (al - preco) / (preco - st) : null
+      }
       default:          return null
     }
   }
@@ -333,531 +343,469 @@ export default function Mercado() {
   const totalManter = sinais.filter(s => s.sinal === "MANTER" && !s._bdr).length
   const temPrecosAtuais = Object.keys(precosAtuais).length > 0
 
+  // ── Future Intelligence (10/11/2026): cálculos para a tela nova (só exibição) ──
+  const num = (v) => { const n = parseFloat(v); return isNaN(n) ? null : n }
+  const tetoDe = (s) => { const a = num(s.alvo_lucro), st = num(s.stop_loss); return (a && st) ? (a + 1.5 * st) / 2.5 : null }
+  const rrDe = (s) => { const p = num(s.preco_atual), a = num(s.alvo_lucro), st = num(s.stop_loss); return (p && a && st && p > st) ? (a - p) / (p - st) : null }
+  const esticadoDe = (s) => { const p = num(s.preco_atual), m = num(s.mme_20); return (p && m) ? (p - m) / m * 100 : null }
+  const pctTxt = (v, casas = 1) => v == null ? "—" : `${v > 0 ? "+" : ""}${v.toFixed(casas).replace(".", ",")}%`
+  const chave = (s) => String(s.ticker || "").toUpperCase()
+
+  const selecionado = sinais.find(s => chave(s) === sel) || sinaisFiltrados.find(s => s.sinal === "COMPRAR") || sinaisFiltrados[0] || null
+  const selKey = selecionado ? chave(selecionado) : null
+  // Gráfico do ativo escolhido (velas + ATR) — rota /mercado/grafico (10/11/2026)
+  useEffect(() => {
+    if (!selKey) return
+    let vivo = true
+    setGrafico({ ticker: selKey, velas: [], carregando: true, erro: null })
+    api.get(`${API}/mercado/grafico/${selKey}`, { params: { pregoes: 90 } })
+      .then(r => { if (vivo) setGrafico({ ticker: selKey, velas: r.data.sucesso ? (r.data.velas || []) : [], carregando: false, erro: r.data.sucesso ? null : (r.data.erro || "erro") }) })
+      .catch(e => { if (vivo) setGrafico({ ticker: selKey, velas: [], carregando: false, erro: e?.message || "sem resposta" }) })
+    return () => { vivo = false }
+  }, [selKey])
+
+  const totalFalso = sinais.filter(s => s.sinal === "COMPRAR" && scannerB[chave(s)]?.desconto === "FALSO").length
+
+  const pill = (cor, fundo, borda) => ({
+    display: "inline-flex", alignItems: "center", gap: "4px", padding: "3px 9px", borderRadius: "999px",
+    fontSize: "11px", fontWeight: 600, whiteSpace: "nowrap", color: cor, background: fundo, border: `1px solid ${borda}`,
+  })
+  const PILL_OK = pill("#22D3A0", "rgba(34,211,160,0.10)", "rgba(34,211,160,0.35)")
+  const PILL_WARN = pill("#FBBF24", "rgba(251,191,36,0.10)", "rgba(251,191,36,0.35)")
+  const PILL_BAD = pill("#FB6474", "rgba(251,100,116,0.10)", "rgba(251,100,116,0.35)")
+  const PILL_NEU = pill("#9DB0CB", "#132238", "#1E3352")
+  const tituloPainel = { margin: 0, fontSize: "13px", fontWeight: 600, color: "var(--fi-texto-2)" }
+  const botaoSec = (ativo = true) => ({
+    height: "34px", padding: "0 16px", borderRadius: "999px", border: "1px solid var(--fi-borda-forte)",
+    background: ativo ? "rgba(56,189,248,0.08)" : "#132238", color: ativo ? "var(--fi-texto)" : "var(--fi-texto-4)",
+    fontSize: "12px", cursor: ativo ? "pointer" : "default", display: "inline-flex", alignItems: "center", gap: "8px",
+  })
+  const girando = (cor) => (
+    <span style={{ width: "12px", height: "12px", border: `2px solid ${cor}`, borderTopColor: "transparent", borderRadius: "50%",
+      display: "inline-block", animation: "spin 0.8s linear infinite" }} />
+  )
+
+  // Anel com brilho (risco/retorno, radar)
+  const Anel = ({ tam, r, esp, frac, cor, grad, children }) => {
+    const C = 2 * Math.PI * r, f = Math.max(0.03, Math.min(1, frac || 0)), c = tam / 2
+    return (
+      <svg width={tam} height={tam} viewBox={`0 0 ${tam} ${tam}`} aria-hidden="true" style={{ flex: "none" }}>
+        {grad && <defs><linearGradient id={grad} x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#2563EB" /><stop offset="1" stopColor="#22D3A0" /></linearGradient></defs>}
+        <circle cx={c} cy={c} r={r} fill="none" stroke="#132238" strokeWidth={esp} />
+        <circle cx={c} cy={c} r={r} fill="none" stroke={grad ? `url(#${grad})` : cor} strokeWidth={esp} strokeLinecap="round"
+          strokeDasharray={`${(C * f).toFixed(1)} ${C.toFixed(1)}`} transform={`rotate(-90 ${c} ${c})`}
+          style={{ filter: "drop-shadow(0 0 6px rgba(56,189,248,0.55))" }} />
+        {children}
+      </svg>
+    )
+  }
+
+  // ── Gráfico de velas com alvo, teto, stop e ATR (21,3) ──
+  const Grafico = () => {
+    if (!selecionado) return null
+    if (grafico.carregando || grafico.ticker !== selKey) return <div style={{ height: "250px", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--fi-texto-4)", fontSize: "12px" }}>Carregando gráfico…</div>
+    if (grafico.erro || !grafico.velas.length) return <div style={{ height: "250px", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--fi-texto-4)", fontSize: "12px" }}>Gráfico indisponível agora ({grafico.erro || "sem dados"}).</div>
+    const v = grafico.velas, alvo = num(selecionado.alvo_lucro), stop = num(selecionado.stop_loss), teto = tetoDe(selecionado)
+    const valores = v.flatMap(x => [x.h, x.l]).concat([alvo, stop].filter(Boolean))
+    const lo = Math.min(...valores) * 0.995, hi = Math.max(...valores) * 1.005, H = 250
+    const y = (p) => (1 - (p - lo) / (hi - lo)) * H
+    const cw = 100 / v.length
+    const linha = (p, cor, rotulo, abaixo) => p == null ? null : (
+      <div style={{ position: "absolute", left: 0, right: 0, top: `${y(p)}px`, borderTop: `1px dashed ${cor}`, boxShadow: `0 0 8px ${cor}` }}>
+        <span style={{ position: "absolute", right: "6px", top: abaixo ? "4px" : "-18px", fontSize: "10px", fontWeight: 600, color: cor,
+          background: "rgba(4,7,13,0.7)", padding: "0 4px", borderRadius: "4px" }}>{rotulo} {moeda(selecionado)} {formatarPreco(p)}</span>
+      </div>
+    )
+    return (
+      <div role="img" aria-label={`Gráfico de velas de ${selecionado.ticker} com alvo, teto, stop e ATR`}
+        style={{ position: "relative", height: `${H}px`, borderRadius: "10px", overflow: "hidden",
+          backgroundImage: "linear-gradient(rgba(56,189,248,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(56,189,248,0.04) 1px, transparent 1px)",
+          backgroundSize: "100% 50px, 60px 100%" }}>
+        {v.map((x, i) => {
+          const up = x.c >= x.o, cor = up ? "#22D3A0" : "#FB6474", left = (i + 0.5) * cw
+          const bt = y(Math.max(x.o, x.c)), bb = y(Math.min(x.o, x.c))
+          return (
+            <div key={i} title={`${x.data.split("-").reverse().join("/")} · abertura ${formatarPreco(x.o)} · máx ${formatarPreco(x.h)} · mín ${formatarPreco(x.l)} · fech ${formatarPreco(x.c)}${x.atr ? ` · ATR ${formatarPreco(x.atr)}` : ""}`}>
+              <div style={{ position: "absolute", left: `calc(${left}% - 0.5px)`, top: `${y(x.h)}px`, height: `${Math.max(1, y(x.l) - y(x.h))}px`, width: "1px", background: cor, opacity: 0.8 }} />
+              <div style={{ position: "absolute", left: `calc(${left}% - ${Math.max(1.5, Math.min(4, cw * 3))}px)`, top: `${bt}px`, height: `${Math.max(1.5, bb - bt)}px`,
+                width: `${Math.max(3, Math.min(8, cw * 6))}px`, borderRadius: "1.5px", background: cor, boxShadow: `0 0 6px ${up ? "rgba(34,211,160,0.45)" : "rgba(251,100,116,0.4)"}` }} />
+              {x.atr != null && x.atr > lo && x.atr < hi && (
+                <div style={{ position: "absolute", left: `calc(${left}% - 2px)`, top: `${y(x.atr) - 2}px`, width: "4px", height: "4px", borderRadius: "50%",
+                  background: x.atr_cor === "VERDE" ? "#A3E635" : "#FB6474", opacity: 0.85 }} />
+              )}
+            </div>
+          )
+        })}
+        {linha(alvo, "#22D3A0", "alvo")}
+        {linha(teto, "#38BDF8", "teto")}
+        {linha(stop, "#FB6474", "stop", true)}
+      </div>
+    )
+  }
+
+  // ── Painel de análise do ativo selecionado ──
+  const PainelAnalise = () => {
+    if (!selecionado) return (
+      <div className="fi-painel" style={{ padding: "18px", color: "var(--fi-texto-4)", fontSize: "13px" }}>Clique num ativo da lista para ver a análise.</div>
+    )
+    const s = selecionado, k = chave(s)
+    const teto = tetoDe(s), rr = rrDe(s), esticado = esticadoDe(s)
+    const preco = num(s.preco_atual), agora = precosAtuais[s.ticker] ? num(precosAtuais[s.ticker]) : preco
+    const alvo = num(s.alvo_lucro), stop = num(s.stop_loss)
+    const b = scannerB[k], sd = saude[k], ins = insiders[k], dv = dividendosSinais[k]
+    const mma = num(s.mma_200), rsi = num(s.rsi), fech = num(s.posicao_fechamento), vol = num(s.volume), desc = num(s.dist_media_6m)
+    const checks = [
+      ["Abaixo da MMA200", mma && preco ? (preco < mma ? "sim" : "não") : "—", mma && preco ? preco < mma : null],
+      ["Desconto ≤ −9%", pctTxt(desc), desc != null ? desc <= -9 : null],
+      ["RSI entre 36 e 46", rsi != null ? rsi.toFixed(0) : "—", rsi != null ? rsi >= 36 && rsi <= 46 : null],
+      ["Esticado ≤ 0 (MME20)", pctTxt(esticado), esticado != null ? esticado <= 0 : null],
+      ["Fechamento > 80%", fech != null ? `${fech.toFixed(0)}%` : "—", fech != null ? fech > 80 : null],
+      ["Volume ≥ 5 mi", vol != null ? `${(vol / 1e6).toFixed(1).replace(".", ",")} mi` : "—", vol != null ? vol >= 5e6 : null],
+      ["R/R ≥ 1,5", rr != null ? `${rr.toFixed(2).replace(".", ",")}x` : "—", rr != null ? rr >= 1.5 : null],
+    ]
+    const okCount = checks.filter(c => c[2] === true).length
+    const folga = teto && agora ? (teto / agora - 1) * 100 : null
+    const barra = (v, cor) => ({ width: "38px", height: `${Math.max(6, Math.min(90, Math.abs(v || 0) / 12 * 90))}px`, borderRadius: "6px 6px 0 0",
+      background: `linear-gradient(180deg, ${cor}, rgba(37,99,235,0.25))`, boxShadow: `0 0 12px ${cor}` })
+    return (
+      <aside aria-label="Análise do ativo" style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
+        <section className="fi-painel" style={{ padding: "18px", borderColor: "var(--fi-borda-forte)", boxShadow: "inset 0 0 40px rgba(56,189,248,0.05)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px" }}>
+            <h2 style={tituloPainel}>Plano da operação · {s.ticker}</h2>
+            <span style={s.sinal === "COMPRAR" ? PILL_OK : PILL_WARN}>{s.sinal}</span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "18px", marginTop: "14px" }}>
+            <Anel tam={120} r={50} esp={9} frac={rr ? rr / 3 : 0} cor={rr >= 1.5 ? "#38BDF8" : "#FBBF24"}>
+              <text x="60" y="60" textAnchor="middle" fill="#E6EDF7" fontFamily="Space Grotesk, Inter, sans-serif" fontSize="24" fontWeight="700">{rr ? rr.toFixed(1).replace(".", ",") : "—"}</text>
+              <text x="60" y="78" textAnchor="middle" fill="#7E93B2" fontFamily="Inter, sans-serif" fontSize="10">risco/retorno</text>
+            </Anel>
+            <div style={{ display: "flex", flexDirection: "column", gap: "4px", minWidth: 0 }}>
+              <span style={{ fontSize: "10px", color: "var(--fi-texto-4)", textTransform: "uppercase", letterSpacing: "1.2px" }}>Comprar até (teto)</span>
+              <span className="fi-titulo" style={{ fontSize: "32px", fontWeight: 600, color: "#38BDF8", textShadow: "0 0 22px rgba(56,189,248,0.5)" }}>{moeda(s)} {formatarPreco(teto)}</span>
+              <span style={{ fontSize: "11px", color: "var(--fi-texto-3)" }}>
+                agora {moeda(s)} {formatarPreco(agora)} · {folga == null ? "" : folga >= 0 ? `cabe ${folga.toFixed(1).replace(".", ",")}% acima` : "preço já acima do teto"}
+              </span>
+            </div>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "10px", marginTop: "16px" }}>
+            <div style={{ padding: "12px", borderRadius: "12px", background: "rgba(34,211,160,0.06)", border: "1px solid rgba(34,211,160,0.2)" }}>
+              <div style={{ fontSize: "11px", color: "var(--fi-texto-4)" }}>Alvo</div>
+              <div style={{ fontSize: "17px", fontWeight: 600, color: "#22D3A0", marginTop: "2px" }}>{moeda(s)} {formatarPreco(alvo)} <span style={{ fontSize: "12px" }}>{alvo && preco ? pctTxt((alvo / preco - 1) * 100) : ""}</span></div>
+              <div style={{ fontSize: "10.5px", color: "var(--fi-texto-3)", marginTop: "2px" }}>
+                {b?.tamanho_b === "NAO" ? "Scanner B: não operaria" : b?.alvo_b != null && alvo && Math.abs(b.alvo_b - alvo) >= 0.01 ? `alvo B (mediana): ${moeda(s)} ${formatarPreco(b.alvo_b)}` : "alvo B igual ao oficial"}
+              </div>
+            </div>
+            <div style={{ padding: "12px", borderRadius: "12px", background: "rgba(251,100,116,0.06)", border: "1px solid rgba(251,100,116,0.2)" }}>
+              <div style={{ fontSize: "11px", color: "var(--fi-texto-4)" }}>Stop (fechamento)</div>
+              <div style={{ fontSize: "17px", fontWeight: 600, color: "#FB6474", marginTop: "2px" }}>{moeda(s)} {formatarPreco(stop)} <span style={{ fontSize: "12px" }}>{stop && preco ? pctTxt((stop / preco - 1) * 100) : ""}</span></div>
+              <div style={{ fontSize: "10.5px", color: "var(--fi-texto-3)", marginTop: "2px" }}>a tese morre abaixo da mínima recente</div>
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: "8px", marginTop: "14px", flexWrap: "wrap" }}>
+            <button type="button" onClick={() => adicionarPortfolio(s)} style={{ ...botaoSec(), background: "rgba(34,211,160,0.12)", borderColor: "rgba(34,211,160,0.4)", color: "#22D3A0", fontWeight: 600 }}>+ Portfólio</button>
+            <button type="button" onClick={() => adicionarFavorito(s)} style={botaoSec()}>
+              {favoritados[s.ticker] === "ok" ? "✓ nos Favoritos" : favoritados[s.ticker] === "erro" ? "✕ erro" : "⭐ Favoritos"}
+            </button>
+          </div>
+        </section>
+
+        <section className="fi-painel" style={{ padding: "18px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+            <h2 style={tituloPainel}>Checklist do método</h2><span style={{ fontSize: "11px", color: "var(--fi-texto-3)" }}>{okCount} de 7</span>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+            {checks.map(([rot, val, ok]) => (
+              <div key={rot} style={{ display: "flex", justifyContent: "space-between", gap: "12px", fontSize: "12.5px" }}>
+                <span style={{ display: "flex", alignItems: "center", gap: "10px", color: "var(--fi-texto-2)" }}>
+                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: ok == null ? "#5F7391" : ok ? "#22D3A0" : "#FBBF24",
+                    boxShadow: ok == null ? "none" : `0 0 6px ${ok ? "rgba(34,211,160,0.7)" : "rgba(251,191,36,0.6)"}` }} />{rot}
+                </span>
+                <span style={{ fontWeight: 600 }}>{val}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {b && (
+          <section className="fi-painel" style={{ padding: "18px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <h2 style={tituloPainel}>Desconto real ou falso</h2>
+              <span style={b.desconto === "FALSO" ? PILL_WARN : b.desconto === "REAL" ? PILL_OK : PILL_NEU}>
+                {b.desconto === "FALSO" ? "Desconto falso" : b.desconto === "REAL" ? "Desconto real" : "Sem desconto"}
+              </span>
+            </div>
+            <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-around", gap: "14px", height: "118px", marginTop: "14px", padding: "0 10px", borderBottom: "1px solid var(--fi-borda)" }}>
+              {[[b.dist_media, "#38BDF8", pctTxt(b.dist_media)], [b.dist_mediana, b.desconto === "FALSO" ? "#FBBF24" : "#22D3A0", pctTxt(b.dist_mediana)],
+                [b.pico_pct / 50 * 12, b.pico_pct >= 40 ? "#FB6474" : "#2563EB", `+${(b.pico_pct || 0).toFixed(0)}%`]].map(([v, cor, rot], i) => (
+                <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px", flex: 1 }}>
+                  <span style={{ fontSize: "12px", fontWeight: 600 }}>{rot}</span><div style={barra(v, cor)} />
+                </div>
+              ))}
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-around", gap: "14px", marginTop: "6px", fontSize: "10.5px", color: "var(--fi-texto-4)", textAlign: "center" }}>
+              <span style={{ flex: 1 }}>pela média</span><span style={{ flex: 1 }}>pela mediana</span><span style={{ flex: 1 }}>pico de 6m</span>
+            </div>
+            <div style={{ marginTop: "12px", fontSize: "12px", color: "var(--fi-texto-3)" }}>
+              Scanner B (teste): {b.tamanho_b === "NAO" ? "não operaria — sem espaço até o preço normal." : b.tamanho_b === "MEIA" ? "meia posição — pela mediana o desconto quase some." : "posição cheia — barato pela média e pela mediana."}
+            </div>
+          </section>
+        )}
+
+        <section className="fi-painel" style={{ padding: "18px", background: "radial-gradient(400px 200px at 0% 0%, rgba(56,189,248,0.10), transparent 70%), var(--fi-painel)" }}>
+          <div style={{ display: "flex", gap: "16px", alignItems: "flex-start" }}>
+            <svg width="56" height="56" viewBox="0 0 64 64" aria-hidden="true" style={{ flex: "none" }}>
+              <defs><radialGradient id="fiOrb" cx="0.4" cy="0.35" r="0.7"><stop offset="0" stopColor="#7DD3FC" /><stop offset="0.55" stopColor="#2563EB" /><stop offset="1" stopColor="#0B1426" /></radialGradient></defs>
+              <circle cx="32" cy="32" r="29" fill="none" stroke="#22D3A0" strokeWidth="1.5" strokeDasharray="120 62" style={{ filter: "drop-shadow(0 0 4px rgba(34,211,160,0.7))" }} />
+              <circle cx="32" cy="32" r="22" fill="url(#fiOrb)" />
+              <text x="32" y="36" textAnchor="middle" fill="#E6EDF7" fontFamily="Space Grotesk, Inter, sans-serif" fontSize="12" fontWeight="700">IA</text>
+            </svg>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                <h2 style={tituloPainel}>Leitura da IA</h2>
+                <span style={{ fontSize: "10.5px", color: "#5F7391" }}>confiança {s.confianca ?? "—"} · não é critério</span>
+              </div>
+              <p style={{ margin: "8px 0 0", fontSize: "12.5px", lineHeight: 1.6, color: "var(--fi-texto-2)" }}>{s.justificativa || "Sem justificativa gravada."}</p>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginTop: "10px" }}>
+                {sd && <span title={sd.tooltip} style={sd.selo === "🟢" ? PILL_OK : sd.selo === "🟡" ? PILL_WARN : sd.selo === "🔴" ? PILL_BAD : PILL_NEU}>Saúde {sd.selo === "🟢" ? "OK" : sd.selo === "🟡" ? "atenção" : sd.selo === "🔴" ? "alerta" : "s/ dados"}</span>}
+                {ins?.sinal && <span title={ins.tooltip} style={ins.sinal === "compra" ? PILL_OK : ins.sinal === "venda" ? PILL_BAD : PILL_WARN}>👔 insiders {ins.sinal}</span>}
+                {dv && <span style={PILL_WARN}>data-com {fmtDiaMes(dv.data_com)} · R$ {dv.valor_bruto.toFixed(2).replace(".", ",")}</span>}
+                {s.score_sentimento != null && <span style={PILL_NEU}>sentimento {parseFloat(s.score_sentimento) > 0 ? "+" : ""}{parseFloat(s.score_sentimento).toFixed(2)}</span>}
+                <span style={PILL_NEU}>sinal de {formatarData(s.criado_em)}</span>
+              </div>
+            </div>
+          </div>
+        </section>
+      </aside>
+    )
+  }
+
+  const colunas = [
+    { label: "Ativo", campo: "ticker", w: "150px" },
+    { label: "Sinal", campo: "sinal", w: "96px" },
+    { label: "Preço", campo: "preco", w: "92px" },
+    { label: "Teto", campo: "teto", w: "92px" },
+    { label: "Alvo", campo: "alvo", w: "98px" },
+    { label: "Stop", campo: "stop", w: "92px" },
+    { label: "R/R", campo: "rr", w: "58px" },
+    { label: "ATR (21,3)", campo: "atr", w: "112px" },
+    { label: "Desconto", campo: "desconto", w: "88px" },
+    { label: "Esticado", campo: "esticado", w: "76px" },
+    { label: "Volume", campo: "volume", w: "68px" },
+    { label: "Saúde", campo: "saude", w: "82px" },
+    { label: "", campo: null, w: "44px" },
+  ]
+  const grade = colunas.map(c => c.w).join(" ")
+
   return (
-    <div style={{ width: "100%" }}>
-      <style>{`
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.6; }
-        }
-      `}</style>
-
-      {/* Banner de status do scanner */}
-      {bannerStatus === "executando" && (
-        <div style={{
-          background: "rgba(245,158,11,0.12)", border: "1px solid rgba(245,158,11,0.4)",
-          borderRadius: "10px", padding: "14px 20px", marginBottom: "16px",
-          display: "flex", alignItems: "center", gap: "12px",
-          animation: "pulse 2s ease-in-out infinite"
-        }}>
-          <span style={{
-            width: "16px", height: "16px", border: "2px solid #f59e0b",
-            borderTopColor: "transparent", borderRadius: "50%",
-            display: "inline-block", animation: "spin 0.8s linear infinite", flexShrink: 0
-          }} />
-          <div>
-            <p style={{ margin: 0, color: "#f59e0b", fontWeight: "700", fontSize: "13px" }}>
-              ⏳ Scanner em execução...
-            </p>
-            <p style={{ margin: "2px 0 0 0", color: "#94a3b8", fontSize: "12px" }}>
-              Analisando 80+ ativos com IA. Isso pode levar 8-10 minutos. A página atualizará automaticamente quando concluir.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {bannerStatus === "concluido" && (
-        <div style={{
-          background: "rgba(34,197,94,0.12)", border: "1px solid rgba(34,197,94,0.4)",
-          borderRadius: "10px", padding: "14px 20px", marginBottom: "16px",
-          display: "flex", alignItems: "center", gap: "12px"
-        }}>
-          <span style={{ fontSize: "20px" }}>✅</span>
-          <div>
-            <p style={{ margin: 0, color: "#4ade80", fontWeight: "700", fontSize: "13px" }}>
-              Scanner concluído!
-            </p>
-            <p style={{ margin: "2px 0 0 0", color: "#94a3b8", fontSize: "12px" }}>
-              {totalComprar} sinal(is) de COMPRAR encontrado(s). Resultados atualizados abaixo.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Header */}
-      <div style={{
-        display: "flex", alignItems: "flex-start", justifyContent: "space-between",
-        marginBottom: "20px", flexWrap: "wrap", gap: "12px"
-      }}>
+    <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: "18px" }}>
+      {/* Cabeçalho da aba */}
+      <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", flexWrap: "wrap", gap: "12px" }}>
         <div>
-          <h2 style={{ color: "#38bdf8", margin: "0 0 4px 0", fontSize: "22px", fontWeight: "800" }}>
-            🌎 Sinais do Mercado
-          </h2>
-          {ultimaAtualizacao && (
-            <span style={{ color: "#64748b", fontSize: "12px" }}>
-              {temPrecosAtuais ? "💹 Preços atualizados às " : "Carregado às "}{ultimaAtualizacao}
-            </span>
-          )}
+          <h1 className="fi-titulo" style={{ margin: 0, fontSize: "24px", fontWeight: 700 }}>Mercado</h1>
+          <span style={{ color: "var(--fi-texto-4)", fontSize: "12px" }}>
+            Sinais da última rodada{ultimaAtualizacao ? ` · ${temPrecosAtuais ? "preços atualizados às" : "carregado às"} ${ultimaAtualizacao}` : ""}
+          </span>
         </div>
         <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-          <button onClick={atualizarPrecos} disabled={atualizandoPrecos || sinais.length === 0} style={{
-            padding: "9px 18px", borderRadius: "8px", border: "none", cursor: "pointer",
-            background: atualizandoPrecos ? "#334155" : "linear-gradient(135deg,#0ea5e9,#0284c7)",
-            color: atualizandoPrecos ? "#94a3b8" : "white",
-            fontSize: "13px", fontWeight: "600", minWidth: "160px",
-            boxShadow: atualizandoPrecos ? "none" : "0 2px 8px rgba(14,165,233,0.3)",
-            transition: "all 0.2s"
-          }}>
-            {atualizandoPrecos ? (
-              <span style={{ display: "flex", alignItems: "center", gap: "8px", justifyContent: "center" }}>
-                <span style={{
-                  width: "12px", height: "12px", border: "2px solid #94a3b8",
-                  borderTopColor: "transparent", borderRadius: "50%",
-                  display: "inline-block", animation: "spin 0.8s linear infinite"
-                }} />
-                Atualizando...
-              </span>
-            ) : "💹 Atualizar Preços"}
+          <button type="button" onClick={atualizarPrecos} disabled={atualizandoPrecos || sinais.length === 0} style={botaoSec(!atualizandoPrecos && sinais.length > 0)}>
+            {atualizandoPrecos ? <>{girando("#9DB0CB")} Atualizando…</> : "Atualizar preços"}
           </button>
-          <button onClick={rodarScanner} disabled={rodando} style={{
-            padding: "9px 20px", borderRadius: "8px", border: "none", cursor: rodando ? "not-allowed" : "pointer",
-            background: rodando ? "#334155" : "linear-gradient(135deg,#38bdf8,#0ea5e9)",
-            color: rodando ? "#94a3b8" : "#0f172a", fontWeight: "bold", fontSize: "13px",
-            boxShadow: rodando ? "none" : "0 2px 8px rgba(56,189,248,0.3)"
-          }}>
-            {rodando ? (
-              <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <span style={{
-                  width: "12px", height: "12px", border: "2px solid #94a3b8",
-                  borderTopColor: "transparent", borderRadius: "50%",
-                  display: "inline-block", animation: "spin 0.8s linear infinite"
-                }} />
-                Analisando...
-              </span>
-            ) : "🚀 Rodar Scanner"}
+          <button type="button" onClick={rodarScanner} disabled={rodando} title="O scanner já roda sozinho às 3h. Use só se precisar de uma rodada extra."
+            style={botaoSec(!rodando)}>
+            {rodando ? <>{girando("#9DB0CB")} Analisando…</> : "Rodar scanner"}
           </button>
         </div>
+      </div>
+
+      {bannerStatus === "executando" && (
+        <div className="fi-painel" style={{ padding: "14px 18px", display: "flex", alignItems: "center", gap: "12px", borderColor: "rgba(251,191,36,0.4)" }}>
+          {girando("#FBBF24")}
+          <div>
+            <p style={{ margin: 0, color: "#FBBF24", fontWeight: 600, fontSize: "13px" }}>Scanner em execução…</p>
+            <p style={{ margin: "2px 0 0", color: "var(--fi-texto-3)", fontSize: "12px" }}>Leva de 15 a 20 minutos. A página atualiza sozinha quando terminar.</p>
+          </div>
+        </div>
+      )}
+      {bannerStatus === "concluido" && (
+        <div className="fi-painel" style={{ padding: "14px 18px", borderColor: "rgba(34,211,160,0.4)" }}>
+          <p style={{ margin: 0, color: "#22D3A0", fontWeight: 600, fontSize: "13px" }}>Scanner concluído — {totalComprar} COMPRAR encontrado(s).</p>
+        </div>
+      )}
+
+      {/* Radar + gráfico */}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "18px", alignItems: "stretch" }}>
+        <section aria-label="Radar do dia" className="fi-painel" style={{ flex: "1 1 300px", padding: "18px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+            <h2 style={tituloPainel}>Radar do dia</h2><span style={{ fontSize: "11px", color: "var(--fi-texto-4)" }}>{totalAnalisados} na rodada</span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "18px", marginTop: "14px" }}>
+            <Anel tam={140} r={58} esp={10} frac={(totalComprar + totalManter) ? totalComprar / (totalComprar + totalManter) : 0} grad="fiRadar">
+              <text x="70" y="70" textAnchor="middle" fill="#E6EDF7" fontFamily="Space Grotesk, Inter, sans-serif" fontSize="34" fontWeight="700">{totalComprar}</text>
+              <text x="70" y="90" textAnchor="middle" fill="#7E93B2" fontFamily="Inter, sans-serif" fontSize="11">COMPRAR</text>
+            </Anel>
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px", fontSize: "12px", flex: 1 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: "12px" }}><span style={{ color: "var(--fi-texto-3)" }}>Comprar</span><b style={{ color: "#22D3A0" }}>{totalComprar}</b></div>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: "12px" }}><span style={{ color: "var(--fi-texto-3)" }}>Manter</span><b style={{ color: "#FBBF24" }}>{totalManter}</b></div>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: "12px" }}><span style={{ color: "var(--fi-texto-3)" }}>Desconto falso</span><b style={{ color: "#FBBF24" }}>{totalFalso}</b></div>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: "12px" }}><span style={{ color: "var(--fi-texto-3)" }}>Total na rodada</span><b>{totalAnalisados}</b></div>
+            </div>
+          </div>
+        </section>
+
+        <section aria-label="Gráfico do ativo" className="fi-painel" style={{ flex: "999 1 560px", minWidth: 0, padding: "18px" }}>
+          <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "baseline", gap: "8px", marginBottom: "12px" }}>
+            <div style={{ display: "flex", alignItems: "baseline", gap: "10px", flexWrap: "wrap" }}>
+              <h2 className="fi-titulo" style={{ margin: 0, fontSize: "22px", fontWeight: 700 }}>{selecionado ? selecionado.ticker.replace(".SA", "") : "—"}</h2>
+              {selecionado && <span style={{ fontSize: "12px", color: "var(--fi-texto-3)" }}>{selecionado.nome} · últimos 90 pregões</span>}
+            </div>
+            <div style={{ display: "flex", gap: "14px", fontSize: "11px", color: "var(--fi-texto-3)", flexWrap: "wrap" }}>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}><span style={{ width: 14, height: 2, background: "#22D3A0" }} />alvo</span>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}><span style={{ width: 14, height: 2, background: "#38BDF8" }} />teto</span>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}><span style={{ width: 14, height: 2, background: "#FB6474" }} />stop</span>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}><span style={{ width: 6, height: 6, borderRadius: "50%", background: "#A3E635" }} />ATR (21,3)</span>
+            </div>
+          </div>
+          <Grafico />
+        </section>
       </div>
 
       {/* Top 5 do dia (28/10/2026) — análise automática do backend */}
       <Top5Card />
 
-      {/* Cards resumo */}
-      <div style={{ display: "flex", gap: "12px", marginBottom: "20px", flexWrap: "wrap" }}>
-        {[
-          { label: "🟢 Comprar", valor: totalComprar, cor: "#22c55e", bg: "rgba(22,163,74,0.1)", border: "rgba(22,163,74,0.3)" },
-          { label: "🟡 Manter", valor: totalManter, cor: "#f59e0b", bg: "rgba(217,119,6,0.1)", border: "rgba(217,119,6,0.3)" },
-          { label: "📊 Total Analisados", valor: totalAnalisados, cor: "#38bdf8", bg: "rgba(56,189,248,0.1)", border: "rgba(56,189,248,0.3)" },
-        ].map((card, i) => (
-          <div key={i} style={{
-            background: card.bg, border: `1px solid ${card.border}`,
-            padding: "16px 24px", borderRadius: "12px", flex: 1, minWidth: "140px", textAlign: "center"
-          }}>
-            <p style={{ color: "#94a3b8", fontSize: "12px", margin: "0 0 6px 0", fontWeight: "500" }}>{card.label}</p>
-            <p style={{ color: card.cor, fontSize: "28px", fontWeight: "800", margin: 0 }}>{card.valor}</p>
-          </div>
-        ))}
-      </div>
-
-      {/* Filtros */}
-      <div style={{ display: "flex", gap: "8px", marginBottom: "16px", flexWrap: "wrap" }}>
-        {mercados.map(m => (
-          <button key={m} onClick={() => setFiltroMercado(m)} style={{
-            padding: "6px 16px", borderRadius: "20px", border: "none", cursor: "pointer",
-            fontSize: "12px", fontWeight: filtroMercado === m ? "700" : "400",
-            background: filtroMercado === m ? "#38bdf8" : "#1e293b",
-            color: filtroMercado === m ? "#0f172a" : "#64748b",
-            transition: "all 0.2s"
-          }}>
-            {m}
-          </button>
-        ))}
-      </div>
-
-      {/* Legenda das colunas de leitura */}
-      {!loading && sinaisFiltrados.length > 0 && (
-        <div style={{
-          display: "flex", gap: "20px", flexWrap: "wrap", marginBottom: "12px",
-          padding: "10px 14px", background: "#0d1829", border: "1px solid #1e293b",
-          borderRadius: "8px", fontSize: "11px", color: "#64748b"
-        }}>
-          <span><strong style={{ color: "#94a3b8" }}>Desconto</strong> — abaixo da média de 6 meses. Verde = descontado de verdade.</span>
-          <span><strong style={{ color: "#94a3b8" }}>Esticado</strong> — distância da MME20. Verde = colado na média, ainda não correu.</span>
-          <span><strong style={{ color: "#94a3b8" }}>Volume</strong> — verde acima de 5M, vermelho abaixo de 2M.</span>
-          <span style={{ color: "#475569" }}>Clique no cabeçalho para ordenar.</span>
-          {ordenacao.campo && (
-            <button
-              onClick={() => setOrdenacao({ campo: null, direcao: "desc" })}
-              style={{
-                padding: "2px 10px", borderRadius: "6px", border: "1px solid #334155",
-                background: "transparent", color: "#38bdf8", fontSize: "11px",
-                cursor: "pointer", marginLeft: "auto"
-              }}
-            >
-              Limpar ordenação
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* Tabela */}
-      {loading ? (
-        <div style={{ textAlign: "center", padding: "60px", color: "#64748b" }}>
-          <p style={{ fontSize: "32px", marginBottom: "12px" }}>⏳</p>
-          <p>Carregando sinais...</p>
-        </div>
-      ) : sinaisFiltrados.length === 0 ? (
-        <div style={{ textAlign: "center", padding: "60px", color: "#64748b" }}>
-          <p style={{ fontSize: "48px", marginBottom: "12px" }}>📭</p>
-          {totalAnalisados > 0 ? (
-            <>
-              <p style={{ fontSize: "16px", marginBottom: "8px", color: "#94a3b8" }}>
-                {totalAnalisados} ativo(s) analisado(s), nenhuma oportunidade de compra hoje
-              </p>
-              <p style={{ fontSize: "13px" }}>
-                Todos os sinais vieram como EVITAR — o sistema preferiu não arriscar.
-              </p>
-            </>
-          ) : (
-            <>
-              <p style={{ fontSize: "16px", marginBottom: "8px" }}>Nenhum sinal disponível</p>
-              <p style={{ fontSize: "13px" }}>Clique em "Rodar Scanner" ou aguarde às 18h</p>
-            </>
-          )}
-        </div>
-      ) : (
-        <div style={{ overflowX: "auto", borderRadius: "12px", border: "1px solid #1e293b", width: "100%" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed", minWidth: "1170px" }}>
-              <colgroup>
-              <col style={{ width: "10%" }} />
-              <col style={{ width: "7%" }} />
-              <col style={{ width: "5%" }} />
-              <col style={{ width: "8%" }} />
-              <col style={{ width: "6%" }} />
-              <col style={{ width: "7%" }} />
-              <col style={{ width: "7%" }} />
-              <col style={{ width: "6%" }} />
-              <col style={{ width: "5%" }} />
-              <col style={{ width: "7%" }} />
-              <col style={{ width: "8%" }} />
-              <col style={{ width: "8%" }} />
-              <col style={{ width: "5%" }} />
-              <col style={{ width: "5%" }} />
-              <col style={{ width: "6%" }} />
-            </colgroup>
-            <thead>
-              <tr style={{ background: "#0a1520" }}>
-                {[
-                  { label: "Ticker", campo: "ticker" },
-                  { label: "Nome", campo: "nome" },
-                  { label: "Mercado", campo: null },
-                  { label: "Sinal", campo: "sinal" },
-                  { label: "Saúde", campo: "saude" },
-                  { label: "ATR", campo: "atr" },
-                  { label: "Desconto", campo: "desconto" },
-                  { label: "Esticado", campo: "esticado" },
-                  { label: "Volume", campo: "volume" },
-                  { label: "Preço Atual", campo: "preco" },
-                  { label: "Alvo", campo: "alvo" },
-                  { label: "Stop", campo: "stop" },
-                  { label: "Sentim.", campo: "sentim" },
-                  { label: "Data", campo: "data" },
-                  { label: "Ação", campo: null }
-                ].map(col => {
-                  const ativa = ordenacao.campo === col.campo && col.campo != null
-                  return (
-                    <th
-                      key={col.label}
-                      onClick={col.campo ? () => alternarOrdenacao(col.campo) : undefined}
-                      style={{
-                        padding: "14px 10px", textAlign: "left",
-                        color: ativa ? "#38bdf8" : "#64748b",
-                        fontSize: "11px", fontWeight: "700", letterSpacing: "0.06em",
-                        borderBottom: ativa ? "2px solid #38bdf8" : "1px solid #1e293b",
-                        whiteSpace: "nowrap",
-                        cursor: col.campo ? "pointer" : "default",
-                        userSelect: "none",
-                        transition: "color 0.15s"
-                      }}
-                    >
-                      {col.label.toUpperCase()}
-                      {col.campo && (
-                        <span style={{ marginLeft: "4px", fontSize: "9px", opacity: ativa ? 1 : 0.3 }}>
-                          {ativa ? (ordenacao.direcao === "asc" ? "\u25B2" : "\u25BC") : "\u21C5"}
-                        </span>
-                      )}
-                    </th>
-                  )
-                })}
-              </tr>
-            </thead>
-            <tbody style={{ opacity: atualizandoPrecos || loading ? 0.4 : 1, transition: "opacity 0.3s ease-in-out" }}>
-              {sinaisFiltrados.map((s, i) => {
-                const precoExibir = getPrecoExibir(s)
-                const variacao = calcularVariacao(s)
-                const precoBase = parseFloat(s.preco_atual) || 1
-                const percentualAlvo = s.pct_alvo || ((parseFloat(s.alvo_lucro) - precoBase) / precoBase * 100).toFixed(1)
-                const percentualStop = s.pct_stop || ((precoBase - parseFloat(s.stop_loss)) / precoBase * 100).toFixed(1)
-                const descontoMedia = s.dist_media_6m != null ? parseFloat(s.dist_media_6m) : null
-                const distMME = (s.mme_20 != null && parseFloat(s.mme_20) > 0)
-                  ? ((precoBase - parseFloat(s.mme_20)) / parseFloat(s.mme_20)) * 100
-                  : null
-                const volMi = s.volume != null ? parseFloat(s.volume) / 1000000 : null
+      {/* Lista de sinais + análise */}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "18px", alignItems: "flex-start" }}>
+        <section aria-label="Sinais da rodada" className="fi-painel" style={{ flex: "999 1 640px", minWidth: 0, overflow: "hidden" }}>
+          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "12px", padding: "16px 18px", borderBottom: "1px solid var(--fi-borda)" }}>
+            <h2 className="fi-titulo" style={{ margin: 0, fontSize: "18px", fontWeight: 600 }}>Sinais da rodada</h2>
+            <div role="group" aria-label="Filtro por mercado" style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+              {mercados.map(m => {
+                const on = filtroMercado === m
                 return (
-                  <tr key={i}
-                    style={{
-                      borderBottom: "1px solid #0f172a",
-                      background: i % 2 === 0 ? "#0d1829" : "#0a1520",
-                      transition: "background 0.15s"
-                    }}
-                    onMouseEnter={e => e.currentTarget.style.background = "#1e293b"}
-                    onMouseLeave={e => e.currentTarget.style.background = i % 2 === 0 ? "#0d1829" : "#0a1520"}
-                  >
-                    <td style={{ padding: "14px 10px", fontWeight: "700", color: "#38bdf8", fontSize: "13px", whiteSpace: "normal", lineHeight: "1.35" }}>
-                                            {s.ticker}
-                      {s.sinal === "COMPRAR" && dividendosSinais[String(s.ticker || "").toUpperCase()] && (() => {
-                        const dv = dividendosSinais[String(s.ticker).toUpperCase()]
-                        const dia = (iso) => iso ? iso.slice(0, 10).split("-").reverse().slice(0, 2).join("/") : ""
-                        const quando = dv.dias_ate === 0 ? "hoje" : dv.dias_ate === 1 ? "amanhã" : dia(dv.data_com)
-                        const pct = parseFloat(s.preco_atual) > 0 ? (dv.valor_bruto / parseFloat(s.preco_atual) * 100) : null
-                        return (
-                          <div title={`Data-com ${dia(dv.data_com)} (comprando até esse dia, você recebe) · data ex ${dia(dv.data_ex)}\n${dv.tipos.join(" + ")} de R$ ${dv.valor_bruto.toFixed(4)}/ação (líquido R$ ${dv.valor_liquido.toFixed(4)})${pct != null ? ` · ~${pct.toFixed(1)}% do preço` : ""}${dv.pagamento ? `\nPagamento ${dv.pagamento.split("-").reverse().join("/")}` : ""}\nNo dia ${dia(dv.data_ex)} o preço abre ~R$ ${dv.valor_bruto.toFixed(2)} mais baixo: é o provento saindo, não queda nem motivo de stop.`}
-                            style={{ marginTop: "3px", display: "inline-block", padding: "1px 6px", borderRadius: "8px", fontSize: "10px", fontWeight: "600", background: "rgba(245,158,11,0.12)", color: "#f59e0b", cursor: "help" }}>
-                            💰 data-com {quando} · R$ {dv.valor_bruto.toFixed(2)}
-                          </div>
-                        )
-                      })()}
-                      {s._bdr && (
-                        <div style={{ fontSize: "10px", fontWeight: "400", color: "#94a3b8", marginTop: "3px" }}>
-                          BDR de {s._original} · liquidez {String(s.bdr_liquidez || "").toLowerCase()}
-                        </div>
-                      )}
-                      {s.mercado !== "B3" && s.atr_data_ref && (() => {
-                        const esperado = fechamentoEsperado(s.criado_em)
-                        const atrasado = esperado && s.atr_data_ref < esperado
-                        return (
-                          <div style={{ fontSize: "10px", fontWeight: "400", marginTop: "2px", color: atrasado ? "#f59e0b" : "#64748b" }}>
-                            {atrasado ? "⚠️ " : ""}fech. {fmtDiaMes(s.atr_data_ref)}{atrasado ? " (atrasado)" : ""}
-                          </div>
-                        )
-                      })()}
-                      {s._bdr && precosAtuais[s.ticker] && (() => {
-                        const base = parseFloat(s.preco_atual), alvo = parseFloat(s.alvo_lucro), agora = parseFloat(precosAtuais[s.ticker])
-                        if (!base || !alvo || alvo <= base) return null
-                        const caminho = (agora - base) / (alvo - base) * 100
-                        if (caminho < 50) return null
-                        return (
-                          <div style={{ fontSize: "10px", fontWeight: "600", marginTop: "2px", color: "#f87171" }}>
-                            ⚠️ {agora >= alvo ? "já passou do alvo" : `já andou ${caminho.toFixed(0)}% até o alvo`}
-                          </div>
-                        )
-                      })()}
-                    </td>
-                    <td style={{ padding: "14px 10px", color: "#e2e8f0", fontSize: "12px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {s.nome}
-                    </td>
-                    <td style={{ padding: "14px 10px" }}>
-                      <span style={{
-                        display: "inline-block", padding: "3px 8px", borderRadius: "12px",
-                        fontSize: "11px", fontWeight: "600", whiteSpace: "nowrap",
-                        background: s.mercado === "B3" ? "rgba(34,197,94,0.15)" : "rgba(56,189,248,0.15)",
-                        color: s.mercado === "B3" ? "#22c55e" : "#38bdf8"
-                      }}>
-                        {s.mercado}
-                      </span>
-                    </td>
-                    <td style={{ padding: "14px 10px" }}>
-                      <span style={{
-                        display: "inline-flex", alignItems: "center", gap: "4px",
-                        padding: "5px 10px", borderRadius: "6px", fontSize: "11px",
-                        fontWeight: "700", whiteSpace: "nowrap",
-                        background: s.sinal === "COMPRAR" ? "rgba(22,163,74,0.2)" : "rgba(217,119,6,0.2)",
-                        color: s.sinal === "COMPRAR" ? "#4ade80" : "#fbbf24",
-                        border: `1px solid ${s.sinal === "COMPRAR" ? "rgba(22,163,74,0.5)" : "rgba(217,119,6,0.5)"}`
-                      }}>
-                        {s.sinal === "COMPRAR" ? "▲" : "◆"} {s.sinal}
-                      </span>
-                    </td>
-                                        <td style={{ padding: "14px 10px", whiteSpace: "nowrap" }}>
-                      {(() => {
-                        const sd = saude[String(s.ticker || "").toUpperCase()]
-                        const ins = insiders[String(s.ticker || "").toUpperCase()]
-                        const corIns = ins?.sinal === "compra" ? "#4ade80" : ins?.sinal === "venda" ? "#f87171" : "#fbbf24"
-                        const icoIns = ins?.sinal ? (
-                          <span title={ins.tooltip} style={{ display: "block", marginTop: "3px", fontSize: "10px", fontWeight: "700", color: corIns, cursor: "help" }}>
-                            👔 {ins.sinal === "compra" ? "compra" : ins.sinal === "venda" ? "venda" : "misto"}
-                          </span>
-                        ) : null
-                        if (!sd) return <>{<span style={{ color: "#475569", fontSize: "12px" }}>—</span>}{icoIns}</>
-                        const cor = sd.selo === "🟢" ? "#4ade80" : sd.selo === "🟡" ? "#fbbf24" : sd.selo === "🔴" ? "#f87171" : "#64748b"
-                        const rotulo = sd.selo === "🟢" ? "OK" : sd.selo === "🟡" ? "Atenção" : sd.selo === "🔴" ? "Alerta" : "s/ dados"
-                        const tri = sd.ultimo_trimestre ? `\nÚltimo balanço: ${sd.ultimo_trimestre.split("-").reverse().join("/")}` : ""
-                        const fin = sd.financeira ? "\n(banco/seguradora: avaliado por lucro e ROE)" : ""
-                        return (
-                          <>
-                            <span title={`${sd.tooltip}${tri}${fin}`} style={{ cursor: "help", fontSize: "11px", fontWeight: "700", color: cor }}>
-                              {sd.selo} {rotulo}
-                            </span>
-                            {icoIns}
-                          </>
-                        )
-                      })()}
-                    </td>
-                    <td style={{ padding: "14px 10px", whiteSpace: "nowrap" }}>
-                      {s.atr_cor ? (() => {
-                        const verde = s.atr_cor === "VERDE"
-                        const dist = verde ? s.atr_margem_pct : s.atr_falta_pct
-                        const ref = s.atr_data_ref ? s.atr_data_ref.split("-").reverse().slice(0, 2).join("/") : null
-                        return (
-                          <div title={`ATR Trailing Stop (21,3) no dia do sinal${ref ? ` (${ref})` : ""} · linha ${formatarPreco(s.atr_linha)}`}>
-                            <span style={{ padding: "3px 8px", borderRadius: "6px", fontSize: "11px", fontWeight: "700", background: verde ? "rgba(74,222,128,0.12)" : "rgba(248,113,113,0.12)", color: verde ? "#4ade80" : "#f87171" }}>
-                              {verde ? "🟢 Alta" : "🔴 Queda"}
-                            </span>
-                            {dist != null && (
-                              <span style={{ display: "block", fontSize: "10px", marginTop: "3px", color: dist < 2 ? "#f59e0b" : "#64748b" }}>
-                                {verde ? `margem ${Number(dist).toFixed(1)}%` : `falta +${Number(dist).toFixed(1)}%`}
-                              </span>
-                            )}
-                            {s._bdr && atrAgora[s.ticker]?.atr_cor && (() => {
-                              const ag = atrAgora[s.ticker]
-                              const vAg = ag.atr_cor === "VERDE"
-                              const dAg = vAg ? ag.atr_margem_pct : ag.atr_falta_pct
-                              return (
-                                <span title={`ATR agora, com o preço do momento${ag.preco_usado ? ` (R$ ${formatarPreco(ag.preco_usado)})` : ""} · linha ${formatarPreco(ag.atr_linha)}`}
-                                  style={{ display: "block", fontSize: "10px", marginTop: "4px", paddingTop: "3px", borderTop: "1px solid #1e293b", color: vAg ? "#4ade80" : "#f87171" }}>
-                                  agora {vAg ? "🟢" : "🔴"}{dAg != null ? (vAg ? ` margem ${Number(dAg).toFixed(1)}%` : ` falta +${Number(dAg).toFixed(1)}%`) : ""}
-                                </span>
-                              )
-                            })()}
-                          </div>
-                        )
-                      })() : <span style={{ color: "#475569", fontSize: "12px" }}>—</span>}
-                    </td>
-                    <td style={{
-                      padding: "14px 10px", fontSize: "12px", fontWeight: "600", whiteSpace: "nowrap",
-                      color: descontoMedia == null ? "#475569"
-                        : descontoMedia <= -5 ? "#4ade80"
-                        : descontoMedia < 0 ? "#94a3b8"
-                        : "#f87171"
-                    }}>
-                      {descontoMedia != null ? `${descontoMedia.toFixed(1)}%` : "—"}
-                      {(() => {
-                        const b = scannerB[String(s.ticker || "").toUpperCase()]
-                        if (!b || !b.desconto || b.desconto === "SEM") return null
-                        const falso = b.desconto === "FALSO"
-                        const dica = `Scanner B (teste)\nMédia 6m: ${b.dist_media?.toFixed(1)}% · Mediana 6m: ${b.dist_mediana?.toFixed(1)}%\nPico nos 6 meses: +${b.pico_pct?.toFixed(0)}% acima da mediana`
-                          + (falso ? "\n⚠️ Só parece barato porque um pico de alta inflou a média. Pelo preço normal (mediana) NÃO está descontado."
-                                   : "\n✅ Barato pela média e pela mediana.")
-                          + `\nSugestão do B: ${b.tamanho_b === "NAO" ? "não operar" : b.tamanho_b === "MEIA" ? "meia posição" : "posição cheia"}`
-                        return (
-                          <span title={dica} style={{ display: "block", marginTop: "3px", fontSize: "10px", fontWeight: "700", cursor: "help",
-                            color: falso ? "#fbbf24" : "#4ade80" }}>
-                            {falso ? "⚠️ falso" : "✅ real"}
-                          </span>
-                        )
-                      })()}
-                    </td>
-                    <td style={{
-                      padding: "14px 10px", fontSize: "12px", fontWeight: "600", whiteSpace: "nowrap",
-                      color: distMME == null ? "#475569"
-                        : Math.abs(distMME) <= 2 ? "#4ade80"
-                        : distMME <= 5 ? "#fbbf24"
-                        : "#f87171"
-                    }}>
-                      {distMME != null ? `${distMME >= 0 ? "+" : ""}${distMME.toFixed(1)}%` : "—"}
-                    </td>
-                    <td style={{
-                      padding: "14px 10px", fontSize: "12px", fontWeight: "600", whiteSpace: "nowrap",
-                      color: volMi == null ? "#475569"
-                        : volMi >= 5 ? "#4ade80"
-                        : volMi >= 2 ? "#fbbf24"
-                        : "#f87171"
-                    }}>
-                      {volMi != null ? `${volMi.toFixed(1)}M` : "—"}
-                    </td>
-                    <td style={{ padding: "14px 10px", whiteSpace: "nowrap" }}>
-                      <span style={{ color: "#e2e8f0", fontSize: "12px", fontWeight: "600" }}>
-                        {moeda(s)} {formatarPreco(precoExibir)}
-                      </span>
-                      {variacao !== null && (
-                        <span style={{
-                          display: "block", fontSize: "10px",
-                          color: variacao >= 0 ? "#22c55e" : "#ef4444"
-                        }}>
-                          {variacao >= 0 ? "▲" : "▼"} {Math.abs(variacao)}%
-                        </span>
-                      )}
-                    </td>
-                    <td style={{ padding: "14px 10px", whiteSpace: "nowrap" }}>
-                      <span style={{ color: "#4ade80", fontSize: "12px", fontWeight: "600" }}>
-                        {moeda(s)} {formatarPreco(s.alvo_lucro)}
-                      </span>
-                      <span style={{ color: "#22c55e", fontSize: "10px", display: "block" }}>+{percentualAlvo}%</span>
-                      {(() => {
-                        const b = scannerB[String(s.ticker || "").toUpperCase()]
-                        if (!b) return null
-                        const ab = b.alvo_b, ao = parseFloat(s.alvo_lucro)
-                        if (b.tamanho_b === "NAO")
-                          return <span title="Scanner B (teste): com pico forte, o preço normal (mediana) já está abaixo do preço — sem espaço de lucro até ele." style={{ display: "block", marginTop: "3px", fontSize: "10px", fontWeight: "700", color: "#fbbf24", cursor: "help" }}>B: não opera</span>
-                        if (ab == null || !ao || Math.abs(ab - ao) < 0.01) return null
-                        return <span title={`Scanner B (teste): pico de +${b.pico_pct?.toFixed(0)}% inflou a média. Alvo B = preço normal (mediana). Só observação — use o alvo oficial.`} style={{ display: "block", marginTop: "3px", fontSize: "10px", fontWeight: "700", color: "#38bdf8", cursor: "help" }}>B: {moeda(s)} {formatarPreco(ab)}</span>
-                      })()}
-                    </td>
-                    <td style={{ padding: "14px 10px", whiteSpace: "nowrap" }}>
-                      <span style={{ color: "#f87171", fontSize: "12px", fontWeight: "600" }}>
-                        {moeda(s)} {formatarPreco(s.stop_loss)}
-                      </span>
-                      <span style={{ color: "#ef4444", fontSize: "10px", display: "block" }}>-{percentualStop}%</span>
-                    </td>
-                    <td style={{
-                      padding: "14px 10px", textAlign: "center", fontSize: "12px", fontWeight: "600",
-                      color: s.score_sentimento > 0.3 ? "#4ade80"
-                        : s.score_sentimento < -0.3 ? "#f87171"
-                        : "#94a3b8"
-                    }}>
-                      {s.score_sentimento != null
-                        ? `${s.score_sentimento > 0 ? "+" : ""}${parseFloat(s.score_sentimento).toFixed(2)}`
-                        : "—"}
-                    </td>
-                    <td style={{ padding: "14px 10px", color: "#64748b", fontSize: "11px", whiteSpace: "nowrap" }}>
-                      {formatarData(s.criado_em)}
-                    </td>
-                    <td style={{ padding: "14px 10px" }}>
-                      <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
-                        <button onClick={() => adicionarPortfolio(s)} style={{
-                          padding: "6px 10px", borderRadius: "6px", border: "none", cursor: "pointer",
-                          background: "linear-gradient(135deg,#16a34a,#15803d)",
-                          color: "white", fontSize: "11px", fontWeight: "700",
-                          whiteSpace: "nowrap", boxShadow: "0 2px 4px rgba(22,163,74,0.3)"
-                        }}>
-                          + Portfólio
-                        </button>
-                        <button onClick={() => adicionarFavorito(s)} title="Enviar para Favoritos"
-                          style={{
-                            padding: "6px 9px", borderRadius: "6px", border: "1px solid #334155", cursor: "pointer",
-                            background: favoritados[s.ticker] === "ok" ? "rgba(74,222,128,0.15)"
-                                      : favoritados[s.ticker] === "erro" ? "rgba(248,113,113,0.15)"
-                                      : "#1e293b",
-                            color: favoritados[s.ticker] === "ok" ? "#4ade80"
-                                 : favoritados[s.ticker] === "erro" ? "#f87171"
-                                 : "#f59e0b",
-                            fontSize: "11px", fontWeight: "700", whiteSpace: "nowrap"
-                          }}>
-                          {favoritados[s.ticker] === "ok" ? "✓" : favoritados[s.ticker] === "erro" ? "✕" : "⭐"}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
+                  <button key={m} type="button" onClick={() => setFiltroMercado(m)} style={{
+                    height: "30px", padding: "0 12px", borderRadius: "999px", cursor: "pointer", fontSize: "11.5px",
+                    border: `1px solid ${on ? "rgba(56,189,248,0.6)" : "var(--fi-borda-forte)"}`,
+                    background: on ? "rgba(56,189,248,0.14)" : "transparent", color: on ? "var(--fi-texto)" : "var(--fi-texto-3)",
+                    boxShadow: on ? "0 0 14px rgba(56,189,248,0.25)" : "none" }}>
+                    {m === "TODOS" ? "Todos" : m}
+                  </button>
                 )
               })}
-            </tbody>
-          </table>
+              {ordenacao.campo && (
+                <button type="button" onClick={() => setOrdenacao({ campo: null, direcao: "desc" })}
+                  style={{ height: "30px", padding: "0 12px", borderRadius: "999px", cursor: "pointer", fontSize: "11.5px", border: "1px solid var(--fi-borda-forte)", background: "transparent", color: "#38BDF8" }}>
+                  Limpar ordenação
+                </button>
+              )}
+            </div>
+          </div>
+
+          {loading ? (
+            <div style={{ textAlign: "center", padding: "50px", color: "var(--fi-texto-4)" }}>Carregando sinais…</div>
+          ) : sinaisFiltrados.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "50px", color: "var(--fi-texto-4)", fontSize: "13px" }}>
+              {totalAnalisados > 0 ? `${totalAnalisados} ativo(s) na rodada, nenhum COMPRAR ou MANTER neste filtro.` : "Nenhum sinal disponível. O scanner roda sozinho às 3h."}
+            </div>
+          ) : (
+            <div style={{ overflowX: "auto" }}>
+              <div style={{ minWidth: "1150px", opacity: atualizandoPrecos ? 0.45 : 1, transition: "opacity 0.3s" }}>
+                <div style={{ display: "grid", gridTemplateColumns: grade, gap: "8px", padding: "10px 18px", fontSize: "10.5px", color: "#5F7391", textTransform: "uppercase", letterSpacing: "1.1px" }}>
+                  {colunas.map(c => {
+                    const ativa = ordenacao.campo === c.campo && c.campo
+                    return c.campo ? (
+                      <button key={c.label} type="button" onClick={() => alternarOrdenacao(c.campo)}
+                        style={{ all: "unset", cursor: "pointer", color: ativa ? "#38BDF8" : "#5F7391" }}>
+                        {c.label} <span style={{ fontSize: "9px", opacity: ativa ? 1 : 0.35 }}>{ativa ? (ordenacao.direcao === "asc" ? "▲" : "▼") : "⇅"}</span>
+                      </button>
+                    ) : <span key={c.label || "acao"} />
+                  })}
+                </div>
+                {sinaisFiltrados.map((s, i) => {
+                  const k = chave(s), escolhido = k === selKey
+                  const precoExibir = getPrecoExibir(s), variacao = calcularVariacao(s)
+                  const teto = tetoDe(s), rr = rrDe(s), esticado = esticadoDe(s)
+                  const preco = num(s.preco_atual), alvo = num(s.alvo_lucro), stop = num(s.stop_loss)
+                  const desc = num(s.dist_media_6m), volMi = num(s.volume) != null ? num(s.volume) / 1e6 : null
+                  const b = scannerB[k], sd = saude[k], dv = s.sinal === "COMPRAR" ? dividendosSinais[k] : null
+                  const verde = s.atr_cor === "VERDE", distAtr = verde ? num(s.atr_margem_pct) : num(s.atr_falta_pct)
+                  return (
+                    <div key={k + i} role="button" tabIndex={0} onClick={() => setSel(k)}
+                      onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSel(k) } }}
+                      aria-pressed={escolhido}
+                      style={{ display: "grid", gridTemplateColumns: grade, gap: "8px", alignItems: "center", padding: "12px 18px", cursor: "pointer",
+                        borderTop: "1px solid #101D31", fontSize: "12.5px",
+                        background: escolhido ? "linear-gradient(90deg, rgba(56,189,248,0.14), rgba(56,189,248,0))" : "transparent",
+                        boxShadow: escolhido ? "inset 3px 0 0 #38BDF8" : "none" }}>
+                      <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+                        <span style={{ fontWeight: 600, fontSize: "14px" }}>{s.ticker.replace(".SA", "")}</span>
+                        <span style={{ fontSize: "11px", color: "var(--fi-texto-4)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {s._bdr ? `BDR de ${s._original}` : s.mercado !== "B3" ? `${s.mercado} · ${s.nome}` : s.nome}
+                        </span>
+                        {dv && <span title={`Data-com ${fmtDiaMes(dv.data_com)} · ${dv.tipos.join(" + ")} de R$ ${dv.valor_bruto.toFixed(4)}/ação. No dia ex o preço abre mais baixo: é o provento, não stop.`}
+                          style={{ fontSize: "10px", color: "#FBBF24", marginTop: "2px" }}>data-com {dv.dias_ate === 0 ? "hoje" : dv.dias_ate === 1 ? "amanhã" : fmtDiaMes(dv.data_com)}</span>}
+                        {s.mercado !== "B3" && s.atr_data_ref && fechamentoEsperado(s.criado_em) && s.atr_data_ref < fechamentoEsperado(s.criado_em) && (
+                          <span style={{ fontSize: "10px", color: "#FBBF24" }}>fech. {fmtDiaMes(s.atr_data_ref)} (atrasado)</span>
+                        )}
+                      </div>
+                      <span><span style={s.sinal === "COMPRAR" ? PILL_OK : PILL_WARN}>{s.sinal}</span></span>
+                      <span style={{ display: "flex", flexDirection: "column" }}>
+                        <span style={{ color: "var(--fi-texto-2)" }}>{formatarPreco(precoExibir)}</span>
+                        {variacao !== null && <span style={{ fontSize: "10px", color: variacao >= 0 ? "#22D3A0" : "#FB6474" }}>{variacao >= 0 ? "▲" : "▼"} {Math.abs(variacao)}%</span>}
+                      </span>
+                      <span style={{ color: "#38BDF8", fontWeight: 600 }}>{formatarPreco(teto)}</span>
+                      <span style={{ display: "flex", flexDirection: "column" }}>
+                        <span style={{ color: "#22D3A0" }}>{alvo && preco ? pctTxt((alvo / preco - 1) * 100) : "—"}</span>
+                        {b?.tamanho_b === "NAO" ? <span style={{ fontSize: "10px", color: "#FBBF24" }}>B: não opera</span>
+                          : b?.alvo_b != null && alvo && Math.abs(b.alvo_b - alvo) >= 0.01 ? <span style={{ fontSize: "10px", color: "#38BDF8" }}>B: {formatarPreco(b.alvo_b)}</span> : null}
+                      </span>
+                      <span style={{ color: "#FB6474" }}>{stop && preco ? pctTxt((stop / preco - 1) * 100) : "—"}</span>
+                      <span style={{ color: rr != null && rr < 1.5 ? "#FBBF24" : "var(--fi-texto-2)" }}>{rr != null ? `${rr.toFixed(2).replace(".", ",")}x` : "—"}</span>
+                      <span style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                        {s.atr_cor ? (
+                          <>
+                            <span title={`ATR (21,3) no dia do sinal · linha ${formatarPreco(s.atr_linha)}`} style={verde ? PILL_OK : PILL_BAD}>
+                              {verde ? "alta" : "queda"}{distAtr != null ? ` · ${verde ? "" : "falta "}${distAtr.toFixed(1).replace(".", ",")}%` : ""}
+                            </span>
+                            <span style={{ height: "3px", width: "90px", borderRadius: "2px", background: "#132238", overflow: "hidden" }}>
+                              <span style={{ display: "block", height: "3px", width: `${Math.min(100, (distAtr || 0) / 8 * 100)}%`, background: verde ? "#22D3A0" : "#FB6474", boxShadow: `0 0 6px ${verde ? "#22D3A0" : "#FB6474"}` }} />
+                            </span>
+                            {s._bdr && atrAgora[s.ticker]?.atr_cor && (
+                              <span style={{ fontSize: "10px", color: atrAgora[s.ticker].atr_cor === "VERDE" ? "#22D3A0" : "#FB6474" }}>agora {atrAgora[s.ticker].atr_cor === "VERDE" ? "alta" : "queda"}</span>
+                            )}
+                          </>
+                        ) : <span style={{ color: "#5F7391" }}>—</span>}
+                      </span>
+                      <span style={{ display: "flex", flexDirection: "column" }}>
+                        <span style={{ fontWeight: 600, color: desc == null ? "#5F7391" : desc <= -5 ? "#22D3A0" : desc < 0 ? "var(--fi-texto-3)" : "#FB6474" }}>{desc != null ? pctTxt(desc) : "—"}</span>
+                        {b && b.desconto && b.desconto !== "SEM" && <span style={{ fontSize: "10px", fontWeight: 600, color: b.desconto === "FALSO" ? "#FBBF24" : "#22D3A0" }}>{b.desconto === "FALSO" ? "falso" : "real"}</span>}
+                      </span>
+                      <span style={{ color: esticado == null ? "#5F7391" : Math.abs(esticado) <= 2 ? "#22D3A0" : esticado <= 5 ? "#FBBF24" : "#FB6474" }}>{pctTxt(esticado)}</span>
+                      <span style={{ color: volMi == null ? "#5F7391" : volMi >= 5 ? "#22D3A0" : volMi >= 2 ? "#FBBF24" : "#FB6474" }}>{volMi != null ? `${volMi.toFixed(1).replace(".", ",")}M` : "—"}</span>
+                      <span title={sd?.tooltip} style={{ fontSize: "11px", fontWeight: 600, color: !sd ? "#5F7391" : sd.selo === "🟢" ? "#22D3A0" : sd.selo === "🟡" ? "#FBBF24" : sd.selo === "🔴" ? "#FB6474" : "#5F7391" }}>
+                        {!sd ? "—" : sd.selo === "🟢" ? "OK" : sd.selo === "🟡" ? "Atenção" : sd.selo === "🔴" ? "Alerta" : "s/ dados"}
+                        {insiders[k]?.sinal && <span style={{ display: "block", fontSize: "10px", color: insiders[k].sinal === "compra" ? "#22D3A0" : insiders[k].sinal === "venda" ? "#FB6474" : "#FBBF24" }}>👔 {insiders[k].sinal}</span>}
+                      </span>
+                      <button type="button" title="Enviar para Favoritos" aria-label={`Enviar ${s.ticker} para Favoritos`}
+                        onClick={e => { e.stopPropagation(); adicionarFavorito(s) }}
+                        style={{ width: "32px", height: "32px", borderRadius: "999px", border: "1px solid var(--fi-borda-forte)", cursor: "pointer",
+                          background: favoritados[s.ticker] === "ok" ? "rgba(34,211,160,0.15)" : favoritados[s.ticker] === "erro" ? "rgba(251,100,116,0.15)" : "transparent",
+                          color: favoritados[s.ticker] === "ok" ? "#22D3A0" : favoritados[s.ticker] === "erro" ? "#FB6474" : "#FBBF24", fontSize: "12px" }}>
+                        {favoritados[s.ticker] === "ok" ? "✓" : favoritados[s.ticker] === "erro" ? "✕" : "⭐"}
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+          <div style={{ padding: "10px 18px", fontSize: "10.5px", color: "#5F7391", borderTop: "1px solid var(--fi-borda)" }}>
+            Clique num ativo para ver o gráfico e o plano · clique no cabeçalho para ordenar · teto = (alvo + 1,5 × stop) ÷ 2,5
+          </div>
+        </section>
+
+        <div style={{ flex: "1 1 400px", minWidth: 0 }}>
+          <PainelAnalise />
         </div>
-      )}
+      </div>
     </div>
   )
 }
