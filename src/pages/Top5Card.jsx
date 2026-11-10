@@ -14,17 +14,39 @@ const horaSP = (s) => {
   return isNaN(d) ? "" : d.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" })
 }
 
+// 10/11/2026: visual "Future Intelligence" — mesmos dados, cards lado a lado com o teto em destaque.
 function corVeredito(v = "") {
-  if (v.includes("🟢")) return { cor: "#4ade80", bg: "rgba(74,222,128,0.12)", borda: "rgba(74,222,128,0.35)" }
-  if (v.includes("🟡")) return { cor: "#fbbf24", bg: "rgba(251,191,36,0.12)", borda: "rgba(251,191,36,0.35)" }
-  if (v.includes("👀")) return { cor: "#38bdf8", bg: "rgba(56,189,248,0.08)", borda: "rgba(56,189,248,0.30)" }
-  return { cor: "#f87171", bg: "rgba(248,113,113,0.10)", borda: "rgba(248,113,113,0.30)" }
+  if (v.includes("🟢")) return { cor: "#22D3A0", bg: "rgba(34,211,160,0.10)", borda: "rgba(34,211,160,0.35)", txt: "Compra pelo método" }
+  if (v.includes("🟡")) return { cor: "#FBBF24", bg: "rgba(251,191,36,0.10)", borda: "rgba(251,191,36,0.35)", txt: "Só se…" }
+  if (v.includes("👀")) return { cor: "#38BDF8", bg: "rgba(56,189,248,0.10)", borda: "rgba(56,189,248,0.35)", txt: "Observar" }
+  return { cor: "#FB6474", bg: "rgba(251,100,116,0.10)", borda: "rgba(251,100,116,0.35)", txt: "Não comprar" }
 }
 
-function Chip({ children, cor = "#94a3b8" }) {
+function Chip({ children, cor = "#9DB0CB", fundo = "#132238", borda = "#1E3352" }) {
   return (
-    <span style={{ padding: "2px 8px", borderRadius: "10px", fontSize: "11px", fontWeight: "600",
-      background: "rgba(148,163,184,0.12)", color: cor, whiteSpace: "nowrap" }}>{children}</span>
+    <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", padding: "3px 9px", borderRadius: "999px",
+      fontSize: "11px", fontWeight: 600, background: fundo, color: cor, border: `1px solid ${borda}`, whiteSpace: "nowrap" }}>{children}</span>
+  )
+}
+
+const pct = (a, b) => (a && b) ? `${(a / b - 1) * 100 > 0 ? "+" : ""}${((a / b - 1) * 100).toFixed(1).replace(".", ",")}%` : "—"
+
+// Anel de risco/retorno (cheio = 3x). Ciano se ≥ 1,5x, amarelo abaixo.
+function AnelRR({ rr }) {
+  const r = 23, C = 2 * Math.PI * r
+  const f = rr ? Math.max(0.03, Math.min(1, rr / 3)) : 0.03
+  const cor = rr >= 1.5 ? "#38BDF8" : "#FBBF24"
+  return (
+    <svg width="58" height="58" viewBox="0 0 58 58" role="img" aria-label={`Risco/retorno ${rr ? rr.toFixed(1) : "—"}`}>
+      <circle cx="29" cy="29" r={r} fill="none" stroke="#132238" strokeWidth="5" />
+      <circle cx="29" cy="29" r={r} fill="none" stroke={cor} strokeWidth="5" strokeLinecap="round"
+        strokeDasharray={`${(C * f).toFixed(1)} ${C.toFixed(1)}`} transform="rotate(-90 29 29)"
+        style={{ filter: `drop-shadow(0 0 4px ${cor}88)` }} />
+      <text x="29" y="31" textAnchor="middle" fill="#E6EDF7" fontFamily="Space Grotesk, Inter, sans-serif" fontSize="12" fontWeight="700">
+        {rr ? rr.toFixed(1).replace(".", ",") : "—"}
+      </text>
+      <text x="29" y="42" textAnchor="middle" fill="#7E93B2" fontFamily="Inter, sans-serif" fontSize="7">R/R</text>
+    </svg>
   )
 }
 
@@ -35,6 +57,7 @@ export default function Top5Card() {
     try { return localStorage.getItem("top5_aberto") !== "0" } catch { return true }
   })
   const [verFora, setVerFora] = useState(false)
+  const [abertoMotivo, setAbertoMotivo] = useState(null)   // card com o motivo inteiro aberto
   const [gerando, setGerando] = useState(false)
   const [avisoGerar, setAvisoGerar] = useState(null)   // mensagem depois do "Gerar agora"
   const pollRef = useRef(null)
@@ -95,114 +118,142 @@ export default function Top5Card() {
   const lista = t5?.top5 || []
 
   return (
-    <div style={{ background: "#0d1829", border: "1px solid rgba(56,189,248,0.35)", borderRadius: "12px",
-      marginBottom: "20px", overflow: "hidden" }}>
+    <section aria-label="Top 5 do dia" className="fi-painel" style={{ marginBottom: "20px", overflow: "hidden" }}>
       {/* Cabeçalho */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px",
-        padding: "14px 18px", background: "rgba(56,189,248,0.08)", flexWrap: "wrap" }}>
-        <div onClick={alternar} style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
-          <span style={{ color: "#38bdf8", fontWeight: "800", fontSize: "16px" }}>🏆 TOP 5 DO DIA</span>
-          {dados?.data_ref && <span style={{ color: "#94a3b8", fontSize: "12px" }}>{dia(dados.data_ref)}</span>}
+        padding: "16px 18px", flexWrap: "wrap", borderBottom: aberto ? "1px solid var(--fi-borda)" : "none" }}>
+        <button type="button" onClick={alternar} style={{ all: "unset", cursor: "pointer", display: "flex", alignItems: "baseline", gap: "12px", flexWrap: "wrap" }}>
+          <span className="fi-titulo" style={{ color: "var(--fi-texto)", fontWeight: 600, fontSize: "18px" }}>Top 5 do dia</span>
+          {dados?.data_ref && <span style={{ color: "var(--fi-texto-4)", fontSize: "12px" }}>{dia(dados.data_ref)} · ordem limitada até o teto</span>}
           {ib?.regime && (
-            <Chip cor={ib.regime === "QUEDA FORTE" ? "#f87171" : ib.regime === "CORREÇÃO" ? "#fbbf24" : "#4ade80"}>
-              Ibov {ib.abaixo_max_pct}% da máx. 12m · {ib.regime}
+            <Chip cor={ib.regime === "QUEDA FORTE" ? "#FB6474" : ib.regime === "CORREÇÃO" ? "#FBBF24" : "#22D3A0"}
+                  fundo={ib.regime === "QUEDA FORTE" ? "rgba(251,100,116,0.10)" : ib.regime === "CORREÇÃO" ? "rgba(251,191,36,0.10)" : "rgba(34,211,160,0.10)"}
+                  borda="transparent">
+              Ibov {String(ib.abaixo_max_pct).replace(".", ",")}% da máx. 12m · {ib.regime}
             </Chip>
           )}
-          <span style={{ color: "#64748b", fontSize: "12px" }}>{aberto ? "▲ recolher" : "▼ abrir"}</span>
-        </div>
+          <span style={{ color: "var(--fi-texto-4)", fontSize: "12px" }}>{aberto ? "▲ recolher" : "▼ abrir"}</span>
+        </button>
         <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
           {dados?.dias?.length > 1 && (
-            <select value={dados.data_ref || ""} onChange={e => carregar(e.target.value)}
-              style={{ background: "#0a1520", color: "#cbd5e1", border: "1px solid #1e293b", borderRadius: "6px",
-                padding: "5px 8px", fontSize: "12px" }}>
+            <select aria-label="Dia do top 5" value={dados.data_ref || ""} onChange={e => carregar(e.target.value)}
+              style={{ background: "#0A1424", color: "var(--fi-texto-2)", border: "1px solid var(--fi-borda-forte)", borderRadius: "999px",
+                padding: "6px 12px", fontSize: "12px" }}>
               {dados.dias.map(d => <option key={d} value={d}>{dia(d)}</option>)}
             </select>
           )}
-          <button onClick={gerarAgora} disabled={gerando} title="Gera a análise de novo com os sinais da última rodada (~1 min)"
-            style={{ padding: "6px 12px", borderRadius: "6px", border: "none", cursor: gerando ? "default" : "pointer",
-              background: gerando ? "#334155" : "#1e293b", color: "#38bdf8", fontSize: "12px", fontWeight: "600" }}>
-            {gerando ? "⏳ gerando… (aguarde)" : "🔄 Gerar agora"}
+          <button type="button" onClick={gerarAgora} disabled={gerando} title="Gera a análise de novo com os sinais da última rodada (~1 min)"
+            style={{ height: "32px", padding: "0 14px", borderRadius: "999px", border: "1px solid var(--fi-borda-forte)",
+              cursor: gerando ? "default" : "pointer", background: gerando ? "#132238" : "rgba(56,189,248,0.08)",
+              color: "var(--fi-texto)", fontSize: "12px" }}>
+            {gerando ? "Gerando… (aguarde)" : "Gerar de novo"}
           </button>
         </div>
       </div>
 
       {avisoGerar && (
-        <div style={{ padding: "8px 18px", fontSize: "12px", color: avisoGerar.startsWith("✅") ? "#4ade80" : "#fbbf24",
+        <div style={{ padding: "8px 18px", fontSize: "12px", color: avisoGerar.startsWith("✅") ? "#22D3A0" : "#FBBF24",
           background: "rgba(56,189,248,0.04)" }}>{avisoGerar}</div>
       )}
       {aberto && (
-        <div style={{ padding: "14px 18px" }}>
+        <div style={{ padding: "16px 18px 18px" }}>
           {carregando ? (
-            <div style={{ color: "#64748b", fontSize: "13px" }}>Carregando o top 5…</div>
+            <div style={{ color: "var(--fi-texto-4)", fontSize: "13px" }}>Carregando o top 5…</div>
           ) : !t5 ? (
-            <div style={{ color: "#64748b", fontSize: "13px" }}>
-              Ainda não há top 5 gerado. Ele sai sozinho de segunda a sexta às 6h45, ou clique em "🔄 Gerar agora".
+            <div style={{ color: "var(--fi-texto-4)", fontSize: "13px" }}>
+              Ainda não há top 5 gerado. Ele sai sozinho de segunda a sexta às 6h45, ou clique em "Gerar de novo".
             </div>
           ) : (
             <>
-              {t5.contexto && <p style={{ color: "#cbd5e1", fontSize: "13px", margin: "0 0 12px 0", lineHeight: 1.5 }}>{t5.contexto}</p>}
+              {t5.contexto && <p style={{ color: "var(--fi-texto-2)", fontSize: "13px", margin: "0 0 14px 0", lineHeight: 1.6 }}>{t5.contexto}</p>}
 
               {lista.length === 0 && (
-                <div style={{ color: "#94a3b8", fontSize: "13px", marginBottom: "10px" }}>
+                <div style={{ color: "var(--fi-texto-3)", fontSize: "13px", marginBottom: "10px" }}>
                   {t5.aviso || "O scanner não deu nenhum COMPRAR na B3 nesta rodada."}
                 </div>
               )}
 
-              <div style={{ display: "grid", gap: "10px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "12px" }}>
                 {lista.map((t, i) => {
                   const c = corVeredito(t.veredito)
-                  const veredito = (t.veredito || "").replace(" ...", "").replace("...", "")
+                  const rr = (t.entrada && t.alvo && t.stop && t.entrada > t.stop) ? (t.alvo - t.entrada) / (t.entrada - t.stop) : null
+                  const abertoM = abertoMotivo === i
                   return (
-                    <div key={t.ticker + i} style={{ border: `1px solid ${c.borda}`, background: c.bg, borderRadius: "10px", padding: "12px 14px" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
-                        <div style={{ display: "flex", gap: "10px", alignItems: "baseline", flexWrap: "wrap" }}>
-                          <span style={{ color: "#64748b", fontWeight: "800" }}>{i + 1}.</span>
-                          <span style={{ color: "#38bdf8", fontWeight: "800", fontSize: "15px" }}>{(t.ticker || "").replace(".SA", "")}</span>
-                          <span style={{ color: "#e2e8f0", fontSize: "13px" }}>{t.nome}</span>
-                          {t.setor && <span style={{ color: "#64748b", fontSize: "12px" }}>· {t.setor}</span>}
+                    <article key={t.ticker + i} style={{ display: "flex", flexDirection: "column", padding: "16px", borderRadius: "14px",
+                      background: i === 0 ? "linear-gradient(180deg, rgba(56,189,248,0.10), rgba(8,15,28,0.92))" : "rgba(8,15,28,0.92)",
+                      border: `1px solid ${i === 0 ? "rgba(56,189,248,0.55)" : "var(--fi-borda)"}`,
+                      boxShadow: i === 0 ? "0 0 26px rgba(56,189,248,0.18)" : "none" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px" }}>
+                        <span className="fi-titulo" style={{ fontSize: "12px", color: "#5F7391" }}>{String(i + 1).padStart(2, "0")}</span>
+                        <Chip cor={c.cor} fundo={c.bg} borda={c.borda}>{c.txt}</Chip>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "10px", gap: "8px" }}>
+                        <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+                          <span className="fi-titulo" style={{ fontSize: "22px", fontWeight: 700 }}>{(t.ticker || "").replace(".SA", "")}</span>
+                          <span style={{ fontSize: "11px", color: "var(--fi-texto-3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {t.setor || t.nome}
+                          </span>
                         </div>
-                        <span style={{ color: c.cor, fontWeight: "800", fontSize: "12px" }}>{veredito}</span>
+                        <AnelRR rr={rr} />
                       </div>
-                      {t.condicao && <div style={{ color: c.cor, fontSize: "12px", marginTop: "4px" }}>{t.condicao}</div>}
-                      <div style={{ display: "flex", gap: "14px", flexWrap: "wrap", marginTop: "8px", fontSize: "12px", color: "#cbd5e1" }}>
-                        <span>Entrada <b>{brl(t.entrada)}</b></span>
-                        <span>Teto <b>{brl(t.teto_compra)}</b></span>
-                        <span style={{ color: "#4ade80" }}>Alvo <b>{brl(t.alvo)}</b></span>
-                        <span style={{ color: "#f87171" }}>Stop <b>{brl(t.stop)}</b></span>
-                        <span>Tamanho <b>{t.tamanho_rs ? brl(t.tamanho_rs) : "—"}</b></span>
+                      <div style={{ marginTop: "10px" }}>
+                        <div style={{ fontSize: "10px", color: "var(--fi-texto-4)", textTransform: "uppercase", letterSpacing: "1.2px" }}>Teto de compra</div>
+                        <div className="fi-titulo" style={{ fontSize: "26px", fontWeight: 600, color: "#38BDF8", textShadow: "0 0 18px rgba(56,189,248,0.45)" }}>
+                          {brl(t.teto_compra)}
+                        </div>
+                        <div style={{ fontSize: "11px", color: "var(--fi-texto-4)" }}>entrada de referência {brl(t.entrada)}</div>
                       </div>
-                      <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginTop: "8px" }}>
-                        <Chip cor={t.atr === "VERDE" ? "#4ade80" : t.atr === "VERMELHO" ? "#f87171" : "#94a3b8"}>
-                          ATR {t.atr === "VERDE" ? "🟢" : t.atr === "VERMELHO" ? "🔴" : "—"}
+                      <div style={{ display: "flex", gap: "14px", marginTop: "8px", fontSize: "12px", color: "var(--fi-texto-3)", flexWrap: "wrap" }}>
+                        <span>Alvo <b style={{ color: "#22D3A0", fontWeight: 600 }}>{brl(t.alvo)} {pct(t.alvo, t.entrada)}</b></span>
+                        <span>Stop <b style={{ color: "#FB6474", fontWeight: 600 }}>{brl(t.stop)} {pct(t.stop, t.entrada)}</b></span>
+                      </div>
+                      <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginTop: "10px" }}>
+                        <Chip cor={t.atr === "VERDE" ? "#22D3A0" : t.atr === "VERMELHO" ? "#FB6474" : "#9DB0CB"}
+                              fundo={t.atr === "VERDE" ? "rgba(34,211,160,0.10)" : t.atr === "VERMELHO" ? "rgba(251,100,116,0.10)" : "#132238"}
+                              borda="transparent">
+                          ATR {t.atr === "VERDE" ? "alta" : t.atr === "VERMELHO" ? "queda" : "—"}
                         </Chip>
                         {t.saude && <Chip>Saúde {t.saude}</Chip>}
-                        {t.insiders && <Chip cor={t.insiders === "compra" ? "#4ade80" : t.insiders === "venda" ? "#f87171" : "#fbbf24"}>👔 {t.insiders}</Chip>}
+                        {t.insiders && <Chip cor={t.insiders === "compra" ? "#22D3A0" : t.insiders === "venda" ? "#FB6474" : "#FBBF24"}>👔 {t.insiders}</Chip>}
                         {t.selo_checklist && <Chip>{t.selo_checklist}</Chip>}
+                        <Chip cor="#E6EDF7">{t.tamanho_rs ? brl(t.tamanho_rs) : "R$ 0"}</Chip>
                       </div>
-                      {t.motivo && <p style={{ color: "#94a3b8", fontSize: "12px", margin: "8px 0 0 0", lineHeight: 1.5 }}>{t.motivo}</p>}
-                    </div>
+                      {t.condicao && <div style={{ color: c.cor, fontSize: "12px", marginTop: "10px", lineHeight: 1.45 }}>{t.condicao}</div>}
+                      {t.motivo && (
+                        <>
+                          <p style={{ color: "var(--fi-texto-3)", fontSize: "12px", margin: "8px 0 0 0", lineHeight: 1.5,
+                            ...(abertoM ? {} : { display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }) }}>
+                            {t.motivo}
+                          </p>
+                          <button type="button" onClick={() => setAbertoMotivo(abertoM ? null : i)}
+                            style={{ all: "unset", cursor: "pointer", color: "#38BDF8", fontSize: "11px", marginTop: "6px" }}>
+                            {abertoM ? "ver menos" : "ver motivo completo"}
+                          </button>
+                        </>
+                      )}
+                    </article>
                   )
                 })}
               </div>
 
               {t5.fora?.length > 0 && (
-                <div style={{ marginTop: "12px" }}>
-                  <span onClick={() => setVerFora(!verFora)} style={{ cursor: "pointer", color: "#fbbf24", fontSize: "12px", fontWeight: "600" }}>
-                    ⚠️ {t5.fora.length} ficaram de fora {verFora ? "▲" : "▼"}
-                  </span>
+                <div style={{ marginTop: "14px" }}>
+                  <button type="button" onClick={() => setVerFora(!verFora)} style={{ all: "unset", cursor: "pointer", color: "#FBBF24", fontSize: "12px", fontWeight: 600 }}>
+                    {t5.fora.length} ficaram de fora {verFora ? "▲" : "▼"}
+                  </button>
                   {verFora && (
-                    <ul style={{ margin: "6px 0 0 0", paddingLeft: "18px", color: "#94a3b8", fontSize: "12px", lineHeight: 1.6 }}>
-                      {t5.fora.map((f, i) => <li key={i}><b style={{ color: "#cbd5e1" }}>{(f.ticker || "").replace(".SA", "")}</b>: {f.motivo}</li>)}
+                    <ul style={{ margin: "6px 0 0 0", paddingLeft: "18px", color: "var(--fi-texto-3)", fontSize: "12px", lineHeight: 1.6 }}>
+                      {t5.fora.map((f, i) => <li key={i}><b style={{ color: "var(--fi-texto-2)" }}>{(f.ticker || "").replace(".SA", "")}</b>: {f.motivo}</li>)}
                     </ul>
                   )}
                 </div>
               )}
 
               {t5.aviso && lista.length > 0 && (
-                <div style={{ marginTop: "12px", padding: "10px 12px", borderRadius: "8px", background: "rgba(56,189,248,0.06)",
-                  color: "#cbd5e1", fontSize: "12px", lineHeight: 1.5 }}>ℹ️ {t5.aviso}</div>
+                <div style={{ marginTop: "12px", padding: "10px 14px", borderRadius: "12px", background: "rgba(56,189,248,0.06)",
+                  border: "1px solid rgba(56,189,248,0.15)", color: "var(--fi-texto-2)", fontSize: "12px", lineHeight: 1.5 }}>{t5.aviso}</div>
               )}
-              <div style={{ marginTop: "10px", color: "#475569", fontSize: "11px" }}>
+              <div style={{ marginTop: "10px", color: "#5F7391", fontSize: "11px" }}>
                 Gerado {dados.gerado_em ? `em ${horaSP(dados.gerado_em)}` : ""} a partir de {t5.total_compra_b3 ?? "—"} COMPRAR da B3{t5.total_candidatos > t5.total_compra_b3 ? ` (+ BDRs e MANTER para completar o ranking)` : ""}.
                 Decisão é sua: ordem limitada até o teto e conferir o gráfico antes.
               </div>
@@ -210,6 +261,6 @@ export default function Top5Card() {
           )}
         </div>
       )}
-    </div>
+    </section>
   )
 }
