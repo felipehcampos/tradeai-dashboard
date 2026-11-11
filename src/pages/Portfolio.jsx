@@ -780,10 +780,11 @@ export default function Portfolio() {
     const C = 2 * Math.PI * 50, corAnel = info.emLucro ? "#22D3A0" : "#FB6474"
     const dm = (x) => x ? x.split("-").reverse().slice(0, 2).join("/") : ""
     const titulo = { margin:0, fontSize:"13px", fontWeight:600, color:"var(--fi-texto-2)" }
-    const celula = (rot, val, cor) => (
+    const celula = (rot, val, cor, sub) => (
       <div style={{ padding:"10px 12px", borderRadius:"12px", background:"#0A1424", border:"1px solid var(--fi-borda)" }}>
         <div style={{ fontSize:"10.5px", color:"var(--fi-texto-4)" }}>{rot}</div>
         <div style={{ fontSize:"14px", fontWeight:600, color: cor || "var(--fi-texto)", marginTop:"2px" }}>{val}</div>
+        {sub && <div style={{ fontSize:"10.5px", color:"var(--fi-texto-4)", marginTop:"2px", whiteSpace:"nowrap" }}>{sub}</div>}
       </div>
     )
     return (
@@ -819,8 +820,8 @@ export default function Portfolio() {
             {celula("Entrada", `${moeda(p.mercado)} ${fmt(p.preco_entrada)}`)}
             {celula("Agora", `${moeda(p.mercado)} ${fmt(p.preco_atual)}`)}
             {celula("Quantidade", `${p.quantidade} · ${moeda(p.mercado)} ${fmt(p.quantidade * p.preco_entrada)}`)}
-            {celula("Alvo", info.alvo ? `${fmt(info.alvo)} (${info.paraAlvo >= 0 ? "+" : ""}${info.paraAlvo.toFixed(1)}%)` : "—", "#22D3A0")}
-            {celula("Stop", info.stop ? `${fmt(info.stop)} (${info.paraStop.toFixed(1)}%)` : "—", "#FB6474")}
+            {celula("Alvo", info.alvo ? fmt(info.alvo) : "—", "#22D3A0", info.alvo ? `faltam ${info.paraAlvo.toFixed(1).replace(".", ",")}%` : null)}
+            {celula("Stop", info.stop ? fmt(info.stop) : "—", "#FB6474", info.stop ? `a ${Math.abs(info.paraStop).toFixed(1).replace(".", ",")}% daqui` : null)}
             {celula("MFE / MAE", `${p.mfe_pct != null ? `+${p.mfe_pct.toFixed(1)}` : "—"} / ${p.mae_pct != null ? p.mae_pct.toFixed(1) : "—"}%`)}
           </div>
           {estaEditando && (
