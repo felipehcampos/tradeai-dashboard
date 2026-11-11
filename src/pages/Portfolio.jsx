@@ -104,6 +104,7 @@ export default function Portfolio() {
   const [atrAberto, setAtrAberto] = useState(null)   // 09/11: posição com a lista de dias do ATR aberta
   const [selPos, setSelPos] = useState(null)          // 10/11: posição escolhida (painel da direita)
   const [grafPos, setGrafPos] = useState({ ticker: null, velas: [], carregando: false, erro: null })
+  const [grafAmp, setGrafAmp] = useState(null)   // 11/11: gráfico ampliado {ticker, pregoes, velas, carregando, erro}
 
   const carregarAtr = async (lista) => {
     try {
@@ -651,6 +652,20 @@ export default function Portfolio() {
     return () => { vivo = false }
   }, [posSelecionada ? posSelecionada.ticker : null])
 
+  // 11/11/2026 — gráfico ampliado (tela cheia), com escolha de período
+  const abrirGrafAmp = (t, pregoes) => {
+    setGrafAmp({ ticker: t, pregoes, velas: [], carregando: true, erro: null })
+    api.get(`${API}/mercado/grafico/${t}`, { params: { pregoes } })
+      .then(r => setGrafAmp(g => g && g.ticker === t && g.pregoes === pregoes ? { ...g, velas: r.data.sucesso ? (r.data.velas || []) : [], carregando: false, erro: r.data.sucesso ? null : (r.data.erro || "erro") } : g))
+      .catch(e => setGrafAmp(g => g && g.ticker === t && g.pregoes === pregoes ? { ...g, carregando: false, erro: e?.message || "sem resposta" } : g))
+  }
+  useEffect(() => {
+    if (!grafAmp) return
+    const fechar = (e) => { if (e.key === "Escape") setGrafAmp(null) }
+    window.addEventListener("keydown", fechar)
+    return () => window.removeEventListener("keydown", fechar)
+  }, [grafAmp ? true : false])
+
   const infoPosicao = (p) => {
     const pl = (p.preco_atual - p.preco_entrada) * p.quantidade
     const plPct = (p.preco_atual - p.preco_entrada) / p.preco_entrada * 100
@@ -730,12 +745,12 @@ export default function Portfolio() {
     )
   }
 
-  const GraficoVelas = ({ p }) => {
+  const GraficoVelas = ({ p, dados = grafPos, H = 240, eixos = false }) => {
     const t = p.ticker.toUpperCase().trim()
-    const caixa = (txt) => <div style={{ height:"240px", display:"flex", alignItems:"center", justifyContent:"center", color:"var(--fi-texto-4)", fontSize:"12px" }}>{txt}</div>
-    if (grafPos.carregando || grafPos.ticker !== t) return caixa("Carregando gráfico…")
-    if (grafPos.erro || !grafPos.velas.length) return caixa(`Gráfico indisponível agora (${grafPos.erro || "sem dados"}).`)
-    const v = grafPos.velas, H = 240
+    const caixa = (txt) => <div style={{ height:`${H}px`, display:"flex", alignItems:"center", justifyContent:"center", color:"var(--fi-texto-4)", fontSize:"12px" }}>{txt}</div>
+    if (dados.carregando || dados.ticker !== t) return caixa("Carregando gráfico…")
+    if (dados.erro || !dados.velas.length) return caixa(`Gráfico indisponível agora (${dados.erro || "sem dados"}).`)
+    const v = dados.velas
     const refs = [p.preco_entrada, p.alvo_lucro, p.stop_loss].filter(x => x)
     const vals = v.flatMap(x => [x.h, x.l]).concat(refs)
     const lo = Math.min(...vals) * 0.995, hi = Math.max(...vals) * 1.005
@@ -756,8 +771,8 @@ export default function Portfolio() {
           return (
             <div key={i} title={`${x.data.split("-").reverse().join("/")} · fech ${fmt(x.c)} · máx ${fmt(x.h)} · mín ${fmt(x.l)}${x.atr ? ` · ATR ${fmt(x.atr)}` : ""}`}>
               <div style={{ position:"absolute", left:`calc(${left}% - 0.5px)`, top:`${y(x.h)}px`, height:`${Math.max(1, y(x.l) - y(x.h))}px`, width:"1px", background:cor, opacity:0.8 }} />
-              <div style={{ position:"absolute", left:`calc(${left}% - ${Math.max(1.5, Math.min(3.5, cw * 3))}px)`, top:`${bt}px`, height:`${Math.max(1.5, bb - bt)}px`,
-                width:`${Math.max(3, Math.min(7, cw * 6))}px`, borderRadius:"1.5px", background:cor }} />
+              <div style={{ position:"absolute", left: eixos ? `${left - cw * 0.32}%` : `calc(${left}% - ${Math.max(1.5, Math.min(3.5, cw * 3))}px)`, top:`${bt}px`, height:`${Math.max(1.5, bb - bt)}px`,
+                width: eixos ? `${cw * 0.64}%` : `${Math.max(3, Math.min(7, cw * 6))}px`, borderRadius:"1.5px", background:cor }} />
               {x.atr != null && x.atr > lo && x.atr < hi && (
                 <div style={{ position:"absolute", left:`calc(${left}% - 2px)`, top:`${y(x.atr) - 2}px`, width:"4px", height:"4px", borderRadius:"50%",
                   background: x.atr_cor === "VERDE" ? "#A3E635" : "#FB6474", opacity:0.85 }} />
@@ -768,6 +783,15 @@ export default function Portfolio() {
         {linha(p.alvo_lucro, "#22D3A0", "alvo")}
         {linha(p.preco_entrada, "#FBBF24", "entrada")}
         {linha(p.stop_loss, "#FB6474", "stop", true)}
+        {eixos && [0, 0.2, 0.4, 0.6, 0.8, 1].map(f => {
+          const q = hi - f * (hi - lo)
+          return <span key={"y" + f} style={{ position:"absolute", left:"6px", top:`${f * H}px`, transform: f === 0 ? "none" : f === 1 ? "translateY(-100%)" : "translateY(-50%)", fontSize:"10.5px", color:"var(--fi-texto-4)", background:"rgba(4,7,13,0.6)", padding:"0 4px", borderRadius:"4px", pointerEvents:"none" }}>{fmt(q)}</span>
+        })}
+        {eixos && v.map((x, i) => {
+          const passo = Math.max(1, Math.round(v.length / 8))
+          if (i % passo !== 0) return null
+          return <span key={"x" + i} style={{ position:"absolute", left:`${(i + 0.5) * cw}%`, bottom:"4px", transform:"translateX(-50%)", fontSize:"10.5px", color:"var(--fi-texto-4)", pointerEvents:"none" }}>{x.data.split("-").reverse().slice(0, 2).join("/")}</span>
+        })}
       </div>
     )
   }
@@ -856,7 +880,11 @@ export default function Portfolio() {
 
         <section className="fi-painel" style={{ padding:"18px" }}>
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:"10px", gap:"8px", flexWrap:"wrap" }}>
-            <h2 style={titulo}>Gráfico · últimos 90 pregões</h2>
+            <div style={{ display:"flex", alignItems:"center", gap:"10px" }}>
+              <h2 style={titulo}>Gráfico · últimos 90 pregões</h2>
+              <button type="button" onClick={() => abrirGrafAmp(p.ticker.toUpperCase().trim(), 90)} title="Ampliar gráfico" aria-label="Ampliar gráfico"
+                style={{ height:"26px", padding:"0 12px", borderRadius:"999px", border:"1px solid var(--fi-borda-forte)", background:"rgba(56,189,248,0.08)", color:"#38BDF8", fontSize:"11.5px", cursor:"pointer" }}>⤢ Ampliar</button>
+            </div>
             <div style={{ display:"flex", gap:"12px", fontSize:"10.5px", color:"var(--fi-texto-3)" }}>
               <span style={{ display:"inline-flex", alignItems:"center", gap:"5px" }}><span style={{ width:12, height:2, background:"#22D3A0" }} />alvo</span>
               <span style={{ display:"inline-flex", alignItems:"center", gap:"5px" }}><span style={{ width:12, height:2, background:"#FBBF24" }} />entrada</span>
@@ -906,6 +934,40 @@ export default function Portfolio() {
   <div style={{ width:"100%", boxSizing:"border-box" }}>
 
       {/* Modal Histórico de Preços */}
+      {grafAmp && posSelecionada && posSelecionada.ticker.toUpperCase().trim() === grafAmp.ticker && (() => {
+        const p = posSelecionada, altura = Math.max(320, Math.round(window.innerHeight * 0.92) - 150)
+        const pill = (on) => ({ height:"30px", padding:"0 14px", borderRadius:"999px", fontSize:"12px", cursor:"pointer",
+          border:`1px solid ${on ? "rgba(56,189,248,0.6)" : "var(--fi-borda-forte)"}`, background: on ? "rgba(56,189,248,0.15)" : "transparent", color: on ? "#38BDF8" : "var(--fi-texto-3)" })
+        return (
+          <div onClick={() => setGrafAmp(null)} style={{ position:"fixed", inset:0, background:"rgba(2,4,8,0.82)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center", padding:"2vh 2vw" }}>
+            <div role="dialog" aria-modal="true" aria-label={`Gráfico ampliado de ${p.ticker}`} onClick={e => e.stopPropagation()}
+              style={{ width:"100%", height:"100%", background:"#0B1426", border:"1px solid #1E3352", borderRadius:"18px", boxShadow:"0 30px 80px rgba(0,0,0,0.6)", padding:"18px 20px", display:"flex", flexDirection:"column", gap:"12px" }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:"12px", flexWrap:"wrap" }}>
+                <div style={{ display:"flex", alignItems:"baseline", gap:"10px", flexWrap:"wrap" }}>
+                  <h2 className="fi-titulo" style={{ margin:0, fontSize:"22px", fontWeight:700 }}>{p.ticker.replace(".SA", "")}</h2>
+                  <span style={{ fontSize:"12px", color:"var(--fi-texto-3)" }}>últimos {grafAmp.pregoes} pregões · entrada {fmt(p.preco_entrada)}{p.alvo_lucro ? ` · alvo ${fmt(p.alvo_lucro)}` : ""}{p.stop_loss ? ` · stop ${fmt(p.stop_loss)}` : ""}</span>
+                </div>
+                <div style={{ display:"flex", gap:"8px", alignItems:"center", flexWrap:"wrap" }}>
+                  {[[90, "3 meses"], [125, "6 meses"], [250, "1 ano"]].map(([n, rot]) => (
+                    <button key={n} type="button" onClick={() => abrirGrafAmp(grafAmp.ticker, n)} style={pill(grafAmp.pregoes === n)}>{rot}</button>
+                  ))}
+                  <button type="button" onClick={() => setGrafAmp(null)} aria-label="Fechar gráfico ampliado" style={{ ...pill(false), color:"var(--fi-texto)" }}>✕ Fechar</button>
+                </div>
+              </div>
+              <div style={{ display:"flex", gap:"14px", fontSize:"11px", color:"var(--fi-texto-3)", flexWrap:"wrap" }}>
+                <span style={{ display:"inline-flex", alignItems:"center", gap:"5px" }}><span style={{ width:12, height:2, background:"#22D3A0" }} />alvo</span>
+                <span style={{ display:"inline-flex", alignItems:"center", gap:"5px" }}><span style={{ width:12, height:2, background:"#FBBF24" }} />entrada</span>
+                <span style={{ display:"inline-flex", alignItems:"center", gap:"5px" }}><span style={{ width:12, height:2, background:"#FB6474" }} />stop</span>
+                <span style={{ display:"inline-flex", alignItems:"center", gap:"5px" }}><span style={{ width:5, height:5, borderRadius:"50%", background:"#A3E635" }} />ATR em alta</span>
+                <span style={{ display:"inline-flex", alignItems:"center", gap:"5px" }}><span style={{ width:5, height:5, borderRadius:"50%", background:"#FB6474" }} />ATR em queda</span>
+                <span>· passe o mouse numa vela para ver os valores do dia · Esc fecha</span>
+              </div>
+              <GraficoVelas p={p} dados={grafAmp} H={altura} eixos />
+            </div>
+          </div>
+        )
+      })()}
+
       {modalHistorico && (
         <div onClick={() => setModalHistorico(null)} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.75)", zIndex:1100, display:"flex", alignItems:"center", justifyContent:"center", padding:"20px" }}>
           <div onClick={e => e.stopPropagation()} style={{ background:"#0B1426", border:"1px solid #1E3352", borderRadius:"18px", boxShadow:"0 30px 80px rgba(0,0,0,0.6)", padding:"24px", maxWidth:"1000px", width:"95%", maxHeight:"90vh", display:"flex", flexDirection:"column" }}>
