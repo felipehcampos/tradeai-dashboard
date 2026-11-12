@@ -872,7 +872,6 @@ export default function Portfolio() {
             </div>
           )}
           <div style={{ display:"flex", gap:"8px", marginTop:"14px", flexWrap:"wrap" }}>
-            <button type="button" onClick={() => abrirHistoricoAtivo(p)} style={fiBotao()}>Histórico de preços</button>
             {!estaEditando && <button type="button" onClick={() => iniciarEdicao(p)} style={fiBotao()}>Editar</button>}
             <button type="button" onClick={() => setModalEncerrar(p)} style={{ ...fiBotao(), color:"#22D3A0", borderColor:"rgba(34,211,160,0.45)", background:"rgba(34,211,160,0.10)", fontWeight:600 }}>Encerrar</button>
             <button type="button" onClick={() => { if (window.confirm(`Remover ${p.ticker}?`)) remover(p) }} style={{ ...fiBotao(), color:"#FB6474", borderColor:"rgba(251,100,116,0.4)", background:"transparent" }}>Remover</button>
@@ -997,106 +996,7 @@ export default function Portfolio() {
         )
       })()}
 
-      {modalHistorico && (
-        <div onClick={() => setModalHistorico(null)} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.75)", zIndex:1100, display:"flex", alignItems:"center", justifyContent:"center", padding:"20px" }}>
-          <div onClick={e => e.stopPropagation()} style={{ background:"#0B1426", border:"1px solid #1E3352", borderRadius:"18px", boxShadow:"0 30px 80px rgba(0,0,0,0.6)", padding:"24px", maxWidth:"1000px", width:"95%", maxHeight:"90vh", display:"flex", flexDirection:"column" }}>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"12px" }}>
-              <div style={{ fontSize:"17px", fontWeight:"bold", color:"#f1f5f9" }}>📈 Histórico — {modalHistorico.ticker}</div>
-              <button onClick={() => setModalHistorico(null)} style={{ background:"none", border:"none", color:"#64748b", cursor:"pointer", fontSize:"16px" }}>✕</button>
-            </div>
-            <div style={{ fontSize:"13px", color:"#94a3b8", marginBottom:"12px" }}>
-              Preço de Entrada Original: {moeda(modalHistorico.mercado)} {fmt(modalHistorico.preco_entrada)}
-            </div>
-
-            {/* ── Controles: período e camadas ── */}
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:"10px", marginBottom:"14px" }}>
-              <div style={{ display:"flex", gap:"6px" }}>
-                {[{id:"30d",label:"30d"},{id:"3m",label:"3m"},{id:"6m",label:"6m"},{id:"12m",label:"12m"},{id:"2a",label:"2a"},{id:"5a",label:"5a"}].map(per => (
-                  <button key={per.id} onClick={() => trocarPeriodoHist(per.id)} disabled={carregandoHist}
-                    style={{ padding:"5px 14px", borderRadius:"20px", border:"none", cursor: carregandoHist ? "default" : "pointer", fontSize:"12px", fontWeight: histPeriodo === per.id ? "700" : "400", background: histPeriodo === per.id ? "#38bdf8" : "#1e293b", color: histPeriodo === per.id ? "#0f172a" : "#64748b", transition:"all 0.2s" }}>
-                    {per.label}
-                  </button>
-                ))}
-              </div>
-              <div style={{ display:"flex", gap:"6px" }}>
-                <button onClick={() => setHistMostrarEntrada(v => !v)}
-                  style={{ padding:"5px 12px", borderRadius:"20px", border:`1px solid ${histMostrarEntrada ? "#f59e0b" : "#334155"}`, cursor:"pointer", fontSize:"11px", fontWeight:"600", background: histMostrarEntrada ? "rgba(245,158,11,0.15)" : "#1e293b", color: histMostrarEntrada ? "#f59e0b" : "#64748b", transition:"all 0.2s" }}>
-                  Entrada
-                </button>
-                {(modalHistorico.alvo_lucro || modalHistorico.stop_loss) && (
-                  <button onClick={() => setHistMostrarAlvoStop(v => !v)}
-                    style={{ padding:"5px 12px", borderRadius:"20px", border:`1px solid ${histMostrarAlvoStop ? "#4ade80" : "#334155"}`, cursor:"pointer", fontSize:"11px", fontWeight:"600", background: histMostrarAlvoStop ? "rgba(74,222,128,0.12)" : "#1e293b", color: histMostrarAlvoStop ? "#4ade80" : "#64748b", transition:"all 0.2s" }}>
-                    Alvo/Stop
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {carregandoHist ? (
-              <div style={{ textAlign:"center", padding:"40px", color:"#64748b" }}>
-                <div style={{ fontSize:"13px" }}>Buscando histórico diário...</div>
-              </div>
-            ) : dadosHistorico.length === 0 ? (
-              <div style={{ textAlign:"center", padding:"40px", color:"#64748b" }}>
-                <div style={{ fontSize:"13px" }}>Nenhum dado encontrado.</div>
-              </div>
-            ) : (
-              <div style={{ display:"flex", gap:"16px", flexWrap:"wrap", flexShrink:0 }}>
-                <div style={{ height:"420px", flex:"1 1 60%", minWidth:"340px" }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={dadosHistorico} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                      <XAxis dataKey="data" tick={{ fontSize:11, fill:"#64748b" }} minTickGap={40} />
-                      <YAxis tick={{ fontSize:11, fill:"#64748b" }} domain={['auto','auto']} width={52} />
-                      <Tooltip formatter={(value) => [`${moeda(modalHistorico.mercado)} ${fmt(value)}`, "Fechamento"]} />
-                      {histMostrarEntrada && (
-                        <ReferenceLine y={modalHistorico.preco_entrada} stroke="#f59e0b" strokeDasharray="5 4" strokeWidth={1.5}
-                          label={{ value: `Entrada ${fmt(modalHistorico.preco_entrada)}`, position: "right", fill: "#f59e0b", fontSize: 11 }} />
-                      )}
-                      {histMostrarAlvoStop && modalHistorico.alvo_lucro && (
-                        <ReferenceLine y={modalHistorico.alvo_lucro} stroke="#4ade80" strokeDasharray="5 4" strokeWidth={1.5}
-                          label={{ value: `Alvo ${fmt(modalHistorico.alvo_lucro)}`, position: "right", fill: "#4ade80", fontSize: 11 }} />
-                      )}
-                      {histMostrarAlvoStop && modalHistorico.stop_loss && (
-                        <ReferenceLine y={modalHistorico.stop_loss} stroke="#f87171" strokeDasharray="5 4" strokeWidth={1.5}
-                          label={{ value: `Stop ${fmt(modalHistorico.stop_loss)}`, position: "right", fill: "#f87171", fontSize: 11 }} />
-                      )}
-                      <Line type="monotone" dataKey="fechamento" stroke="#38bdf8" strokeWidth={2.5} dot={false} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-                <div style={{ height:"420px", flex:"1 1 34%", minWidth:"260px", overflowY:"auto", border:"1px solid #1e293b", borderRadius:"10px" }}>
-                  <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"14px" }}>
-                    <thead>
-                      <tr style={{ position:"sticky", top:0, background:"#0d1829", zIndex:1 }}>
-                        <th style={{ padding:"10px 12px", textAlign:"left", color:"#64748b", borderBottom:"1px solid #1e293b" }}>DATA</th>
-                        <th style={{ padding:"10px 12px", textAlign:"right", color:"#64748b", borderBottom:"1px solid #1e293b" }}>FECH.</th>
-                        <th style={{ padding:"10px 12px", textAlign:"right", color:"#64748b", borderBottom:"1px solid #1e293b" }}>P&L</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {dadosHistorico.map((dia, idx) => {
-                        const varPct = ((dia.fechamento - modalHistorico.preco_entrada) / modalHistorico.preco_entrada * 100).toFixed(2)
-                        const lucro = dia.fechamento >= modalHistorico.preco_entrada
-                        return (
-                          <tr key={idx} style={{ borderBottom:"1px solid #1e293b" }}>
-                            <td style={{ padding:"9px 12px", color:"#94a3b8" }}>{dia.data}</td>
-                            <td style={{ padding:"9px 12px", textAlign:"right", color:"#f1f5f9" }}>{moeda(modalHistorico.mercado)} {fmt(dia.fechamento)}</td>
-                            <td style={{ padding:"9px 12px", textAlign:"right", color: lucro ? "#4ade80" : "#f87171", fontWeight:"600" }}>
-                              {lucro ? "▲ +" : "▼ "}{varPct}%
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-            <button onClick={() => setModalHistorico(null)} style={{ marginTop:"16px", padding:"12px", borderRadius:"8px", border:"1px solid #334155", background:"#1e293b", color:"#94a3b8", cursor:"pointer", fontWeight:"600", fontSize:"13px", flexShrink:0 }}>Fechar</button>
-          </div>
-        </div>
-      )}
+      {/* 12/11/2026: janela antiga "Histórico de preços" retirada a pedido do Felipe — o gráfico ampliado (3m a 5a + tabela diária) cobre o mesmo */}
 
       {/* Modal Encerrar Posição (com venda parcial) */}
       {modalEncerrar && (
