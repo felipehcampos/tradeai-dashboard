@@ -168,13 +168,19 @@ export default function Patrimonio() {
 
   // linhas da tabela: trading automático + itens, filtradas pela categoria
   const linhas = [
-    { id: "tr", auto: true, categoria: "trading", nome: "Trading (Portfólio)", valor: tr.valor || 0,
-      custo: tr.custo ?? tr.investido ?? 0, valorizacao: (tr.valor || 0) - (tr.custo ?? tr.investido ?? 0),
-      sub: `automático · ${tr.posicoes || 0} posições abertas${tr.realizado != null ? ` · vendas já feitas ${fmtSinal(tr.realizado)}` : ""}` },
+    { id: "tr", auto: true, categoria: "trading", nome: "Ações · posições abertas", valor: tr.valor || 0,
+      custo: tr.investido || 0, valorizacao: (tr.valor || 0) - (tr.investido || 0),
+      sub: `automático · ${tr.posicoes || 0} posições do Portfólio` },
     ...itens.map(it => ({ ...it, sub: it.categoria === "renda_fixa" && it.indexador
       ? `${it.indexador === "cdi" ? `${String(it.taxa).replace(".", ",")}% do CDI` : `${String(it.taxa).replace(".", ",")}% a.a.`} · ${(it.movimentos || []).length ? `${it.movimentos.length} movimentações` : `desde ${dataBR(it.data_aplicacao)}`}`
       : it.categoria === "imovel" ? "custo investido até agora" : it.categoria === "carro" ? "valor FIPE / estimado" : "manual" })),
   ].filter(l => !filtro || l.categoria === filtro).sort((a, b) => b.valor - a.valor)
+  // 12/11: resultado das vendas logo abaixo das posições abertas (o dinheiro já está no caixa)
+  if (tr.realizado != null && Math.abs(tr.realizado) >= 0.01 && (!filtro || filtro === "trading")) {
+    const iTr = linhas.findIndex(l => l.id === "tr")
+    linhas.splice(iTr + 1, 0, { id: "trv", auto: true, vendas: true, categoria: "trading", nome: "Ações · vendas já feitas",
+      valor: 0, custo: -(tr.realizado || 0), valorizacao: tr.realizado || 0, sub: "lucro das vendas + proventos · o dinheiro já está no caixa" })
+  }
 
   // ── blocos (chamados como função para não perder o foco dos campos) ──
   const Formulario = () => {
@@ -251,11 +257,13 @@ export default function Patrimonio() {
     const d = l.detalhe
     return (
       <div style={{ padding: "12px 14px", borderRadius: "12px", background: "#0A1424", border: "1px solid #1E3352", fontSize: "12px", color: "var(--fi-texto-3)", lineHeight: 1.7 }}>
-        {l.auto && <>
-          <b>Valor</b> = posições abertas a preço de hoje ({fmtBRL(tr.valor)}). Investido nelas: {fmtBRL(tr.investido)} (resultado em aberto {fmtSinal((tr.valor || 0) - (tr.investido || 0))}).<br />
-          <b>Vendas já feitas</b>: {fmtSinal(tr.realizado || 0)} (lucro/prejuízo das vendas {fmtSinal(tr.realizado_preco || 0)} + dividendos {fmtBRL(tr.dividendos_fechados || 0)}{tr.dividendos_ok === false ? " — dividendos indisponíveis agora" : ""}).
-          Esse dinheiro já está no seu caixa (caixinha/conta/corretora), por isso não é somado de novo no valor — ele entra como <b>valorização</b>: "Coloquei" = investido nas abertas − vendas já feitas.<br />
-          Para o dinheiro das vendas aparecer no patrimônio, cadastre onde ele está (ex.: "Caixa na corretora", categoria Trading, ou a caixinha).{tr.dolar ? ` Dólar usado: ${String(tr.dolar).replace(".", ",")}.` : ""}
+        {l.auto && !l.vendas && <>
+          As {tr.posicoes || 0} posições abertas do Portfólio a preço de hoje ({fmtBRL(tr.valor)}), contra o que foi pago por elas ({fmtBRL(tr.investido)}).
+          Atualiza sozinho: comprou ou vendeu no Portfólio, muda aqui.{tr.dolar ? ` Dólar usado: ${String(tr.dolar).replace(".", ",")}.` : ""}
+        </>}
+        {l.auto && l.vendas && <>
+          Resultado das ações que você já vendeu: lucro/prejuízo das vendas {fmtSinal(tr.realizado_preco || 0)} + proventos {fmtBRL(tr.dividendos_fechados || 0)}{tr.dividendos_ok === false ? " (proventos indisponíveis agora)" : ""}.
+          O dinheiro dessas vendas já está no seu caixa (caixinha/conta), por isso não é somado de novo no valor — aqui ele só aparece como <b>valorização</b>, para o lucro não ser confundido com dinheiro novo.
         </>}
         {!l.auto && l.categoria === "renda_fixa" && d && !d.incompleto && d.colocado != null && <>
           {d.movimentos} movimentações desde {dataBR(d.primeira)} · colocado {fmtBRL(d.colocado)} · bruto {fmtBRL(d.bruto)} · IR {fmtBRL(d.ir)}{d.iof > 0 ? ` · IOF ${fmtBRL(d.iof)}` : ""} · líquido {fmtBRL(d.liquido)}.
@@ -643,24 +651,18 @@ export default function Patrimonio() {
                         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}><span style={{ width: 9, height: 9, borderRadius: "50%", background: cor, flexShrink: 0 }} /><b>{l.nome}</b></div>
                         <div style={{ fontSize: "11px", color: "var(--fi-texto-4)", margin: "2px 0 0 17px" }}>{catInfo(l.categoria).rot} · {l.sub}</div>
                       </td>
-                      <td style={{ ...tdS, fontWeight: 700, whiteSpace: "nowrap" }}>{fmtBRL(l.valor)}</td>
-                      <td style={{ ...tdS, color: "var(--fi-texto-3)", whiteSpace: "nowrap" }}>{fmtBRL(l.custo)}</td>
+                      <td style={{ ...tdS, fontWeight: 700, whiteSpace: "nowrap", color: l.vendas ? "var(--fi-texto-4)" : undefined }}>{l.vendas ? "no caixa" : fmtBRL(l.valor)}</td>
+                      <td style={{ ...tdS, color: "var(--fi-texto-3)", whiteSpace: "nowrap" }}>{l.vendas ? "—" : fmtBRL(l.custo)}</td>
                       <td style={{ ...tdS, whiteSpace: "nowrap", color: corDe(l.valorizacao) }}>
-                        {l.auto ? (<>
-                          {fmtSinal(l.valorizacao)}
-                          <div style={{ fontSize: "11px", color: "var(--fi-texto-4)", marginTop: "2px" }}>
-                            aberto <span style={{ color: corDe((tr.valor || 0) - (tr.investido || 0)) }}>{fmtSinal((tr.valor || 0) - (tr.investido || 0))}{tr.investido ? ` (${fmtPct(((tr.valor || 0) / tr.investido - 1) * 100)})` : ""}</span>
-                            {" · "}vendas <span style={{ color: corDe(tr.realizado || 0) }}>{fmtSinal(tr.realizado || 0)}</span>
-                          </div>
-                        </>) : Math.abs(l.valorizacao) < 0.005 ? "—" : `${fmtSinal(l.valorizacao)}${l.custo ? ` (${fmtPct(l.valorizacao / l.custo * 100)})` : ""}`}
+                        {Math.abs(l.valorizacao) < 0.005 ? "—" : `${fmtSinal(l.valorizacao)}${!l.vendas && l.custo ? ` (${fmtPct(l.valorizacao / l.custo * 100)})` : ""}`}
                       </td>
                       <td style={tdS}>
-                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        {l.vendas ? <span style={{ fontSize: "12px", color: "var(--fi-texto-4)" }}>—</span> : <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                           <div style={{ flex: 1, height: "6px", borderRadius: "999px", background: "#132238", overflow: "hidden" }}>
                             <div style={{ height: "100%", width: `${Math.max(1.5, Math.min(100, peso))}%`, borderRadius: "999px", background: cor, boxShadow: `0 0 8px ${cor}` }} />
                           </div>
                           <span style={{ fontSize: "12px", color: "var(--fi-texto-2)", minWidth: "42px", textAlign: "right" }}>{pct1(peso)}</span>
-                        </div>
+                        </div>}
                       </td>
                       <td style={{ ...tdS, color: "#38BDF8", fontSize: "12px", whiteSpace: "nowrap" }}>{ab ? "fechar ‹" : "detalhes ›"}</td>
                     </tr>,
