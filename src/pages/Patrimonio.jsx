@@ -646,7 +646,13 @@ export default function Patrimonio() {
                       <td style={{ ...tdS, fontWeight: 700, whiteSpace: "nowrap" }}>{fmtBRL(l.valor)}</td>
                       <td style={{ ...tdS, color: "var(--fi-texto-3)", whiteSpace: "nowrap" }}>{fmtBRL(l.custo)}</td>
                       <td style={{ ...tdS, whiteSpace: "nowrap", color: corDe(l.valorizacao) }}>
-                        {Math.abs(l.valorizacao) < 0.005 ? "—" : `${fmtSinal(l.valorizacao)}${l.custo ? ` (${fmtPct(l.valorizacao / l.custo * 100)})` : ""}`}
+                        {l.auto ? (<>
+                          {fmtSinal(l.valorizacao)}
+                          <div style={{ fontSize: "11px", color: "var(--fi-texto-4)", marginTop: "2px" }}>
+                            aberto <span style={{ color: corDe((tr.valor || 0) - (tr.investido || 0)) }}>{fmtSinal((tr.valor || 0) - (tr.investido || 0))}{tr.investido ? ` (${fmtPct(((tr.valor || 0) / tr.investido - 1) * 100)})` : ""}</span>
+                            {" · "}vendas <span style={{ color: corDe(tr.realizado || 0) }}>{fmtSinal(tr.realizado || 0)}</span>
+                          </div>
+                        </>) : Math.abs(l.valorizacao) < 0.005 ? "—" : `${fmtSinal(l.valorizacao)}${l.custo ? ` (${fmtPct(l.valorizacao / l.custo * 100)})` : ""}`}
                       </td>
                       <td style={tdS}>
                         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
