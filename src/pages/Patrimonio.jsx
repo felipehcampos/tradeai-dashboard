@@ -156,8 +156,10 @@ export default function Patrimonio() {
   const origemValoriz = (resumo.categorias || []).filter(c => Math.abs(c.valorizacao) >= 0.01)
 
   // série do gráfico = fotos + agora, cortada pelo período
-  const serie = [...fotos]
-  if (evol?.atual && (!serie.length || serie[serie.length - 1].data !== evol.atual.data)) serie.push({ ...evol.atual, agora: true })
+  // 12/11: se a última foto é de hoje, o ponto de hoje mostra o valor de AGORA (a foto pode ter sido
+  // tirada antes de cadastrar os itens). A foto continua guardada; refazê-la substitui os valores.
+  const serie = fotos.filter(f => !evol?.atual || f.data !== evol.atual.data)
+  if (evol?.atual) serie.push({ ...evol.atual, agora: true })
   const diasPer = (PERIODOS.find(p => p[0] === periodo) || [])[2]
   const limite = diasPer ? new Date(Date.now() - diasPer * 864e5).toISOString().slice(0, 10) : null
   const serieF = serie.filter(p => !limite || p.data >= limite || p.agora)
@@ -166,9 +168,9 @@ export default function Patrimonio() {
 
   // linhas da tabela: trading automático + itens, filtradas pela categoria
   const linhas = [
-    { id: "tr", auto: true, categoria: "trading", nome: "Posições abertas", valor: tr.valor || 0, custo: tr.investido || 0,
-      valorizacao: (tr.valor || 0) - (tr.investido || 0),
-      sub: `automático · ${tr.posicoes || 0} posições do Portfólio${tr.dolar ? ` · dólar ${String(tr.dolar).replace(".", ",")}` : ""}` },
+    { id: "tr", auto: true, categoria: "trading", nome: "Trading (Portfólio)", valor: tr.valor || 0,
+      custo: tr.custo ?? tr.investido ?? 0, valorizacao: (tr.valor || 0) - (tr.custo ?? tr.investido ?? 0),
+      sub: `automático · ${tr.posicoes || 0} posições abertas${tr.realizado != null ? ` · vendas já feitas ${fmtSinal(tr.realizado)}` : ""}` },
     ...itens.map(it => ({ ...it, sub: it.categoria === "renda_fixa" && it.indexador
       ? `${it.indexador === "cdi" ? `${String(it.taxa).replace(".", ",")}% do CDI` : `${String(it.taxa).replace(".", ",")}% a.a.`} · ${(it.movimentos || []).length ? `${it.movimentos.length} movimentações` : `desde ${dataBR(it.data_aplicacao)}`}`
       : it.categoria === "imovel" ? "custo investido até agora" : it.categoria === "carro" ? "valor FIPE / estimado" : "manual" })),
@@ -249,7 +251,12 @@ export default function Patrimonio() {
     const d = l.detalhe
     return (
       <div style={{ padding: "12px 14px", borderRadius: "12px", background: "#0A1424", border: "1px solid #1E3352", fontSize: "12px", color: "var(--fi-texto-3)", lineHeight: 1.7 }}>
-        {l.auto && <>Vem do Portfólio: valor de hoje das posições ({fmtBRL(l.valor)}) contra o que foi investido ({fmtBRL(l.custo)}). Para mudar, edite as posições na aba Portfólio.</>}
+        {l.auto && <>
+          <b>Valor</b> = posições abertas a preço de hoje ({fmtBRL(tr.valor)}). Investido nelas: {fmtBRL(tr.investido)} (resultado em aberto {fmtSinal((tr.valor || 0) - (tr.investido || 0))}).<br />
+          <b>Vendas já feitas</b>: {fmtSinal(tr.realizado || 0)} (lucro/prejuízo das vendas {fmtSinal(tr.realizado_preco || 0)} + dividendos {fmtBRL(tr.dividendos_fechados || 0)}{tr.dividendos_ok === false ? " — dividendos indisponíveis agora" : ""}).
+          Esse dinheiro já está no seu caixa (caixinha/conta/corretora), por isso não é somado de novo no valor — ele entra como <b>valorização</b>: "Coloquei" = investido nas abertas − vendas já feitas.<br />
+          Para o dinheiro das vendas aparecer no patrimônio, cadastre onde ele está (ex.: "Caixa na corretora", categoria Trading, ou a caixinha).{tr.dolar ? ` Dólar usado: ${String(tr.dolar).replace(".", ",")}.` : ""}
+        </>}
         {!l.auto && l.categoria === "renda_fixa" && d && !d.incompleto && d.colocado != null && <>
           {d.movimentos} movimentações desde {dataBR(d.primeira)} · colocado {fmtBRL(d.colocado)} · bruto {fmtBRL(d.bruto)} · IR {fmtBRL(d.ir)}{d.iof > 0 ? ` · IOF ${fmtBRL(d.iof)}` : ""} · líquido {fmtBRL(d.liquido)}.
           Entra no total pelo líquido.{" "}
@@ -333,6 +340,40 @@ export default function Patrimonio() {
     )
   }
 
+  // 12/11: tabela mês a mês — uma linha por foto (+ agora), comparando com a foto anterior
+  const MesAMes = () => {
+    if (serie.length < 1 || !temFoto) return null
+    const linhasM = serie.map((p, i) => {
+      const ant = i > 0 ? serie[i - 1] : null
+      if (!ant) return { ...p, novo: null, val: null, pct: null }
+      const novo = (p.custo || 0) - (ant.custo || 0), dt = p.total - ant.total
+      return { ...p, novo, val: dt - novo, pct: ant.total ? dt / ant.total * 100 : null }
+    }).reverse()
+    const th = { padding: "8px 10px", textAlign: "left", color: "#5F7391", fontSize: "10.5px", fontWeight: 500, textTransform: "uppercase", letterSpacing: "1.1px" }
+    const td = { padding: "9px 10px", borderTop: "1px solid #101D31", whiteSpace: "nowrap" }
+    return (
+      <div style={{ marginTop: "16px", overflowX: "auto" }}>
+        <div style={{ fontSize: "11px", color: "var(--fi-texto-4)", textTransform: "uppercase", letterSpacing: "1.1px", marginBottom: "4px" }}>Mês a mês</div>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12.5px", minWidth: "560px" }}>
+          <thead><tr>{["Foto", "Patrimônio", "Dinheiro novo", "Valorização", "Variação"].map(h => <th key={h} style={th}>{h}</th>)}</tr></thead>
+          <tbody>
+            {linhasM.map(p => (
+              <tr key={p.data + (p.agora ? "a" : "")}>
+                <td style={td}>{p.agora ? `agora (${dataBR(p.data).slice(0, 5)})` : dataBR(p.data)}
+                  {p.retro && <span title="Reconstruída a partir das movimentações e dos trades" style={{ marginLeft: "8px", padding: "1px 8px", borderRadius: "999px", fontSize: "10px", color: "#FBBF24", border: "1px solid rgba(251,191,36,0.35)" }}>reconstruída</span>}
+                </td>
+                <td style={{ ...td, fontWeight: 700 }}>{fmtBRL(p.total)}</td>
+                <td style={{ ...td, color: p.novo == null ? "var(--fi-texto-4)" : "#38BDF8" }}>{p.novo == null ? "início da série" : fmtSinal(p.novo)}</td>
+                <td style={{ ...td, color: p.val == null ? "var(--fi-texto-4)" : corDe(p.val) }}>{p.val == null ? "—" : fmtSinal(p.val)}</td>
+                <td style={{ ...td, color: p.pct == null ? "var(--fi-texto-4)" : corDe(p.pct) }}>{p.pct == null ? "—" : fmtPct(p.pct)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+
   const BarraComp = (rot, ini, larg, cor, valor, corTxt, destaque) => (
     <div style={{ display: "grid", gridTemplateColumns: "118px 1fr auto", gap: "10px", alignItems: "center", fontSize: "12px",
       ...(destaque ? { paddingTop: "8px", borderTop: "1px solid var(--fi-borda)" } : {}) }}>
@@ -409,8 +450,15 @@ export default function Patrimonio() {
               <div style={caixa}>
                 <div style={{ fontSize: "11px", color: "var(--fi-texto-4)" }}>De onde vem a valorização</div>
                 <div style={{ fontSize: "12px", marginTop: "6px", lineHeight: 1.7 }}>
-                  {origemValoriz.length ? origemValoriz.map((c, i) => (
-                    <span key={c.categoria}>{i > 0 && " · "}<span style={{ color: corDe(c.valorizacao) }}>{c.rotulo} {fmtSinal(c.valorizacao)}</span></span>
+                  {origemValoriz.length ? origemValoriz.map((c) => (
+                    <div key={c.categoria}>
+                      <span style={{ color: corDe(c.valorizacao) }}>{c.rotulo === "Renda fixa" ? "Renda fixa (rendimento)" : c.rotulo} {fmtSinal(c.valorizacao)}</span>
+                      {c.categoria === "trading" && tr.realizado != null && (
+                        <div style={{ fontSize: "11px", color: "var(--fi-texto-4)" }}>
+                          em aberto {fmtSinal((tr.valor || 0) - (tr.investido || 0))} · vendas {fmtSinal(tr.realizado_preco || 0)} · proventos {fmtSinal(tr.dividendos_fechados || 0)}
+                        </div>
+                      )}
+                    </div>
                   )) : <span style={{ color: "var(--fi-texto-4)" }}>nada ainda</span>}
                 </div>
               </div>
@@ -439,7 +487,11 @@ export default function Patrimonio() {
             </>) : (
               <div style={{ fontSize: "12px", color: "var(--fi-texto-3)", lineHeight: 1.7 }}>
                 <div style={rotulo}>No mês</div>
-                <div style={{ marginTop: "6px" }}>A variação aparece depois da primeira foto. A rentabilidade só é mostrada quando houver duas fotos para comparar — nada é estimado.</div>
+                <div style={{ marginTop: "6px" }}>
+                  {temFoto
+                    ? <>A primeira comparação sai em <b>01/12</b>, com a próxima foto automática: aí aparecem a variação do mês, quanto foi dinheiro novo e quanto foi valorização, e a rentabilidade comparada ao CDI.</>
+                    : <>Registre a primeira foto para começar. A variação e a rentabilidade só aparecem quando houver duas fotos para comparar — nada é estimado.</>}
+                </div>
               </div>
             )}
           </div>
@@ -481,6 +533,23 @@ export default function Patrimonio() {
                 </button>
                 {itens.length === 0 && <div style={{ fontSize: "11px", color: "#FBBF24", marginTop: "8px" }}>Cadastre seus itens primeiro (+ Novo item).</div>}
               </div>
+            ) : serie.length === 1 ? (
+              <div style={{ minHeight: "220px", display: "flex", flexDirection: "column", justifyContent: "center", gap: "14px", padding: "6px 4px" }}>
+                {[["Patrimônio hoje", serie[0].total, "#38BDF8"], ["Dinheiro colocado", serie[0].custo, "#7E93B2"]].map(([rot, v, cor]) => (
+                  <div key={rot}>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12.5px", marginBottom: "6px" }}>
+                      <span style={{ color: "var(--fi-texto-3)" }}>{rot}</span><b style={{ color: cor }}>{fmtBRL(v)}</b>
+                    </div>
+                    <div style={{ height: "10px", borderRadius: "999px", background: "#132238", overflow: "hidden" }}>
+                      <div style={{ height: "100%", width: `${Math.max(2, v / Math.max(serie[0].total, serie[0].custo) * 100)}%`, borderRadius: "999px", background: cor, boxShadow: `0 0 10px ${cor}` }} />
+                    </div>
+                  </div>
+                ))}
+                <div style={{ fontSize: "12px", color: "var(--fi-texto-3)", lineHeight: 1.6 }}>
+                  Diferença (valorização): <b style={{ color: corDe(serie[0].total - serie[0].custo) }}>{fmtSinal(serie[0].total - serie[0].custo)}</b>.
+                  {" "}A curva mês a mês começa com a foto automática de 01/12 — o gráfico não inventa meses que não foram registrados.
+                </div>
+              </div>
             ) : (<>
               <div style={{ height: "260px" }}>
                 <ResponsiveContainer width="100%" height="100%">
@@ -488,8 +557,9 @@ export default function Patrimonio() {
                     <defs><linearGradient id="fiPatr" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#38BDF8" stopOpacity={0.32} /><stop offset="1" stopColor="#38BDF8" stopOpacity={0} /></linearGradient></defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="#132238" vertical={false} />
                     <XAxis dataKey="rot" tick={{ fill: "#7E93B2", fontSize: 11 }} minTickGap={30} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fill: "#7E93B2", fontSize: 11 }} width={60} axisLine={false} tickLine={false} domain={["auto", "auto"]}
-                      tickFormatter={(v) => Math.abs(v) >= 1000 ? `R$${(v / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}k` : `R$${Math.round(v)}`} />
+                    <YAxis tick={{ fill: "#7E93B2", fontSize: 11 }} width={64} axisLine={false} tickLine={false}
+                      domain={[(min) => Math.floor(min * 0.97), (max) => Math.ceil(max * 1.02)]} tickCount={5}
+                      tickFormatter={(v) => Math.abs(v) >= 1000 ? `R$${(v / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 0 })}k` : `R$${Math.round(v)}`} />
                     <Tooltip contentStyle={tooltipEstilo} formatter={(v, n) => [fmtBRL(v), n === "total" ? "Patrimônio" : "Dinheiro colocado"]} />
                     <Area type="monotone" dataKey="total" stroke="#38BDF8" strokeWidth={3} fill="url(#fiPatr)" dot={{ r: 3, fill: "#38BDF8" }} style={{ filter: "drop-shadow(0 0 6px rgba(56,189,248,0.8))" }} />
                     <Line type="monotone" dataKey="custo" stroke="#7E93B2" strokeWidth={2} strokeDasharray="7 6" dot={false} />
@@ -499,9 +569,10 @@ export default function Patrimonio() {
               <div style={{ display: "flex", gap: "16px", fontSize: "11.5px", color: "var(--fi-texto-3)", marginTop: "10px", flexWrap: "wrap" }}>
                 <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}><span style={{ width: 14, height: 3, background: "#38BDF8", borderRadius: 2 }} />Patrimônio</span>
                 <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}><span style={{ width: 14, height: 0, borderTop: "2px dashed #7E93B2" }} />Dinheiro colocado</span>
-                <span>· a distância entre as duas linhas é a valorização{fotos.length === 1 ? " · com uma foto só, o gráfico liga a foto ao valor de agora" : ""}</span>
+                <span>· a distância entre as duas linhas é a valorização{serie.some(x => x.retro) ? " · meses marcados como \"reconstruída\" foram calculados a partir das movimentações e dos trades" : ""}</span>
               </div>
             </>)}
+            {MesAMes()}
           </div>
 
           <div className="fi-painel" style={{ flex: "1 1 320px", padding: "18px", display: "flex", flexDirection: "column", gap: "12px" }}>
