@@ -7,6 +7,7 @@ import Login from "./Login"
 import { tokenAindaValido, apagarToken } from "./services/api"
 import Financeiro from "./pages/Financeiro"
 import ScannerB from "./pages/ScannerB"
+import Patrimonio from "./pages/Patrimonio"
 
 // 10/11/2026: visual "Future Intelligence" (cabeçalho, abas em pílula, moldura com luz).
 // Só aparência — as abas e o que cada uma faz continuam iguais.
@@ -16,6 +17,7 @@ const ABAS = [
   { id: "scannerb",   label: "Scanner B" },
   { id: "portfolio",  label: "Portfólio" },
   { id: "financeiro", label: "Financeiro" },
+  { id: "patrimonio", label: "Patrimônio" },
   { id: "favoritos",  label: "Favoritos" },
   { id: "noticias",   label: "Notícias" },
 ]
@@ -132,6 +134,7 @@ export default function App() {
             {aba === "mercado"    && <Mercado />}
             {aba === "portfolio"  && <Portfolio />}
             {aba === "financeiro" && <Financeiro />}
+            {aba === "patrimonio" && <Patrimonio />}
             {aba === "favoritos"  && <Favoritos />}
             {aba === "scannerb"   && <ScannerB />}
             {aba === "noticias"   && <Noticias />}
