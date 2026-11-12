@@ -44,6 +44,10 @@ export default function Patrimonio() {
   const [filtro, setFiltro] = useState(null)      // categoria selecionada na rosca
   const [aberto, setAberto] = useState(null)      // id do item com detalhes abertos ("tr" = trading)
   const [periodo, setPeriodo] = useState("tudo")
+  const [novoMov, setNovoMov] = useState({ data: "", tipo: "aplicacao", valor: "", liquido: "" })   // 12/11: movimentações
+  const [salvandoMov, setSalvandoMov] = useState(false)
+  const [erroMov, setErroMov] = useState(null)
+  const [verTodosMov, setVerTodosMov] = useState(false)
 
   const carregar = () => {
     setErro(null)
@@ -65,7 +69,7 @@ export default function Patrimonio() {
       id: it.id, categoria: it.categoria, nome: it.nome || "",
       valor: it.valor_cadastrado ?? "", valor_aplicado: it.valor_aplicado ?? "",
       data_aplicacao: it.data_aplicacao || "", indexador: it.indexador || "cdi",
-      taxa: it.taxa ?? "", observacao: it.observacao || "",
+      taxa: it.taxa ?? "", observacao: it.observacao || "", temMov: (it.movimentos || []).length > 0,
     })
     window.scrollTo({ top: 0, behavior: "smooth" })
   }
@@ -74,7 +78,8 @@ export default function Patrimonio() {
     const rf = form.categoria === "renda_fixa"
     const corpo = {
       categoria: form.categoria, nome: form.nome, observacao: form.observacao,
-      ...(rf ? { valor_aplicado: form.valor_aplicado, data_aplicacao: form.data_aplicacao, indexador: form.indexador, taxa: form.taxa }
+      ...(rf && form.temMov ? { indexador: form.indexador, taxa: form.taxa }
+        : rf ? { valor_aplicado: form.valor_aplicado, data_aplicacao: form.data_aplicacao, indexador: form.indexador, taxa: form.taxa }
              : { valor: form.valor }),
     }
     setSalvando(true); setErroForm(null)
@@ -90,6 +95,20 @@ export default function Patrimonio() {
     api.delete(`${API}/patrimonio/itens/${id}`)
       .then(() => { setConfirmarExcluir(null); setAberto(null); carregar() })
       .catch(e => setAviso(`Não excluiu: ${e?.message || "erro"}`))
+  }
+
+  const lancarMov = (id) => {
+    setSalvandoMov(true); setErroMov(null)
+    api.post(`${API}/patrimonio/itens/${id}/movimentos`, { movimentos: [novoMov] })
+      .then(r => {
+        if (!r.data.sucesso) throw new Error(r.data.erro || "não salvou")
+        setNovoMov({ data: "", tipo: novoMov.tipo, valor: "", liquido: "" }); carregar()
+      })
+      .catch(e => setErroMov(e?.message || "erro"))
+      .finally(() => setSalvandoMov(false))
+  }
+  const apagarMov = (idMov) => {
+    api.delete(`${API}/patrimonio/movimentos/${idMov}`).then(() => carregar()).catch(e => setErroMov(e?.message || "erro"))
   }
 
   const tirarFoto = () => {
@@ -151,7 +170,7 @@ export default function Patrimonio() {
       valorizacao: (tr.valor || 0) - (tr.investido || 0),
       sub: `automático · ${tr.posicoes || 0} posições do Portfólio${tr.dolar ? ` · dólar ${String(tr.dolar).replace(".", ",")}` : ""}` },
     ...itens.map(it => ({ ...it, sub: it.categoria === "renda_fixa" && it.indexador
-      ? `${it.indexador === "cdi" ? `${String(it.taxa).replace(".", ",")}% do CDI` : `${String(it.taxa).replace(".", ",")}% a.a.`} · desde ${dataBR(it.data_aplicacao)}`
+      ? `${it.indexador === "cdi" ? `${String(it.taxa).replace(".", ",")}% do CDI` : `${String(it.taxa).replace(".", ",")}% a.a.`} · ${(it.movimentos || []).length ? `${it.movimentos.length} movimentações` : `desde ${dataBR(it.data_aplicacao)}`}`
       : it.categoria === "imovel" ? "custo investido até agora" : it.categoria === "carro" ? "valor FIPE / estimado" : "manual" })),
   ].filter(l => !filtro || l.categoria === filtro).sort((a, b) => b.valor - a.valor)
 
@@ -174,7 +193,17 @@ export default function Patrimonio() {
             <input aria-label="Nome" style={inputS} value={form.nome} onChange={set("nome")}
               placeholder={rf ? "ex.: CDB Banco X" : form.categoria === "imovel" ? "ex.: Obra Rua Y" : form.categoria === "trading" ? "ex.: Caixa na corretora (Nubank)" : form.categoria === "carro" ? "ex.: Carro" : "ex.: Conta corrente"} />
           </label>
-          {rf ? (<>
+          {rf && form.temMov ? (<>
+            <label style={lab}>Rende
+              <select aria-label="Indexador" style={inputS} value={form.indexador} onChange={set("indexador")}>
+                <option value="cdi">% do CDI</option>
+                <option value="pre">Prefixado (% ao ano)</option>
+              </select>
+            </label>
+            <label style={lab}>{form.indexador === "cdi" ? "Taxa (% do CDI, ex.: 110)" : "Taxa (% ao ano, ex.: 12,5)"}
+              <input aria-label="Taxa" type="number" step="0.01" min="0" style={inputS} value={form.taxa} onChange={set("taxa")} />
+            </label>
+          </>) : rf ? (<>
             <label style={lab}>Valor aplicado (R$)
               <input aria-label="Valor aplicado" type="number" step="0.01" min="0" style={inputS} value={form.valor_aplicado} onChange={set("valor_aplicado")} />
             </label>
@@ -201,7 +230,8 @@ export default function Patrimonio() {
           </label>
         </div>
         <div style={{ fontSize: "11px", color: "var(--fi-texto-4)", marginTop: "8px", lineHeight: 1.6 }}>
-          {rf && "O rendimento é calculado sozinho todo dia. No total entra o valor líquido (já descontado o IR estimado)."}
+          {rf && !form.temMov && "O rendimento é calculado sozinho todo dia. No total entra o valor líquido (já descontado o IR estimado). Se você coloca e tira dinheiro com frequência (ex.: caixinha), cadastre a primeira aplicação aqui e lance o resto em \"detalhes › movimentações\"."}
+          {rf && form.temMov && "Este item usa as movimentações (aplicações e resgates com data). Para mudar valores, edite as movimentações nos detalhes do item."}
           {form.categoria === "imovel" && "Cada gasto novo que você somar aqui conta como dinheiro novo, não como valorização."}
           {form.categoria === "carro" && "O valor da primeira foto vira o ponto de partida; quando a FIPE mudar, a diferença aparece como valorização ou desvalorização."}
           {(form.categoria === "caixa" || form.categoria === "outros" || form.categoria === "trading") && "Aumentar ou diminuir este valor conta como dinheiro colocado ou retirado."}
@@ -220,7 +250,15 @@ export default function Patrimonio() {
     return (
       <div style={{ padding: "12px 14px", borderRadius: "12px", background: "#0A1424", border: "1px solid #1E3352", fontSize: "12px", color: "var(--fi-texto-3)", lineHeight: 1.7 }}>
         {l.auto && <>Vem do Portfólio: valor de hoje das posições ({fmtBRL(l.valor)}) contra o que foi investido ({fmtBRL(l.custo)}). Para mudar, edite as posições na aba Portfólio.</>}
-        {!l.auto && l.categoria === "renda_fixa" && d && !d.incompleto && <>
+        {!l.auto && l.categoria === "renda_fixa" && d && !d.incompleto && d.colocado != null && <>
+          {d.movimentos} movimentações desde {dataBR(d.primeira)} · colocado {fmtBRL(d.colocado)} · bruto {fmtBRL(d.bruto)} · IR {fmtBRL(d.ir)}{d.iof > 0 ? ` · IOF ${fmtBRL(d.iof)}` : ""} · líquido {fmtBRL(d.liquido)}.
+          Entra no total pelo líquido.{" "}
+          {d.ultimo_ajuste
+            ? <>Calibrado com o saldo do app em {dataBR(d.ultimo_ajuste.data)} (o cálculo dava {fmtBRL(d.ultimo_ajuste.calculado)}); de lá para cá o rendimento é calculado.</>
+            : <>Para bater exatamente com o banco, lance um "Saldo do app" (bruto e líquido) de vez em quando.</>}
+          {d.resgate_sem_saldo > 0 && <span style={{ color: "#FBBF24" }}> Há resgates maiores que o saldo calculado ({fmtBRL(d.resgate_sem_saldo)}) — confira se falta alguma aplicação.</span>}
+        </>}
+        {!l.auto && l.categoria === "renda_fixa" && d && !d.incompleto && d.colocado == null && <>
           Aplicado {fmtBRL(l.valor_aplicado)} em {dataBR(l.data_aplicacao)} · bruto {fmtBRL(d.bruto)} · IR {pct1(d.aliquota_ir * 100)} ({fmtBRL(d.ir)}) · {d.dias} dias.
           Entra no total pelo líquido.{d.antes_da_tabela_cdi && " Aplicação anterior a 28/01/2026: o trecho antes dessa data usa a primeira taxa da tabela de CDI."}
         </>}
@@ -228,6 +266,7 @@ export default function Patrimonio() {
         {!l.auto && l.categoria === "carro" && <>Valor de partida (primeira foto): {fmtBRL(l.custo)}. A diferença para o valor de hoje é a valorização ({fmtSinal(l.valorizacao)}).</>}
         {!l.auto && l.categoria === "imovel" && <>Lançado pelo custo investido. Aumentar o valor = dinheiro novo na obra, não valorização.</>}
         {!l.auto && ["caixa", "outros", "trading"].includes(l.categoria) && <>Valor lançado à mão. Atualize quando quiser.</>}
+        {!l.auto && l.categoria === "renda_fixa" && Movimentos(l)}
         {!l.auto && l.observacao && <div style={{ marginTop: "4px" }}>Obs.: {l.observacao}</div>}
         {!l.auto && <div style={{ fontSize: "11px", color: "var(--fi-texto-4)", marginTop: "4px" }}>Atualizado em {dataBR(l.atualizado_em)}</div>}
         {!l.auto && (
@@ -242,6 +281,54 @@ export default function Patrimonio() {
             )}
           </div>
         )}
+      </div>
+    )
+  }
+
+  const Movimentos = (l) => {
+    const movs = [...(l.movimentos || [])].sort((a, b) => b.data.localeCompare(a.data) || b.id - a.id)
+    const mostrar = verTodosMov ? movs : movs.slice(0, 8)
+    const inp = { ...inputS, padding: "6px 8px", fontSize: "12px" }
+    return (
+      <div style={{ marginTop: "12px", paddingTop: "10px", borderTop: "1px solid var(--fi-borda)" }} onClick={e => e.stopPropagation()}>
+        <div style={{ fontSize: "11px", color: "var(--fi-texto-4)", textTransform: "uppercase", letterSpacing: "1px", marginBottom: "6px" }}>Movimentações</div>
+        {movs.length === 0 && <div style={{ fontSize: "11.5px", color: "var(--fi-texto-4)" }}>Nenhuma ainda. Ao lançar a primeira, a aplicação do cadastro ({fmtBRL(l.valor_aplicado)} em {dataBR(l.data_aplicacao)}) entra como a primeira da lista.</div>}
+        {mostrar.map(m => (
+          <div key={m.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px", padding: "3px 0", fontSize: "12px" }}>
+            <span style={{ color: "var(--fi-texto-3)", minWidth: "80px" }}>{dataBR(m.data)}</span>
+            {m.tipo === "ajuste" ? (<>
+              <span style={{ flex: 1, color: "#38BDF8" }}>saldo do app{m.liquido != null ? ` · líquido ${fmtBRL(m.liquido)}` : ""}</span>
+              <b style={{ color: "#38BDF8" }}>{fmtBRL(m.valor)}</b>
+            </>) : (<>
+              <span style={{ flex: 1, color: m.valor >= 0 ? "#22D3A0" : "#FB6474" }}>{m.valor >= 0 ? "aplicação" : "resgate"}</span>
+              <b style={{ color: m.valor >= 0 ? "#22D3A0" : "#FB6474" }}>{fmtSinal(m.valor)}</b>
+            </>)}
+            <button type="button" onClick={() => apagarMov(m.id)} aria-label="Apagar movimentação" title="Apagar"
+              style={{ width: "22px", height: "22px", borderRadius: "999px", border: "1px solid var(--fi-borda-forte)", background: "transparent", color: "#FB6474", cursor: "pointer", fontSize: "10px" }}>✕</button>
+          </div>
+        ))}
+        {movs.length > 8 && (
+          <button type="button" onClick={() => setVerTodosMov(!verTodosMov)} style={{ background: "none", border: "none", color: "#38BDF8", fontSize: "11.5px", cursor: "pointer", padding: "4px 0" }}>
+            {verTodosMov ? "mostrar menos" : `ver todas (${movs.length})`}
+          </button>
+        )}
+        <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginTop: "8px", alignItems: "center" }}>
+          <input aria-label="Data da movimentação" type="date" style={inp} value={novoMov.data} onChange={e => setNovoMov({ ...novoMov, data: e.target.value })} />
+          <select aria-label="Tipo" style={inp} value={novoMov.tipo} onChange={e => setNovoMov({ ...novoMov, tipo: e.target.value })}>
+            <option value="aplicacao">Aplicação</option>
+            <option value="resgate">Resgate</option>
+            <option value="ajuste">Saldo do app (calibrar)</option>
+          </select>
+          <input aria-label={novoMov.tipo === "ajuste" ? "Saldo bruto do app" : "Valor da movimentação"} type="number" step="0.01" min="0"
+            placeholder={novoMov.tipo === "ajuste" ? "Bruto (R$)" : "Valor (R$)"} style={{ ...inp, width: "120px" }} value={novoMov.valor} onChange={e => setNovoMov({ ...novoMov, valor: e.target.value })} />
+          {novoMov.tipo === "ajuste" && (
+            <input aria-label="Saldo líquido do app" type="number" step="0.01" min="0" placeholder="Líquido (R$)" style={{ ...inp, width: "120px" }}
+              value={novoMov.liquido} onChange={e => setNovoMov({ ...novoMov, liquido: e.target.value })} />
+          )}
+          <button type="button" onClick={() => lancarMov(l.id)} disabled={salvandoMov || !novoMov.data || !novoMov.valor}
+            style={{ ...pill("#22D3A0", true), height: "30px", padding: "0 12px", opacity: !novoMov.data || !novoMov.valor ? 0.5 : 1 }}>{salvandoMov ? "…" : "+ Lançar"}</button>
+        </div>
+        {erroMov && <div style={{ fontSize: "11.5px", color: "#FB6474", marginTop: "6px" }}>{erroMov}</div>}
       </div>
     )
   }
