@@ -104,6 +104,7 @@ export default function Portfolio() {
   const [atrAberto, setAtrAberto] = useState(null)   // 09/11: posição com a lista de dias do ATR aberta
   const [selPos, setSelPos] = useState(null)          // 10/11: posição escolhida (painel da direita)
   const [grafPos, setGrafPos] = useState({ ticker: null, velas: [], carregando: false, erro: null })
+  const [grafTabela, setGrafTabela] = useState(false)   // 12/11: tabela diária dentro do gráfico ampliado
   const [grafAmp, setGrafAmp] = useState(null)   // 11/11: gráfico ampliado {ticker, pregoes, velas, carregando, erro}
 
   const carregarAtr = async (lista) => {
@@ -774,7 +775,7 @@ export default function Portfolio() {
               <div style={{ position:"absolute", left: eixos ? `${left - cw * 0.32}%` : `calc(${left}% - ${Math.max(1.5, Math.min(3.5, cw * 3))}px)`, top:`${bt}px`, height:`${Math.max(1.5, bb - bt)}px`,
                 width: eixos ? `${cw * 0.64}%` : `${Math.max(3, Math.min(7, cw * 6))}px`, borderRadius:"1.5px", background:cor }} />
               {x.atr != null && x.atr > lo && x.atr < hi && (
-                <div style={{ position:"absolute", left:`calc(${left}% - 2px)`, top:`${y(x.atr) - 2}px`, width:"4px", height:"4px", borderRadius:"50%",
+                <div style={{ position:"absolute", left:`calc(${left}% - ${v.length > 400 ? 1 : 2}px)`, top:`${y(x.atr) - (v.length > 400 ? 1 : 2)}px`, width: v.length > 400 ? "2px" : "4px", height: v.length > 400 ? "2px" : "4px", borderRadius:"50%",
                   background: x.atr_cor === "VERDE" ? "#A3E635" : "#FB6474", opacity:0.85 }} />
               )}
             </div>
@@ -790,7 +791,7 @@ export default function Portfolio() {
         {eixos && v.map((x, i) => {
           const passo = Math.max(1, Math.round(v.length / 8))
           if (i % passo !== 0) return null
-          return <span key={"x" + i} style={{ position:"absolute", left:`${(i + 0.5) * cw}%`, bottom:"4px", transform:"translateX(-50%)", fontSize:"10.5px", color:"var(--fi-texto-4)", pointerEvents:"none" }}>{x.data.split("-").reverse().slice(0, 2).join("/")}</span>
+          return <span key={"x" + i} style={{ position:"absolute", left:`${(i + 0.5) * cw}%`, bottom:"4px", transform:"translateX(-50%)", fontSize:"10.5px", color:"var(--fi-texto-4)", pointerEvents:"none" }}>{v.length > 300 ? `${x.data.slice(5, 7)}/${x.data.slice(2, 4)}` : x.data.split("-").reverse().slice(0, 2).join("/")}</span>
         })}
       </div>
     )
@@ -948,9 +949,10 @@ export default function Portfolio() {
                   <span style={{ fontSize:"12px", color:"var(--fi-texto-3)" }}>últimos {grafAmp.pregoes} pregões · entrada {fmt(p.preco_entrada)}{p.alvo_lucro ? ` · alvo ${fmt(p.alvo_lucro)}` : ""}{p.stop_loss ? ` · stop ${fmt(p.stop_loss)}` : ""}</span>
                 </div>
                 <div style={{ display:"flex", gap:"8px", alignItems:"center", flexWrap:"wrap" }}>
-                  {[[90, "3 meses"], [125, "6 meses"], [250, "1 ano"]].map(([n, rot]) => (
+                  {[[90, "3 meses"], [125, "6 meses"], [250, "1 ano"], [500, "2 anos"], [1260, "5 anos"]].map(([n, rot]) => (
                     <button key={n} type="button" onClick={() => abrirGrafAmp(grafAmp.ticker, n)} style={pill(grafAmp.pregoes === n)}>{rot}</button>
                   ))}
+                  <button type="button" onClick={() => setGrafTabela(!grafTabela)} aria-pressed={grafTabela} style={pill(grafTabela)}>☰ Tabela diária</button>
                   <button type="button" onClick={() => setGrafAmp(null)} aria-label="Fechar gráfico ampliado" style={{ ...pill(false), color:"var(--fi-texto)" }}>✕ Fechar</button>
                 </div>
               </div>
@@ -962,7 +964,34 @@ export default function Portfolio() {
                 <span style={{ display:"inline-flex", alignItems:"center", gap:"5px" }}><span style={{ width:5, height:5, borderRadius:"50%", background:"#FB6474" }} />ATR em queda</span>
                 <span>· passe o mouse numa vela para ver os valores do dia · Esc fecha</span>
               </div>
-              <GraficoVelas p={p} dados={grafAmp} H={altura} eixos />
+              <div style={{ display:"flex", gap:"14px", minHeight:0 }}>
+                <div style={{ flex:1, minWidth:0 }}><GraficoVelas p={p} dados={grafAmp} H={altura} eixos /></div>
+                {grafTabela && (
+                  <div style={{ width:"300px", flexShrink:0, height:`${altura}px`, overflowY:"auto", borderRadius:"12px", border:"1px solid #1E3352", background:"#0A1424" }}>
+                    <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"12px" }}>
+                      <thead style={{ position:"sticky", top:0, background:"#0A1424" }}>
+                        <tr>{["Data", "Fech.", "vs entrada"].map(h => (
+                          <th key={h} style={{ padding:"9px 10px", textAlign: h === "Data" ? "left" : "right", color:"#5F7391", fontSize:"10.5px", fontWeight:500, textTransform:"uppercase", letterSpacing:"1px" }}>{h}</th>
+                        ))}</tr>
+                      </thead>
+                      <tbody>
+                        {[...(grafAmp.velas || [])].reverse().map(v => {
+                          const pct = p.preco_entrada ? (v.c / p.preco_entrada - 1) * 100 : null
+                          return (
+                            <tr key={v.data}>
+                              <td style={{ padding:"7px 10px", borderTop:"1px solid #101D31", color:"var(--fi-texto-3)" }}>{v.data.split("-").reverse().join("/")}</td>
+                              <td style={{ padding:"7px 10px", borderTop:"1px solid #101D31", textAlign:"right" }}>{fmt(v.c)}</td>
+                              <td style={{ padding:"7px 10px", borderTop:"1px solid #101D31", textAlign:"right", fontWeight:600, color: pct == null ? "#5F7391" : pct >= 0 ? "#22D3A0" : "#FB6474" }}>
+                                {pct == null ? "—" : `${pct >= 0 ? "+" : ""}${pct.toFixed(2).replace(".", ",")}%`}
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )
