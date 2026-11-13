@@ -46,6 +46,10 @@ export default function Mercado() {
         pct_alvo: null,
         pct_stop: null,
         mme_20: null,
+        // 13/11/2026: "esticado" do BDR = o da ação original (MME20 em US$ não pode
+        // ser comparada ao preço em R$; o percentual não depende da moeda).
+        _esticado: (parseFloat(s.preco_atual) && parseFloat(s.mme_20))
+          ? (parseFloat(s.preco_atual) - parseFloat(s.mme_20)) / parseFloat(s.mme_20) * 100 : null,
         volume: s.bdr_vol_30d,
         atr_cor: s.bdr_atr_cor,
         atr_linha: s.bdr_atr_linha,
@@ -297,7 +301,8 @@ export default function Mercado() {
       }
       case "atr":       return s.atr_cor === "VERDE" ? 1 : s.atr_cor === "VERMELHO" ? 0 : null
       case "desconto":  return s.dist_media_6m != null ? parseFloat(s.dist_media_6m) : null
-      case "esticado":  return (s.mme_20 != null && parseFloat(s.mme_20) > 0)
+      case "esticado":  if (s._bdr) return s._esticado ?? null
+                        return (s.mme_20 != null && parseFloat(s.mme_20) > 0)
                           ? ((preco - parseFloat(s.mme_20)) / parseFloat(s.mme_20)) * 100 : null
       case "volume":    return s.volume != null ? parseFloat(s.volume) : null
       case "preco":     return preco
@@ -347,7 +352,7 @@ export default function Mercado() {
   const num = (v) => { const n = parseFloat(v); return isNaN(n) ? null : n }
   const tetoDe = (s) => { const a = num(s.alvo_lucro), st = num(s.stop_loss); return (a && st) ? (a + 1.5 * st) / 2.5 : null }
   const rrDe = (s) => { const p = num(s.preco_atual), a = num(s.alvo_lucro), st = num(s.stop_loss); return (p && a && st && p > st) ? (a - p) / (p - st) : null }
-  const esticadoDe = (s) => { const p = num(s.preco_atual), m = num(s.mme_20); return (p && m) ? (p - m) / m * 100 : null }
+  const esticadoDe = (s) => { if (s._bdr) return s._esticado ?? null; const p = num(s.preco_atual), m = num(s.mme_20); return (p && m) ? (p - m) / m * 100 : null }
   const pctTxt = (v, casas = 1) => v == null ? "—" : `${v > 0 ? "+" : ""}${v.toFixed(casas).replace(".", ",")}%`
   const chave = (s) => String(s.ticker || "").toUpperCase()
 
